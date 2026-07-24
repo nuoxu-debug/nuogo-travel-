@@ -1,0 +1,543 @@
+import { randomUUID } from "node:crypto";
+import mysql from "mysql2/promise";
+
+function json(value) {
+  return JSON.stringify(value);
+}
+
+function parseJson(value, fallback = {}) {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function publicDate(value) {
+  if (typeof value === "string") return value.slice(0, 10);
+  return value?.toISOString?.().slice(0, 10) ?? value;
+}
+
+export class MySqlRepository {
+  constructor(configOrPool) {
+    this.pool = typeof configOrPool?.query === "function"
+      ? configOrPool
+      : mysql.createPool({
+          ...configOrPool,
+          waitForConnections: true,
+          connectionLimit: 8,
+          namedPlaceholders: false,
+          decimalNumbers: true
+        });
+  }
+
+  async createUser(user) {
+    const id = randomUUID();
+    await this.pool.execute(
+      "INSERT INTO users (id, name, email, password_hash) VALUES (?, ?, ?, ?)",
+      [id, user.name, user.email, user.passwordHash]
+    );
+    return this.findUserById(id);
+  }
+
+  async findUserByEmail(email) {
+    const [rows] = await this.pool.execute(
+      "SELECT id, name, email, password_hash AS passwordHash, created_at AS createdAt FROM users WHERE email = ? LIMIT 1",
+      [email]
+    );
+    return rows[0];
+  }
+
+  async findUserById(id) {
+    const [rows] = await this.pool.execute(
+      "SELECT id, name, email, password_hash AS passwordHash, created_at AS createdAt FROM users WHERE id = ? LIMIT 1",
+      [id]
+    );
+    return rows[0];
+  }
+
+  async createTrip(ownerId, preferences, variants) {
+    const connection = await this.pool.getConnection();
+    const tripId = variants[0]?.tripId ?? randomUUID();
+    try {
+      await connection.beginTransaction();
+      const first = variants[0];
+      const end = new Date(`${preferences.startDate}T00:00:00Z`);
+      end.setUTCDate(end.getUTCDate() + preferences.days - 1);
+      await connection.execute(
+        `INSERT INTO trips
+          (id, user_id, status, title_en, title_zh, destination, start_date, end_date, total_budget, preferences_json)
+         VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          tripId, ownerId, first.title.en, first.title.zh, preferences.destination,
+          preferences.startDate, end.toISOString().slice(0, 10), preferences.totalBudget, json(preferences)
+        ]
+      );
+      await connection.execute(
+        `INSERT INTO travel_preferences
+          (id, user_id, trip_id, destination, departure_city, days, total_budget, interests_json,
+           group_type, accommodation, language, start_date, conflicts_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          randomUUID(), ownerId, tripId, preferences.destination, preferences.departureCity,
+          preferences.days, preferences.totalBudget, json(preferences.interests),
+          preferences.groupType, preferences.accommodation, preferences.language,
+          preferences.startDate, json(preferences.conflicts ?? [])
+        ]
+      );
+
+      for (const variant of variants) {
+        await connection.execute(
+          `INSERT INTO itinerary_variants
+            (id, trip_id, style, title_json, summary_json, pace, highlights_json, budget_json, is_fallback)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            variant.id, tripId, variant.style, json(variant.title), json(variant.summary),
+            variant.pace, json(variant.highlights), json(variant.budget), variant.isFallback ? 1 : 0
+          ]
+        );
+        for (const day of variant.days) {
+          await connection.execute(
+            `INSERT INTO trip_days (id, variant_id, day_number, trip_date, title_json)
+             VALUES (?, ?, ?, ?, ?)`,
+            [day.id, variant.id, day.dayNumber, day.date, json(day.title)]
+          );
+          for (const activity of day.activities) {
+            await this.insertActivity(connection, day.id, activity);
+          }
+        }
+      }
+      await connection.commit();
+      return this.getTrip(tripId);
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async insertActivity(connection, dayId, activity) {
+    await connection.execute(
+      `INSERT INTO activities
+        (id, day_id, sort_order, start_time, end_time, name_json, description_json, category,
+         address_json, longitude, latitude, estimated_cost, transport_note_json, guide_json,
+         source_attraction_id, source_provider, source_url, image_url, image_attribution,
+         visit_details_json, location_is_estimated, vote_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        activity.id, dayId, activity.order, activity.startTime, activity.endTime,
+        json(activity.name), json(activity.description), activity.category, json(activity.address),
+        activity.location.longitude, activity.location.latitude, activity.estimatedCost,
+        json(activity.transportNote), json(activity.guide), activity.sourceAttractionId ?? null,
+        activity.sourceProvider ?? null, activity.sourceUrl ?? null,
+        activity.imageUrl ?? null, activity.imageAttribution ?? null,
+        activity.visitDetails ? json(activity.visitDetails) : null,
+        activity.locationIsEstimated === undefined ? null : (activity.locationIsEstimated ? 1 : 0),
+        activity.votes ?? 0
+      ]
+    );
+  }
+
+  async listTrips(ownerId) {
+    const [rows] = await this.pool.execute(
+      "SELECT id FROM trips WHERE user_id = ? ORDER BY updated_at DESC",
+      [ownerId]
+    );
+    return this.loadTrips(rows.map((row) => row.id));
+  }
+
+  async getTrip(id) {
+    const [trip] = await this.loadTrips([id]);
+    return trip;
+  }
+
+  async loadTrips(ids) {
+    if (!ids.length) return [];
+    const placeholders = ids.map(() => "?").join(", ");
+    const [tripRows] = await this.pool.execute(
+      `SELECT id, user_id AS ownerId, status, title_en, title_zh, destination,
+              start_date AS startDate, end_date AS endDate, total_budget AS totalBudget,
+              selected_variant_id AS selectedVariantId, preferences_json, created_at AS createdAt,
+              updated_at AS updatedAt
+       FROM trips WHERE id IN (${placeholders})`,
+      ids
+    );
+    if (!tripRows.length) return [];
+    const tripsById = new Map(tripRows.map((row) => [row.id, {
+      id: row.id,
+      ownerId: row.ownerId,
+      status: row.status,
+      title: { en: row.title_en, zh: row.title_zh },
+      destination: row.destination,
+      startDate: publicDate(row.startDate),
+      endDate: publicDate(row.endDate),
+      totalBudget: row.totalBudget,
+      preferences: parseJson(row.preferences_json),
+      variants: [],
+      selectedVariantId: row.selectedVariantId,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt
+    }]));
+    const tripIds = [...tripsById.keys()];
+    const tripPlaceholders = tripIds.map(() => "?").join(", ");
+    const [variantRows] = await this.pool.execute(
+      `SELECT id, trip_id AS tripId, style, title_json, summary_json, pace,
+              highlights_json, budget_json, is_fallback
+       FROM itinerary_variants
+       WHERE trip_id IN (${tripPlaceholders})
+       ORDER BY trip_id, FIELD(style, 'budget', 'food', 'leisure')`,
+      tripIds
+    );
+    const variantsById = new Map();
+    for (const variantRow of variantRows) {
+      const trip = tripsById.get(variantRow.tripId);
+      if (!trip) continue;
+      const variant = {
+        id: variantRow.id,
+        tripId: variantRow.tripId,
+        style: variantRow.style,
+        title: parseJson(variantRow.title_json),
+        summary: parseJson(variantRow.summary_json),
+        destination: trip.destination,
+        startDate: trip.startDate,
+        totalBudget: trip.totalBudget,
+        pace: variantRow.pace,
+        highlights: parseJson(variantRow.highlights_json),
+        budget: parseJson(variantRow.budget_json),
+        days: [],
+        isFallback: Boolean(variantRow.is_fallback)
+      };
+      variantsById.set(variant.id, variant);
+      trip.variants.push(variant);
+    }
+    const variantIds = [...variantsById.keys()];
+    if (!variantIds.length) return ids.map((id) => tripsById.get(id)).filter(Boolean);
+
+    const variantPlaceholders = variantIds.map(() => "?").join(", ");
+    const [dayRows] = await this.pool.execute(
+      `SELECT id, variant_id AS variantId, day_number AS dayNumber, trip_date AS tripDate, title_json
+       FROM trip_days WHERE variant_id IN (${variantPlaceholders})
+       ORDER BY variant_id, day_number`,
+      variantIds
+    );
+    const daysById = new Map();
+    for (const dayRow of dayRows) {
+      const variant = variantsById.get(dayRow.variantId);
+      if (!variant) continue;
+      const day = {
+        id: dayRow.id,
+        dayNumber: dayRow.dayNumber,
+        date: publicDate(dayRow.tripDate),
+        title: parseJson(dayRow.title_json),
+        activities: []
+      };
+      daysById.set(day.id, day);
+      variant.days.push(day);
+    }
+    const dayIds = [...daysById.keys()];
+    if (!dayIds.length) return ids.map((id) => tripsById.get(id)).filter(Boolean);
+
+    const dayPlaceholders = dayIds.map(() => "?").join(", ");
+    const [activityRows] = await this.pool.execute(
+      `SELECT id, day_id AS dayId, sort_order AS sortOrder, start_time AS startTime, end_time AS endTime,
+              name_json, description_json, category, address_json, longitude, latitude,
+              estimated_cost AS estimatedCost, transport_note_json, guide_json,
+              source_attraction_id AS sourceAttractionId, source_provider AS sourceProvider,
+              source_url AS sourceUrl, image_url AS imageUrl,
+              image_attribution AS imageAttribution, visit_details_json,
+              location_is_estimated AS locationIsEstimated,
+              vote_count AS votes
+       FROM activities WHERE day_id IN (${dayPlaceholders}) ORDER BY day_id, sort_order`,
+      dayIds
+    );
+    for (const activity of activityRows) {
+      const day = daysById.get(activity.dayId);
+      if (!day) continue;
+      day.activities.push({
+        id: activity.id,
+        order: activity.sortOrder,
+        startTime: String(activity.startTime).slice(0, 5),
+        endTime: String(activity.endTime).slice(0, 5),
+        name: parseJson(activity.name_json),
+        description: parseJson(activity.description_json),
+        category: activity.category,
+        address: parseJson(activity.address_json),
+        location: { longitude: activity.longitude, latitude: activity.latitude },
+        estimatedCost: activity.estimatedCost,
+        transportNote: parseJson(activity.transport_note_json),
+        guide: parseJson(activity.guide_json),
+        ...(activity.sourceAttractionId ? {
+          sourceAttractionId: activity.sourceAttractionId,
+          sourceProvider: activity.sourceProvider,
+          sourceUrl: activity.sourceUrl
+        } : {}),
+        ...(activity.imageUrl ? {
+          imageUrl: activity.imageUrl,
+          imageAttribution: activity.imageAttribution
+        } : {}),
+        ...(activity.visit_details_json ? {
+          visitDetails: parseJson(activity.visit_details_json)
+        } : {}),
+        ...(activity.locationIsEstimated === null ? {} : {
+          locationIsEstimated: Boolean(activity.locationIsEstimated)
+        }),
+        votes: activity.votes,
+        isFavorite: false
+      });
+    }
+
+    return ids.map((id) => tripsById.get(id)).filter(Boolean);
+  }
+
+  async updateTrip(id, ownerId, patch) {
+    const fields = [];
+    const values = [];
+    if (patch.status) {
+      fields.push("status = ?");
+      values.push(patch.status);
+    }
+    if (patch.title) {
+      fields.push("title_en = ?", "title_zh = ?");
+      values.push(patch.title.en, patch.title.zh);
+    }
+    if (!fields.length) return this.getTrip(id);
+    values.push(id, ownerId);
+    const [result] = await this.pool.execute(
+      `UPDATE trips SET ${fields.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?`,
+      values
+    );
+    return result.affectedRows ? this.getTrip(id) : undefined;
+  }
+
+  async deleteTrip(id, ownerId) {
+    const [result] = await this.pool.execute("DELETE FROM trips WHERE id = ? AND user_id = ?", [id, ownerId]);
+    return result.affectedRows > 0;
+  }
+
+  async duplicateTrip(id, ownerId) {
+    const source = await this.getTrip(id);
+    if (!source || source.ownerId !== ownerId) return undefined;
+    const tripId = randomUUID();
+    const variants = source.variants.map((variant) => ({
+      ...variant,
+      id: randomUUID(),
+      tripId,
+      days: variant.days.map((day) => ({
+        ...day,
+        id: randomUUID(),
+        activities: day.activities.map((activity) => ({ ...activity, id: randomUUID() }))
+      }))
+    }));
+    return this.createTrip(ownerId, source.preferences, variants);
+  }
+
+  async selectVariant(id, ownerId, variantId) {
+    const [result] = await this.pool.execute(
+      `UPDATE trips t SET selected_variant_id = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE t.id = ? AND t.user_id = ?
+         AND EXISTS (SELECT 1 FROM itinerary_variants v WHERE v.id = ? AND v.trip_id = t.id)`,
+      [variantId, id, ownerId, variantId]
+    );
+    return result.affectedRows ? this.getTrip(id) : undefined;
+  }
+
+  async findActivityContext(activityId) {
+    const [rows] = await this.pool.execute(
+      `SELECT t.id AS tripId, d.id AS dayId, v.id AS variantId
+       FROM activities a
+       JOIN trip_days d ON d.id = a.day_id
+       JOIN itinerary_variants v ON v.id = d.variant_id
+       JOIN trips t ON t.id = v.trip_id
+       WHERE a.id = ? LIMIT 1`,
+      [activityId]
+    );
+    if (!rows[0]) return undefined;
+    const trip = await this.getTrip(rows[0].tripId);
+    const variant = trip.variants.find((item) => item.id === rows[0].variantId);
+    const day = variant.days.find((item) => item.id === rows[0].dayId);
+    const index = day.activities.findIndex((item) => item.id === activityId);
+    return { trip, variant, day, index, activity: day.activities[index] };
+  }
+
+  async findDayContext(tripId, dayId) {
+    const trip = await this.getTrip(tripId);
+    if (!trip) return undefined;
+    for (const variant of trip.variants) {
+      const day = variant.days.find((item) => item.id === dayId);
+      if (day) return { trip, variant, day };
+    }
+    return undefined;
+  }
+
+  async addActivity(tripId, dayId, ownerId, activity) {
+    const context = await this.findDayContext(tripId, dayId);
+    if (!context || context.trip.ownerId !== ownerId) return undefined;
+    await this.insertActivity(this.pool, dayId, activity);
+    return this.findActivityContext(activity.id);
+  }
+
+  async updateActivity(activityId, ownerId, patch) {
+    const context = await this.findActivityContext(activityId);
+    if (!context || context.trip.ownerId !== ownerId) return undefined;
+    const mapping = {
+      startTime: ["start_time", (value) => value],
+      endTime: ["end_time", (value) => value],
+      name: ["name_json", json],
+      description: ["description_json", json],
+      category: ["category", (value) => value],
+      address: ["address_json", json],
+      estimatedCost: ["estimated_cost", (value) => value],
+      transportNote: ["transport_note_json", json],
+      guide: ["guide_json", json],
+      sourceAttractionId: ["source_attraction_id", (value) => value ?? null],
+      sourceProvider: ["source_provider", (value) => value ?? null],
+      sourceUrl: ["source_url", (value) => value ?? null],
+      imageUrl: ["image_url", (value) => value ?? null],
+      imageAttribution: ["image_attribution", (value) => value ?? null],
+      visitDetails: [
+        "visit_details_json",
+        (value) => value === undefined ? null : json(value)
+      ],
+      locationIsEstimated: [
+        "location_is_estimated",
+        (value) => value === undefined ? null : (value ? 1 : 0)
+      ]
+    };
+    const fields = [];
+    const values = [];
+    for (const [key, value] of Object.entries(patch)) {
+      if (mapping[key]) {
+        fields.push(`${mapping[key][0]} = ?`);
+        values.push(mapping[key][1](value));
+      }
+    }
+    if (patch.location) {
+      fields.push("longitude = ?", "latitude = ?");
+      values.push(patch.location.longitude, patch.location.latitude);
+    }
+    if (fields.length) {
+      values.push(activityId);
+      await this.pool.execute(`UPDATE activities SET ${fields.join(", ")} WHERE id = ?`, values);
+    }
+    return this.findActivityContext(activityId);
+  }
+
+  async deleteActivity(activityId, ownerId) {
+    const context = await this.findActivityContext(activityId);
+    if (!context || context.trip.ownerId !== ownerId) return undefined;
+    await this.pool.execute("DELETE FROM activities WHERE id = ?", [activityId]);
+    return context;
+  }
+
+  async reorderDay(tripId, dayId, ownerId, activityIds) {
+    const context = await this.findDayContext(tripId, dayId);
+    if (!context || context.trip.ownerId !== ownerId) return undefined;
+    const existing = new Set(context.day.activities.map((item) => item.id));
+    if (activityIds.length !== existing.size || new Set(activityIds).size !== existing.size ||
+        activityIds.some((item) => !existing.has(item))) return null;
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      for (const [order, activityId] of activityIds.entries()) {
+        await connection.execute(
+          "UPDATE activities SET sort_order = ? WHERE id = ? AND day_id = ?",
+          [order, activityId, dayId]
+        );
+      }
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+    return this.findDayContext(tripId, dayId);
+  }
+
+  async replaceDay(tripId, dayId, ownerId, activities) {
+    const context = await this.findDayContext(tripId, dayId);
+    if (!context || context.trip.ownerId !== ownerId) return undefined;
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.execute("DELETE FROM activities WHERE day_id = ?", [dayId]);
+      for (const activity of activities) await this.insertActivity(connection, dayId, activity);
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+    return this.findDayContext(tripId, dayId);
+  }
+
+  async createShare(tripId, ownerId, permission) {
+    const trip = await this.getTrip(tripId);
+    if (!trip || trip.ownerId !== ownerId) return undefined;
+    const share = { id: randomUUID(), token: randomUUID().replaceAll("-", ""), tripId, permission };
+    await this.pool.execute(
+      "INSERT INTO trip_shares (id, trip_id, token, permission) VALUES (?, ?, ?, ?)",
+      [share.id, tripId, share.token, permission]
+    );
+    return share;
+  }
+
+  async getShare(token) {
+    const [rows] = await this.pool.execute(
+      "SELECT id, trip_id AS tripId, token, permission, created_at AS createdAt FROM trip_shares WHERE token = ? LIMIT 1",
+      [token]
+    );
+    return rows[0] ? { ...rows[0], trip: await this.getTrip(rows[0].tripId) } : undefined;
+  }
+
+  async vote(token, activityId, userId) {
+    const share = await this.getShare(token);
+    const context = await this.findActivityContext(activityId);
+    if (!share || share.permission !== "edit" || context?.trip.id !== share.tripId) return undefined;
+    await this.pool.execute(
+      `INSERT IGNORE INTO activity_votes (id, share_id, activity_id, user_id)
+       VALUES (?, ?, ?, ?)`,
+      [randomUUID(), share.id, activityId, userId]
+    );
+    const [rows] = await this.pool.execute(
+      "SELECT COUNT(*) AS votes FROM activity_votes WHERE activity_id = ?",
+      [activityId]
+    );
+    await this.pool.execute("UPDATE activities SET vote_count = ? WHERE id = ?", [rows[0].votes, activityId]);
+    return rows[0].votes;
+  }
+
+  async listFavorites(userId) {
+    const [rows] = await this.pool.execute(
+      "SELECT id, user_id AS userId, activity_json, created_at AS createdAt FROM favorites WHERE user_id = ? ORDER BY created_at DESC",
+      [userId]
+    );
+    return rows.map((row) => ({ ...row, activity: parseJson(row.activity_json) }));
+  }
+
+  async addFavorite(userId, activityId) {
+    const context = await this.findActivityContext(activityId);
+    if (!context) return undefined;
+    const id = randomUUID();
+    await this.pool.execute(
+      `INSERT INTO favorites (id, user_id, source_activity_id, activity_json)
+       VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE activity_json = VALUES(activity_json)`,
+      [id, userId, activityId, json({ ...context.activity, isFavorite: true })]
+    );
+    const favorites = await this.listFavorites(userId);
+    return favorites.find((item) => item.activity.id === activityId);
+  }
+
+  async deleteFavorite(userId, favoriteId) {
+    const [result] = await this.pool.execute(
+      "DELETE FROM favorites WHERE id = ? AND user_id = ?",
+      [favoriteId, userId]
+    );
+    return result.affectedRows > 0;
+  }
+}

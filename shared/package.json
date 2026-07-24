@@ -1,0 +1,19 @@
+{
+  "name": "@nuogo/shared",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./constants": "./constants.js",
+    "./schemas": "./schemas.js"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "vitest": "^2.0.5"
+  }
+}

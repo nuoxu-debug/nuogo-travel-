@@ -1,0 +1,33 @@
+{
+  "name": "@nuogo/server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "build": "node --check src/index.js",
+    "test": "vitest run",
+    "ingest:anhui": "node src/cli/ingestAnhui.js",
+    "attractions:list": "node src/cli/listAttractions.js",
+    "attractions:review": "node src/cli/reviewAttractions.js"
+  },
+  "dependencies": {
+    "@nuogo/shared": "0.1.0",
+    "bcryptjs": "^2.4.3",
+    "cheerio": "^1.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.11.3",
+    "sql.js": "^1.13.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "supertest": "^7.0.0",
+    "vitest": "^2.0.5"
+  }
+}
