@@ -74,7 +74,7 @@ export function summarizeExpenses(members, expenses) {
   const debtors = memberBalances
     .filter(({ netFen }) => netFen < 0)
     .map((balance) => ({ ...balance, remainingFen: -balance.netFen }))
-    .sort((left, right) => left.remainingFen - right.remainingFen || compareUserIds(left, right));
+    .sort((left, right) => right.remainingFen - left.remainingFen || compareUserIds(left, right));
   const creditors = memberBalances
     .filter(({ netFen }) => netFen > 0)
     .map((balance) => ({ ...balance, remainingFen: balance.netFen }))

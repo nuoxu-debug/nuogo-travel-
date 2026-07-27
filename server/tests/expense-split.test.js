@@ -55,6 +55,41 @@ describe("expense splitting", () => {
     ]);
   });
 
+  it("settles the most-negative debtor before smaller debts", () => {
+    const summary = summarizeExpenses(
+      [
+        { userId: "creditor", name: "Creditor" },
+        { userId: "large-debtor", name: "Large debtor" },
+        { userId: "small-debtor", name: "Small debtor" }
+      ],
+      [{
+        amountFen: 30000,
+        paidByUserId: "creditor",
+        participants: [
+          { userId: "large-debtor", shareFen: 20000 },
+          { userId: "small-debtor", shareFen: 10000 }
+        ]
+      }]
+    );
+
+    expect(summary.settlements).toEqual([
+      {
+        fromUserId: "large-debtor",
+        fromName: "Large debtor",
+        toUserId: "creditor",
+        toName: "Creditor",
+        amountFen: 20000
+      },
+      {
+        fromUserId: "small-debtor",
+        fromName: "Small debtor",
+        toUserId: "creditor",
+        toName: "Creditor",
+        amountFen: 10000
+      }
+    ]);
+  });
+
   it("rejects non-positive or non-integer amounts", () => {
     expect(() => splitEqually(0, ["user-1"])).toThrow(RangeError);
     expect(() => splitEqually(-1, ["user-1"])).toThrow(RangeError);
