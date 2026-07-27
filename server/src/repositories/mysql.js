@@ -165,10 +165,15 @@ export class MySqlRepository {
     );
   }
 
-  async listTrips(ownerId) {
+  async listTrips(userId) {
     const [rows] = await this.pool.execute(
-      "SELECT id FROM trips WHERE user_id = ? ORDER BY updated_at DESC",
-      [ownerId]
+      `SELECT t.id
+       FROM trips t
+       LEFT JOIN trip_members m
+         ON m.trip_id = t.id AND m.user_id = ? AND m.status = 'active'
+       WHERE t.user_id = ? OR m.user_id IS NOT NULL
+       ORDER BY t.updated_at DESC`,
+      [userId, userId]
     );
     return this.loadTrips(rows.map((row) => row.id));
   }
@@ -317,7 +322,35 @@ export class MySqlRepository {
     return ids.map((id) => tripsById.get(id)).filter(Boolean);
   }
 
-  async updateTrip(id, ownerId, patch) {
+  async mutateWithRevision(tripId, expectedRevision, mutation) {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [revisionResult] = await connection.execute(
+        `UPDATE trips
+         SET revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND revision = ?`,
+        [tripId, expectedRevision]
+      );
+      if (!revisionResult.affectedRows) {
+        await connection.rollback();
+        return undefined;
+      }
+      if (await mutation(connection) === false) {
+        await connection.rollback();
+        return undefined;
+      }
+      await connection.commit();
+      return expectedRevision + 1;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async updateTrip(id, _actorId, patch, expectedRevision) {
     const fields = [];
     const values = [];
     if (patch.status) {
@@ -329,12 +362,16 @@ export class MySqlRepository {
       values.push(patch.title.en, patch.title.zh);
     }
     if (!fields.length) return this.getTrip(id);
-    values.push(id, ownerId);
-    const [result] = await this.pool.execute(
-      `UPDATE trips SET ${fields.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?`,
-      values
-    );
-    return result.affectedRows ? this.getTrip(id) : undefined;
+    values.push(id);
+    const revision = await this.mutateWithRevision(id, expectedRevision, async (connection) => {
+      await connection.execute(
+        `UPDATE trips SET ${fields.join(", ")} WHERE id = ?`,
+        values
+      );
+      return true;
+    });
+    if (revision === undefined) return undefined;
+    return { ...await this.getTrip(id), revision };
   }
 
   async deleteTrip(id, ownerId) {
@@ -359,14 +396,18 @@ export class MySqlRepository {
     return this.createTrip(ownerId, source.preferences, variants);
   }
 
-  async selectVariant(id, ownerId, variantId) {
-    const [result] = await this.pool.execute(
-      `UPDATE trips t SET selected_variant_id = ?, updated_at = CURRENT_TIMESTAMP
-       WHERE t.id = ? AND t.user_id = ?
-         AND EXISTS (SELECT 1 FROM itinerary_variants v WHERE v.id = ? AND v.trip_id = t.id)`,
-      [variantId, id, ownerId, variantId]
-    );
-    return result.affectedRows ? this.getTrip(id) : undefined;
+  async selectVariant(id, _actorId, variantId, expectedRevision) {
+    const revision = await this.mutateWithRevision(id, expectedRevision, async (connection) => {
+      await connection.execute(
+        `UPDATE trips t SET selected_variant_id = ?
+         WHERE t.id = ?
+           AND EXISTS (SELECT 1 FROM itinerary_variants v WHERE v.id = ? AND v.trip_id = t.id)`,
+        [variantId, id, variantId]
+      );
+      return true;
+    });
+    if (revision === undefined) return undefined;
+    return { ...await this.getTrip(id), revision };
   }
 
   async findActivityContext(activityId) {
@@ -397,16 +438,24 @@ export class MySqlRepository {
     return undefined;
   }
 
-  async addActivity(tripId, dayId, ownerId, activity) {
+  async addActivity(tripId, dayId, _actorId, activity, expectedRevision) {
     const context = await this.findDayContext(tripId, dayId);
-    if (!context || context.trip.ownerId !== ownerId) return undefined;
-    await this.insertActivity(this.pool, dayId, activity);
-    return this.findActivityContext(activity.id);
+    if (!context) return undefined;
+    const revision = await this.mutateWithRevision(
+      tripId,
+      expectedRevision,
+      async (connection) => {
+        await this.insertActivity(connection, dayId, activity);
+        return true;
+      }
+    );
+    if (revision === undefined) return undefined;
+    return { ...await this.findActivityContext(activity.id), revision };
   }
 
-  async updateActivity(activityId, ownerId, patch) {
+  async updateActivity(activityId, _actorId, patch, expectedRevision) {
     const context = await this.findActivityContext(activityId);
-    if (!context || context.trip.ownerId !== ownerId) return undefined;
+    if (!context) return undefined;
     const mapping = {
       startTime: ["start_time", (value) => value],
       endTime: ["end_time", (value) => value],
@@ -443,61 +492,81 @@ export class MySqlRepository {
       fields.push("longitude = ?", "latitude = ?");
       values.push(patch.location.longitude, patch.location.latitude);
     }
-    if (fields.length) {
-      values.push(activityId);
-      await this.pool.execute(`UPDATE activities SET ${fields.join(", ")} WHERE id = ?`, values);
-    }
-    return this.findActivityContext(activityId);
+    values.push(activityId);
+    const revision = await this.mutateWithRevision(
+      context.trip.id,
+      expectedRevision,
+      async (connection) => {
+        if (!fields.length) return true;
+        await connection.execute(
+          `UPDATE activities SET ${fields.join(", ")} WHERE id = ?`,
+          values
+        );
+        return true;
+      }
+    );
+    if (revision === undefined) return undefined;
+    return { ...await this.findActivityContext(activityId), revision };
   }
 
-  async deleteActivity(activityId, ownerId) {
+  async deleteActivity(activityId, _actorId, expectedRevision) {
     const context = await this.findActivityContext(activityId);
-    if (!context || context.trip.ownerId !== ownerId) return undefined;
-    await this.pool.execute("DELETE FROM activities WHERE id = ?", [activityId]);
-    return context;
+    if (!context) return undefined;
+    const revision = await this.mutateWithRevision(
+      context.trip.id,
+      expectedRevision,
+      async (connection) => {
+        const [result] = await connection.execute(
+          "DELETE FROM activities WHERE id = ?",
+          [activityId]
+        );
+        return result.affectedRows > 0;
+      }
+    );
+    if (revision === undefined) return undefined;
+    const current = await this.findDayContext(context.trip.id, context.day.id);
+    return { ...current, activity: context.activity, revision };
   }
 
-  async reorderDay(tripId, dayId, ownerId, activityIds) {
+  async reorderDay(tripId, dayId, _actorId, activityIds, expectedRevision) {
     const context = await this.findDayContext(tripId, dayId);
-    if (!context || context.trip.ownerId !== ownerId) return undefined;
+    if (!context) return undefined;
     const existing = new Set(context.day.activities.map((item) => item.id));
     if (activityIds.length !== existing.size || new Set(activityIds).size !== existing.size ||
         activityIds.some((item) => !existing.has(item))) return null;
-    const connection = await this.pool.getConnection();
-    try {
-      await connection.beginTransaction();
-      for (const [order, activityId] of activityIds.entries()) {
-        await connection.execute(
-          "UPDATE activities SET sort_order = ? WHERE id = ? AND day_id = ?",
-          [order, activityId, dayId]
-        );
+    const revision = await this.mutateWithRevision(
+      tripId,
+      expectedRevision,
+      async (connection) => {
+        for (const [order, activityId] of activityIds.entries()) {
+          await connection.execute(
+            "UPDATE activities SET sort_order = ? WHERE id = ? AND day_id = ?",
+            [order, activityId, dayId]
+          );
+        }
+        return true;
       }
-      await connection.commit();
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
-    }
-    return this.findDayContext(tripId, dayId);
+    );
+    if (revision === undefined) return undefined;
+    return { ...await this.findDayContext(tripId, dayId), revision };
   }
 
-  async replaceDay(tripId, dayId, ownerId, activities) {
+  async replaceDay(tripId, dayId, _actorId, activities, expectedRevision) {
     const context = await this.findDayContext(tripId, dayId);
-    if (!context || context.trip.ownerId !== ownerId) return undefined;
-    const connection = await this.pool.getConnection();
-    try {
-      await connection.beginTransaction();
-      await connection.execute("DELETE FROM activities WHERE day_id = ?", [dayId]);
-      for (const activity of activities) await this.insertActivity(connection, dayId, activity);
-      await connection.commit();
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
-    }
-    return this.findDayContext(tripId, dayId);
+    if (!context) return undefined;
+    const revision = await this.mutateWithRevision(
+      tripId,
+      expectedRevision,
+      async (connection) => {
+        await connection.execute("DELETE FROM activities WHERE day_id = ?", [dayId]);
+        for (const activity of activities) {
+          await this.insertActivity(connection, dayId, activity);
+        }
+        return true;
+      }
+    );
+    if (revision === undefined) return undefined;
+    return { ...await this.findDayContext(tripId, dayId), revision };
   }
 
   async getMember(tripId, userId) {

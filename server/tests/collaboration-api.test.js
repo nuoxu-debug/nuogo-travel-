@@ -13,6 +13,19 @@ describe("trip invitation and member API", () => {
   let member;
   let unrelated;
   let tripId;
+  const approvedAttractions = Array.from({ length: 6 }, (_, index) => ({
+    id: `approved-${index}`,
+    externalId: `poi-${index}`,
+    nameZh: `黄山景点${index}`,
+    nameEn: `Huangshan attraction ${index}`,
+    locationLabel: "Huangshan Scenic Area",
+    longitude: 118.17 + index * 0.001,
+    latitude: 30.13 + index * 0.001,
+    ticketPriceMin: 20,
+    category: "natural_scenery",
+    sourceProvider: "Mafengwo",
+    sourceUrl: `https://m.mafengwo.cn/poi/${index}.html`
+  }));
 
   async function register(name, email) {
     const response = await request(app)
@@ -47,7 +60,7 @@ describe("trip invitation and member API", () => {
     app = createApp({
       repository,
       planProvider: new DemoPlanProvider(),
-      attractionCatalogue: { listApproved: () => [] },
+      attractionCatalogue: { listApproved: () => approvedAttractions },
       config: {
         jwtSecret: "test-secret-with-enough-length",
         demoMode: true,
@@ -314,5 +327,163 @@ describe("trip invitation and member API", () => {
       .set(unrelated.auth)
       .expect(403);
     expect(denied.body.error.code).toBe("TRIP_MEMBER_REQUIRED");
+  });
+
+  it("includes active member trips and returns role-specific access on trip reads", async () => {
+    await acceptInvitation(member, "editor");
+    const viewer = await register("Zhao Viewer", "viewer@nuogo.test");
+    await acceptInvitation(viewer, "viewer");
+
+    const editorList = await request(app)
+      .get("/api/trips")
+      .set(member.auth)
+      .expect(200);
+    expect(editorList.body.trips.filter(({ id }) => id === tripId)).toHaveLength(1);
+
+    const viewerList = await request(app)
+      .get("/api/trips")
+      .set(viewer.auth)
+      .expect(200);
+    expect(viewerList.body.trips.filter(({ id }) => id === tripId)).toHaveLength(1);
+
+    const viewerRead = await request(app)
+      .get(`/api/trips/${tripId}`)
+      .set(viewer.auth)
+      .expect(200);
+    expect(viewerRead.body.access).toEqual({
+      role: "viewer",
+      canEdit: false,
+      isOwner: false
+    });
+
+    const ownerRead = await request(app)
+      .get(`/api/trips/${tripId}`)
+      .set(owner.auth)
+      .expect(200);
+    expect(ownerRead.body.access).toEqual({
+      role: "owner",
+      canEdit: true,
+      isOwner: true
+    });
+
+    const denied = await request(app)
+      .get(`/api/trips/${tripId}`)
+      .set(unrelated.auth)
+      .expect(403);
+    expect(denied.body.error.code).toBe("TRIP_MEMBER_REQUIRED");
+  });
+
+  it("authorizes editor mutations, rejects viewers, and detects stale revisions", async () => {
+    await acceptInvitation(member, "editor");
+    const viewer = await register("Sun Viewer", "readonly@nuogo.test");
+    await acceptInvitation(viewer, "viewer");
+    const initial = await repository.getTrip(tripId);
+    const variant = initial.variants[0];
+    const day = variant.days[0];
+    const activity = day.activities[0];
+
+    const edited = await request(app)
+      .patch(`/api/activities/${activity.id}`)
+      .set(member.auth)
+      .send({ expectedRevision: 0, estimatedCost: 420 })
+      .expect(200);
+    expect(edited.body).toMatchObject({
+      revision: 1,
+      activity: { id: activity.id, estimatedCost: 420 }
+    });
+
+    const viewerDenied = await request(app)
+      .patch(`/api/activities/${activity.id}`)
+      .set(viewer.auth)
+      .send({ expectedRevision: 1, estimatedCost: 500 })
+      .expect(403);
+    expect(viewerDenied.body.error.code).toBe("TRIP_EDITOR_REQUIRED");
+
+    const unrelatedDenied = await request(app)
+      .patch(`/api/activities/${activity.id}`)
+      .set(unrelated.auth)
+      .send({ expectedRevision: 1, estimatedCost: 500 })
+      .expect(403);
+    expect(unrelatedDenied.body.error.code).toBe("TRIP_MEMBER_REQUIRED");
+
+    const conflict = await request(app)
+      .patch(`/api/activities/${activity.id}`)
+      .set(owner.auth)
+      .send({ expectedRevision: 0, estimatedCost: 600 })
+      .expect(409);
+    expect(conflict.body.error.code).toBe("TRIP_VERSION_CONFLICT");
+    expect((await repository.findActivityContext(activity.id)).activity.estimatedCost).toBe(420);
+
+    const added = await request(app)
+      .post(`/api/trips/${tripId}/days/${day.id}/activities`)
+      .set(member.auth)
+      .send({
+        ...activity,
+        expectedRevision: 1,
+        name: { en: "Shared tea stop", zh: "协作茶歇" }
+      })
+      .expect(201);
+    expect(added.body.revision).toBe(2);
+
+    const reordered = await request(app)
+      .patch(`/api/trips/${tripId}/days/${day.id}/reorder`)
+      .set(member.auth)
+      .send({
+        expectedRevision: 2,
+        activityIds: [added.body.activity.id, activity.id]
+      })
+      .expect(200);
+    expect(reordered.body.revision).toBe(3);
+
+    const regenerated = await request(app)
+      .post(`/api/activities/${activity.id}/regenerate`)
+      .set(member.auth)
+      .send({ expectedRevision: 3 })
+      .expect(200);
+    expect(regenerated.body.revision).toBe(4);
+
+    const deleted = await request(app)
+      .delete(`/api/activities/${added.body.activity.id}`)
+      .set(member.auth)
+      .send({ expectedRevision: 4 })
+      .expect(200);
+    expect(deleted.body.revision).toBe(5);
+
+    const tripUpdate = await request(app)
+      .patch(`/api/trips/${tripId}`)
+      .set(member.auth)
+      .send({
+        expectedRevision: 5,
+        title: { en: "Huangshan Team Trip", zh: "黄山结伴行" }
+      })
+      .expect(200);
+    expect(tripUpdate.body.revision).toBe(6);
+
+    const selected = await request(app)
+      .post(`/api/trips/${tripId}/select-variant`)
+      .set(member.auth)
+      .send({ expectedRevision: 6, variantId: variant.id })
+      .expect(200);
+    expect(selected.body.revision).toBe(7);
+
+    const deleteDenied = await request(app)
+      .delete(`/api/trips/${tripId}`)
+      .set(member.auth)
+      .expect(403);
+    expect(deleteDenied.body.error.code).toBe("TRIP_OWNER_REQUIRED");
+
+    const log = await request(app)
+      .get(`/api/trips/${tripId}/activity-log`)
+      .set(owner.auth)
+      .expect(200);
+    expect(log.body.activities.map(({ action }) => action)).toEqual(expect.arrayContaining([
+      "activity.updated",
+      "activity.created",
+      "day.reordered",
+      "activity.regenerated",
+      "activity.deleted",
+      "trip.updated",
+      "trip.variant_selected"
+    ]));
   });
 });

@@ -133,7 +133,9 @@ describe("Nuogo REST API", () => {
     const regeneratedActivity = await request(app)
       .post(`/api/activities/${firstDay.activities[0].id}/regenerate`)
       .set("Authorization", `Bearer ${register.body.token}`)
+      .send({ expectedRevision: 0 })
       .expect(200);
+    expect(regeneratedActivity.body.revision).toBe(1);
     expect(allowed.has(regeneratedActivity.body.activity.sourceAttractionId)).toBe(true);
 
     const costOnlyEdit = await request(app)
@@ -141,9 +143,11 @@ describe("Nuogo REST API", () => {
       .set("Authorization", `Bearer ${register.body.token}`)
       .send({
         ...regeneratedActivity.body.activity,
+        expectedRevision: 1,
         estimatedCost: regeneratedActivity.body.activity.estimatedCost + 5
       })
       .expect(200);
+    expect(costOnlyEdit.body.revision).toBe(2);
     expect(allowed.has(costOnlyEdit.body.activity.sourceAttractionId)).toBe(true);
 
     const editedActivity = await request(app)
@@ -151,16 +155,20 @@ describe("Nuogo REST API", () => {
       .set("Authorization", `Bearer ${register.body.token}`)
       .send({
         ...costOnlyEdit.body.activity,
+        expectedRevision: 2,
         name: { en: "Student-custom stop", zh: "学生自定义景点" }
       })
       .expect(200);
+    expect(editedActivity.body.revision).toBe(3);
     expect(editedActivity.body.activity.sourceAttractionId).toBeUndefined();
     expect(editedActivity.body.activity.sourceUrl).toBeUndefined();
 
     const regeneratedDay = await request(app)
       .post(`/api/trips/${generated.body.trip.id}/days/${firstDay.id}/regenerate`)
       .set("Authorization", `Bearer ${register.body.token}`)
+      .send({ expectedRevision: 3 })
       .expect(200);
+    expect(regeneratedDay.body.revision).toBe(4);
     expect(regeneratedDay.body.day.activities
       .filter((activity) => activity.sourceAttractionId)
       .every((activity) =>
@@ -211,7 +219,7 @@ describe("Nuogo REST API", () => {
     await request(app)
       .post(`/api/trips/${tripId}/select-variant`)
       .set(auth)
-      .send({ variantId: variant.id })
+      .send({ variantId: variant.id, expectedRevision: 0 })
       .expect(200);
 
     const day = variant.days[0];
@@ -219,8 +227,9 @@ describe("Nuogo REST API", () => {
     const updated = await request(app)
       .patch(`/api/activities/${activity.id}`)
       .set(auth)
-      .send({ estimatedCost: 18 })
+      .send({ expectedRevision: 1, estimatedCost: 18 })
       .expect(200);
+    expect(updated.body.revision).toBe(2);
     expect(updated.body.activity.estimatedCost).toBe(18);
     expect(updated.body.budget.total).toBeGreaterThanOrEqual(18);
 
@@ -229,21 +238,28 @@ describe("Nuogo REST API", () => {
       .set(auth)
       .send({
         ...activity,
+        expectedRevision: 2,
         id: undefined,
         name: { en: "Student-made stop", zh: "学生自定义行程点" }
       })
       .expect(201);
+    expect(added.body.revision).toBe(3);
 
     await request(app)
       .patch(`/api/trips/${tripId}/days/${day.id}/reorder`)
       .set(auth)
-      .send({ activityIds: [added.body.activity.id, ...day.activities.map((item) => item.id)] })
+      .send({
+        expectedRevision: 3,
+        activityIds: [added.body.activity.id, ...day.activities.map((item) => item.id)]
+      })
       .expect(200);
 
     const cheaper = await request(app)
       .post(`/api/activities/${activity.id}/cheaper-alternative`)
       .set(auth)
+      .send({ expectedRevision: 4 })
       .expect(200);
+    expect(cheaper.body.revision).toBe(5);
     expect(cheaper.body.activity.estimatedCost).toBeLessThanOrEqual(18);
 
     await request(app)
@@ -310,16 +326,17 @@ describe("Nuogo REST API", () => {
     const tripId = generated.body.trip.id;
     const activity = generated.body.variants[0].days[0].activities[0];
 
-    await request(app).get(`/api/trips/${tripId}`).set(intruderAuth).expect(404);
+    await request(app).get(`/api/trips/${tripId}`).set(intruderAuth).expect(403);
     await request(app)
       .patch(`/api/activities/${activity.id}`)
       .set(intruderAuth)
-      .send({ estimatedCost: activity.estimatedCost + 10 })
-      .expect(404);
+      .send({ expectedRevision: 0, estimatedCost: activity.estimatedCost + 10 })
+      .expect(403);
     await request(app)
       .delete(`/api/activities/${activity.id}`)
       .set(intruderAuth)
-      .expect(404);
+      .send({ expectedRevision: 0 })
+      .expect(403);
   });
 
   it("redirects an approved attraction image without authentication", async () => {

@@ -702,6 +702,167 @@ describe("repository adapters", () => {
     expect(connection.release).toHaveBeenCalledOnce();
   });
 
+  it("commits a MySQL activity update and revision increment together", async () => {
+    const current = {
+      trip: { id: "trip-1", ownerId: "owner-1", revision: 3 },
+      variant: { id: "variant-1" },
+      day: { id: "day-1" },
+      activity: { id: "activity-1", estimatedCost: 200 }
+    };
+    const updated = {
+      ...current,
+      trip: { ...current.trip, revision: 4 },
+      activity: { ...current.activity, estimatedCost: 420 }
+    };
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      execute: vi.fn(async (sql) => {
+        if (sql.startsWith("UPDATE trips")) return [{ affectedRows: 1 }];
+        if (sql.startsWith("UPDATE activities")) return [{ affectedRows: 1 }];
+        throw new Error(`Unexpected SQL: ${sql}`);
+      })
+    };
+    const repository = new MySqlRepository({
+      getConnection: vi.fn(async () => connection),
+      query: vi.fn()
+    });
+    vi.spyOn(repository, "findActivityContext")
+      .mockResolvedValueOnce(current)
+      .mockResolvedValueOnce(updated);
+
+    const result = await repository.updateActivity(
+      "activity-1",
+      "editor-1",
+      { estimatedCost: 420 },
+      3
+    );
+
+    expect(result).toMatchObject({ revision: 4, activity: { estimatedCost: 420 } });
+    expect(connection.beginTransaction).toHaveBeenCalledOnce();
+    expect(connection.execute).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining("revision = revision + 1"),
+      ["trip-1", 3]
+    );
+    expect(connection.execute).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("UPDATE activities"),
+      [420, "activity-1"]
+    );
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(connection.rollback).not.toHaveBeenCalled();
+  });
+
+  it("rolls back a MySQL revision when its activity write fails", async () => {
+    const failure = new Error("activity update failed");
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      execute: vi.fn(async (sql) => {
+        if (sql.startsWith("UPDATE trips")) return [{ affectedRows: 1 }];
+        if (sql.startsWith("UPDATE activities")) throw failure;
+        throw new Error(`Unexpected SQL: ${sql}`);
+      })
+    };
+    const repository = new MySqlRepository({
+      getConnection: vi.fn(async () => connection),
+      query: vi.fn()
+    });
+    vi.spyOn(repository, "findActivityContext").mockResolvedValue({
+      trip: { id: "trip-1", ownerId: "owner-1", revision: 3 },
+      variant: { id: "variant-1" },
+      day: { id: "day-1" },
+      activity: { id: "activity-1", estimatedCost: 200 }
+    });
+
+    await expect(repository.updateActivity(
+      "activity-1",
+      "editor-1",
+      { estimatedCost: 420 },
+      3
+    )).rejects.toBe(failure);
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(connection.rollback).toHaveBeenCalledOnce();
+    expect(connection.release).toHaveBeenCalledOnce();
+  });
+
+  it("commits a MySQL revision when an activity update already has the requested value", async () => {
+    const context = {
+      trip: { id: "trip-1", ownerId: "owner-1", revision: 3 },
+      variant: { id: "variant-1" },
+      day: { id: "day-1" },
+      activity: { id: "activity-1", estimatedCost: 420 }
+    };
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      execute: vi.fn(async (sql) => {
+        if (sql.startsWith("UPDATE trips")) return [{ affectedRows: 1 }];
+        if (sql.startsWith("UPDATE activities")) return [{ affectedRows: 0 }];
+        throw new Error(`Unexpected SQL: ${sql}`);
+      })
+    };
+    const repository = new MySqlRepository({
+      getConnection: vi.fn(async () => connection),
+      query: vi.fn()
+    });
+    vi.spyOn(repository, "findActivityContext")
+      .mockResolvedValueOnce(context)
+      .mockResolvedValueOnce({
+        ...context,
+        trip: { ...context.trip, revision: 4 }
+      });
+
+    await expect(repository.updateActivity(
+      "activity-1",
+      "editor-1",
+      { estimatedCost: 420 },
+      3
+    )).resolves.toMatchObject({ revision: 4 });
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(connection.rollback).not.toHaveBeenCalled();
+  });
+
+  it("does not write a MySQL activity when the expected revision is stale", async () => {
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      execute: vi.fn(async (sql) => {
+        if (sql.startsWith("UPDATE trips")) return [{ affectedRows: 0 }];
+        throw new Error(`Unexpected SQL: ${sql}`);
+      })
+    };
+    const repository = new MySqlRepository({
+      getConnection: vi.fn(async () => connection),
+      query: vi.fn()
+    });
+    vi.spyOn(repository, "findActivityContext").mockResolvedValue({
+      trip: { id: "trip-1", ownerId: "owner-1", revision: 4 },
+      variant: { id: "variant-1" },
+      day: { id: "day-1" },
+      activity: { id: "activity-1", estimatedCost: 200 }
+    });
+
+    await expect(repository.updateActivity(
+      "activity-1",
+      "editor-1",
+      { estimatedCost: 420 },
+      3
+    )).resolves.toBeUndefined();
+    expect(connection.execute).toHaveBeenCalledTimes(1);
+    expect(connection.rollback).toHaveBeenCalledOnce();
+    expect(connection.commit).not.toHaveBeenCalled();
+  });
+
   it("persists grounded activity provenance through the MySQL adapter", async () => {
     const execute = vi.fn(async () => [{ affectedRows: 1 }]);
     const repository = new MySqlRepository({ execute, query: vi.fn() });
