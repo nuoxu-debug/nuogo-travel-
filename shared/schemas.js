@@ -186,12 +186,29 @@ export const tripExpenseSchema = z.object({
   participants: z.array(expenseParticipantSchema).min(1).max(50),
   createdAt: z.string().datetime().optional(),
   updatedAt: z.string().datetime().optional()
-}).strict();
+}).strict().superRefine((expense, context) => {
+  const userIds = expense.participants.map(({ userId }) => userId);
+  if (new Set(userIds).size !== userIds.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["participants"],
+      message: "Expense participants must be unique."
+    });
+  }
+
+  if (expense.participants.reduce((total, { shareFen }) => total + shareFen, 0) !== expense.amountFen) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["participants"],
+      message: "Participant shares must total the expense amount."
+    });
+  }
+});
 
 const expenseBalanceSchema = z.object({
   userId: z.string().min(1),
   name: z.string().min(1).max(80),
-  paidFen: z.number().int(),
+  paidFen: z.number().int().nonnegative(),
   shareFen: z.number().int().nonnegative(),
   netFen: z.number().int()
 }).strict();

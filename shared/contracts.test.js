@@ -6,6 +6,7 @@ import {
   itineraryVariantSchema,
   preferenceSchema,
   tripInvitationSchema,
+  tripExpenseSchema,
   tripMemberSchema,
   tripRevisionSchema
 } from "./schemas.js";
@@ -184,5 +185,55 @@ describe("Nuogo shared contracts", () => {
       settlements: []
     });
     expect(summary.members[0].netFen).toBe(20000);
+  });
+
+  it("rejects duplicate expense participants", () => {
+    expect(() => tripExpenseSchema.parse({
+      id: "expense-1",
+      tripId: "trip-1",
+      description: "Tunxi dinner",
+      category: "food",
+      amountFen: 30000,
+      expenseDate: "2026-08-10",
+      paidByUserId: "user-1",
+      createdByUserId: "user-1",
+      note: "",
+      participants: [
+        { userId: "user-1", name: "Chen", shareFen: 15000 },
+        { userId: "user-1", name: "Chen", shareFen: 15000 }
+      ]
+    })).toThrow();
+  });
+
+  it("rejects expense participant shares that do not total the expense", () => {
+    expect(() => tripExpenseSchema.parse({
+      id: "expense-1",
+      tripId: "trip-1",
+      description: "Tunxi dinner",
+      category: "food",
+      amountFen: 30000,
+      expenseDate: "2026-08-10",
+      paidByUserId: "user-1",
+      createdByUserId: "user-1",
+      note: "",
+      participants: [
+        { userId: "user-1", name: "Chen", shareFen: 10000 },
+        { userId: "user-2", name: "Li", shareFen: 10000 }
+      ]
+    })).toThrow();
+  });
+
+  it("rejects negative paid balances", () => {
+    expect(() => expenseSummarySchema.parse({
+      totalSpentFen: 30000,
+      members: [{
+        userId: "user-1",
+        name: "Chen",
+        paidFen: -1,
+        shareFen: 10000,
+        netFen: -10001
+      }],
+      settlements: []
+    })).toThrow();
   });
 });

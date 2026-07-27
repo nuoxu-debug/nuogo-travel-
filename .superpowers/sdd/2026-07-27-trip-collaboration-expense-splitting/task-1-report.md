@@ -72,3 +72,50 @@ The same GREEN command was rerun as the final verification. `git diff --check` a
 ## Concerns
 
 The task brief's exact `.tools\\node\\npm.cmd` command cannot run from this worktree because the runtime is provisioned only at the repository root. The equivalent `npm run test:shared` command passed using that root runtime. Git also reports normal Windows LF-to-CRLF conversion warnings when touching the three JavaScript files; no diff-check whitespace errors were found.
+
+## Fix Round 1
+
+### Implementation
+
+- Added a strict `tripExpenseSchema` refinement rejecting duplicate participant user IDs.
+- Added a strict `tripExpenseSchema` refinement requiring participant `shareFen` values to sum exactly to `amountFen`.
+- Changed expense summary member `paidFen` to require a nonnegative integer.
+- Added contract tests covering all three invalid cases.
+
+### RED
+
+```powershell
+$env:PATH="C:\Users\G16\OneDrive\桌面\FYP\.tools\node;$env:PATH"
+npm run test:shared
+```
+
+```text
+contracts.test.js (11 tests | 3 failed)
+3 failed: duplicate participants, non-reconciling shares, and negative paidFen were accepted.
+8 existing tests passed.
+EXIT_CODE=1
+```
+
+### GREEN
+
+```powershell
+$env:PATH="C:\Users\G16\OneDrive\桌面\FYP\.tools\node;$env:PATH"
+npm run test:shared
+```
+
+```text
+contracts.test.js (11 tests) 9ms
+Test Files 1 passed (1)
+Tests 11 passed (11)
+EXIT_CODE=0
+```
+
+### Files Changed
+
+- `shared/schemas.js`
+- `shared/contracts.test.js`
+- `.superpowers/sdd/2026-07-27-trip-collaboration-expense-splitting/task-1-report.md`
+
+### Self-Review and Concerns
+
+The refinements run after the existing strict participant object validation, report precise `participants` issues, and preserve valid equal allocations. No new concerns were identified beyond the existing worktree-local Node runtime path mismatch documented above.
