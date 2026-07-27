@@ -11,6 +11,10 @@ const mediaMigrationUrl = new URL(
   "../../database/migrations/004_activity_media_details.sql",
   import.meta.url
 );
+const collaborationMigrationUrl = new URL(
+  "../../database/migrations/005_trip_collaboration_expenses.sql",
+  import.meta.url
+);
 
 describe("Nuogo MySQL schema", () => {
   it("defines every required table without admin tables", () => {
@@ -75,5 +79,24 @@ describe("Nuogo MySQL schema", () => {
     expect(sql).toMatch(/image_url\s+VARCHAR\(500\)/i);
     expect(sql).toMatch(/image_attribution\s+VARCHAR\(255\)/i);
     expect(sql).toMatch(/visit_details_json\s+JSON/i);
+  });
+
+  it("defines collaboration memberships, invitations, expenses, logs, and revisions", () => {
+    const sql = readFileSync(collaborationMigrationUrl, "utf8");
+    for (const table of [
+      "trip_members",
+      "trip_invitations",
+      "trip_expenses",
+      "expense_participants",
+      "trip_activity_log"
+    ]) {
+      expect(sql).toMatch(new RegExp(`CREATE TABLE(?: IF NOT EXISTS)? ${table}`, "i"));
+    }
+    expect(sql).toMatch(/ADD COLUMN revision INT UNSIGNED NOT NULL DEFAULT 0/i);
+    expect(sql).toMatch(/token_hash CHAR\(64\) NOT NULL/i);
+    expect(sql).not.toMatch(/\btoken\s+VARCHAR/i);
+    expect(sql).toMatch(/amount_fen INT UNSIGNED NOT NULL/i);
+    expect(sql).toMatch(/share_fen INT UNSIGNED NOT NULL/i);
+    expect(sql).toMatch(/UNIQUE KEY\s+\w+\s+\(trip_id,\s*user_id\)/i);
   });
 });
