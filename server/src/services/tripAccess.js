@@ -9,7 +9,8 @@ export async function getTripAccess(repository, tripId, userId) {
   const trip = await repository.getTrip(tripId);
   if (!trip) return undefined;
 
-  const member = await repository.getMember(tripId, userId);
+  const candidate = await repository.getMember(tripId, userId);
+  const member = candidate?.userId === userId ? candidate : undefined;
   const isOwner = trip.ownerId === userId;
   const role = isOwner ? "owner" : member?.status === "active" ? member.role : undefined;
 

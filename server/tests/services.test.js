@@ -54,6 +54,20 @@ describe("trip access policy", () => {
     expect((await getTripAccess(removedMemberRepository, "trip-1", "user-1")).role).toBeUndefined();
   });
 
+  it("does not grant access from a membership for another user", async () => {
+    const repository = {
+      getTrip: async () => ({ id: "trip-1", ownerId: "owner-1" }),
+      getMember: async () => ({ userId: "other-user", role: "editor", status: "active" })
+    };
+
+    expect(await getTripAccess(repository, "trip-1", "user-1")).toMatchObject({
+      member: undefined,
+      role: undefined,
+      canEdit: false,
+      isOwner: false
+    });
+  });
+
   it("resolves an owner before owner membership backfill", async () => {
     const repository = {
       getTrip: async () => ({ id: "trip-1", ownerId: "owner-1" }),
