@@ -10,6 +10,7 @@ import { createAttractionMediaRouter } from "./routes/attractionMedia.js";
 import { createCollaborationRouter } from "./routes/collaboration.js";
 import { createFavoritesRouter } from "./routes/favorites.js";
 import { createLegacyMetaRouter, createMetaRouter } from "./routes/meta.js";
+import { createMembersRouter } from "./routes/members.js";
 import { createTripsRouter } from "./routes/trips.js";
 import { AuthService } from "./services/authService.js";
 
@@ -73,6 +74,11 @@ export function createApp({
     authenticate
   }));
   app.use("/api", createCollaborationRouter({
+    repository,
+    authenticate,
+    clientOrigin: config.clientOrigin
+  }));
+  app.use("/api", createMembersRouter({
     repository,
     authenticate,
     clientOrigin: config.clientOrigin
