@@ -20,6 +20,25 @@ function publicDate(value) {
   return value?.toISOString?.().slice(0, 10) ?? value;
 }
 
+function withoutNulls(row, fields) {
+  if (!row) return undefined;
+  const normalized = { ...row };
+  for (const field of fields) {
+    if (normalized[field] === null || normalized[field] === undefined) {
+      delete normalized[field];
+    }
+  }
+  return normalized;
+}
+
+function memberRecord(row) {
+  return withoutNulls(row, ["removedAt"]);
+}
+
+function invitationRecord(row) {
+  return withoutNulls(row, ["acceptedByUserId", "acceptedAt"]);
+}
+
 export class MySqlRepository {
   constructor(configOrPool) {
     this.pool = typeof configOrPool?.query === "function"
@@ -491,7 +510,7 @@ export class MySqlRepository {
        LIMIT 1`,
       [tripId, userId]
     );
-    return rows[0];
+    return memberRecord(rows[0]);
   }
 
   async listMembers(tripId) {
@@ -504,7 +523,7 @@ export class MySqlRepository {
        ORDER BY m.joined_at, m.id`,
       [tripId]
     );
-    return rows;
+    return rows.map(memberRecord);
   }
 
   async createInvitation(input) {
@@ -532,7 +551,7 @@ export class MySqlRepository {
        LIMIT 1`,
       [tokenHash]
     );
-    return rows[0];
+    return invitationRecord(rows[0]);
   }
 
   async listInvitations(tripId) {
@@ -546,10 +565,10 @@ export class MySqlRepository {
        ORDER BY created_at DESC`,
       [tripId]
     );
-    return rows;
+    return rows.map(invitationRecord);
   }
 
-  async updateInvitation(invitationId, tripId, patch) {
+  async updateInvitation(invitationId, tripId, patch, options = {}) {
     const mapping = {
       role: "role",
       status: "status",
@@ -565,11 +584,19 @@ export class MySqlRepository {
       values.push(value ?? null);
     }
     if (fields.length) {
+      const conditions = ["id = ?", "trip_id = ?"];
       values.push(invitationId, tripId);
+      if (options.expectedStatuses?.length) {
+        conditions.push(`status IN (${options.expectedStatuses.map(() => "?").join(", ")})`);
+        values.push(...options.expectedStatuses);
+      }
+      if (options.requireUnexpired) {
+        conditions.push("expires_at > CURRENT_TIMESTAMP");
+      }
       const [result] = await this.pool.execute(
         `UPDATE trip_invitations
          SET ${fields.join(", ")}
-         WHERE id = ? AND trip_id = ?`,
+         WHERE ${conditions.join(" AND ")}`,
         values
       );
       if (!result.affectedRows) return undefined;
@@ -584,7 +611,7 @@ export class MySqlRepository {
        LIMIT 1`,
       [invitationId, tripId]
     );
-    return rows[0];
+    return invitationRecord(rows[0]);
   }
 
   async acceptInvitation(invitationId, userId) {
@@ -592,10 +619,12 @@ export class MySqlRepository {
     try {
       await connection.beginTransaction();
       const [invitations] = await connection.execute(
-        `SELECT id, trip_id AS tripId, role, status,
-                accepted_by_user_id AS acceptedByUserId
-         FROM trip_invitations
-         WHERE id = ?
+        `SELECT i.id, i.trip_id AS tripId, i.role, i.status,
+                i.accepted_by_user_id AS acceptedByUserId,
+                i.expires_at AS expiresAt, t.user_id AS ownerId
+         FROM trip_invitations i
+         JOIN trips t ON t.id = i.trip_id
+         WHERE i.id = ?
          LIMIT 1
          FOR UPDATE`,
         [invitationId]
@@ -620,25 +649,49 @@ export class MySqlRepository {
           [invitation.tripId, userId]
         );
         await connection.commit();
-        return members[0]?.status === "active" ? members[0] : undefined;
+        return members[0]?.status === "active" ? memberRecord(members[0]) : undefined;
       }
       if (invitation.status !== "pending") {
         await connection.commit();
         return undefined;
       }
+      if (invitation.ownerId === userId) {
+        await connection.commit();
+        return undefined;
+      }
+      if (Date.parse(invitation.expiresAt) <= Date.now()) {
+        await connection.execute(
+          `UPDATE trip_invitations
+           SET status = 'expired'
+           WHERE id = ? AND status = 'pending'`,
+          [invitationId]
+        );
+        await connection.commit();
+        return undefined;
+      }
 
+      const [accepted] = await connection.execute(
+        `UPDATE trip_invitations
+         SET status = 'accepted', accepted_by_user_id = ?, accepted_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND status = 'pending' AND expires_at > CURRENT_TIMESTAMP`,
+        [userId, invitationId]
+      );
+      if (!accepted.affectedRows) {
+        await connection.execute(
+          `UPDATE trip_invitations
+           SET status = 'expired'
+           WHERE id = ? AND status = 'pending'`,
+          [invitationId]
+        );
+        await connection.commit();
+        return undefined;
+      }
       await connection.execute(
         `INSERT INTO trip_members (id, trip_id, user_id, role, status)
          VALUES (?, ?, ?, ?, 'active')
          ON DUPLICATE KEY UPDATE
            role = VALUES(role), status = 'active', removed_at = NULL`,
         [randomUUID(), invitation.tripId, userId, invitation.role]
-      );
-      await connection.execute(
-        `UPDATE trip_invitations
-         SET status = 'accepted', accepted_by_user_id = ?, accepted_at = CURRENT_TIMESTAMP
-         WHERE id = ? AND status = 'pending'`,
-        [userId, invitationId]
       );
       const [members] = await connection.execute(
         `SELECT m.id, m.trip_id AS tripId, m.user_id AS userId, u.name,
@@ -650,7 +703,7 @@ export class MySqlRepository {
         [invitation.tripId, userId]
       );
       await connection.commit();
-      return members[0];
+      return memberRecord(members[0]);
     } catch (error) {
       await connection.rollback();
       throw error;
@@ -676,7 +729,7 @@ export class MySqlRepository {
        LIMIT 1`,
       [memberId, tripId]
     );
-    return rows[0];
+    return memberRecord(rows[0]);
   }
 
   async removeMember(tripId, memberId) {
@@ -696,7 +749,7 @@ export class MySqlRepository {
        LIMIT 1`,
       [memberId, tripId]
     );
-    return rows[0];
+    return memberRecord(rows[0]);
   }
 
   async listExpenses(tripId) {

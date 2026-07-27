@@ -39,6 +39,9 @@ function invitationStateError(invitation) {
   if (invitation.status === "accepted") {
     return apiError(409, "INVITATION_CONSUMED", "This invitation was already accepted.");
   }
+  if (invitation.status === "declined") {
+    return apiError(409, "INVITATION_CONSUMED", "This invitation was declined.");
+  }
   return undefined;
 }
 
@@ -119,10 +122,15 @@ export function createMembersRouter({ repository, authenticate, clientOrigin }) 
         const invitation = await repository.updateInvitation(
           req.params.invitationId,
           req.params.tripId,
-          { status: "revoked" }
+          { status: "revoked" },
+          { expectedStatuses: ["pending"], requireUnexpired: true }
         );
         if (!invitation) {
-          throw apiError(404, "NOT_FOUND", "Invitation was not found.");
+          const current = (await repository.listInvitations(req.params.tripId))
+            .find(({ id }) => id === req.params.invitationId);
+          if (!current) throw apiError(404, "NOT_FOUND", "Invitation was not found.");
+          throw invitationStateError(current)
+            ?? apiError(409, "INVITATION_CONSUMED", "Invitation state has changed.");
         }
         await recordActivity(repository, {
           tripId: req.params.tripId,
@@ -257,12 +265,19 @@ export function createMembersRouter({ repository, authenticate, clientOrigin }) 
       const isRepeat = invitation.status === "accepted"
         && invitation.acceptedByUserId === req.user.id;
       if (stateError && !isRepeat) throw stateError;
-      if (invitation.status === "declined") {
-        throw apiError(409, "INVITATION_CONSUMED", "This invitation was declined.");
+      const trip = await repository.getTrip(invitation.tripId);
+      if (trip?.ownerId === req.user.id) {
+        throw apiError(
+          409,
+          "TRIP_OWNER_IMMUTABLE",
+          "The trip owner already has owner access."
+        );
       }
       const membership = await repository.acceptInvitation(invitation.id, req.user.id);
       if (!membership) {
-        throw apiError(409, "INVITATION_CONSUMED", "This invitation was already consumed.");
+        const current = await loadInvitation(repository, req.params.token);
+        throw invitationStateError(current)
+          ?? apiError(409, "INVITATION_CONSUMED", "This invitation was already consumed.");
       }
       if (!isRepeat) {
         await recordActivity(repository, {
@@ -285,17 +300,19 @@ export function createMembersRouter({ repository, authenticate, clientOrigin }) 
       const invitation = await loadInvitation(repository, req.params.token);
       const stateError = invitationStateError(invitation);
       if (stateError) throw stateError;
-      if (invitation.status === "declined") {
-        if (invitation.acceptedByUserId !== req.user.id) {
-          throw apiError(409, "INVITATION_CONSUMED", "This invitation was already consumed.");
-        }
-        return res.json({ invitation: publicInvitation(invitation) });
-      }
       const declined = await repository.updateInvitation(invitation.id, invitation.tripId, {
         status: "declined",
         acceptedByUserId: req.user.id,
         acceptedAt: new Date().toISOString()
+      }, {
+        expectedStatuses: ["pending"],
+        requireUnexpired: true
       });
+      if (!declined) {
+        const current = await loadInvitation(repository, req.params.token);
+        throw invitationStateError(current)
+          ?? apiError(409, "INVITATION_CONSUMED", "Invitation state has changed.");
+      }
       await recordActivity(repository, {
         tripId: invitation.tripId,
         actorUserId: req.user.id,

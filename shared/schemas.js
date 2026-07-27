@@ -143,7 +143,7 @@ export const tripMemberSchema = z.object({
 export const tripInvitationSchema = z.object({
   id: z.string().min(1),
   tripId: z.string().min(1),
-  role: z.enum(tripMemberRoles),
+  role: z.enum(["editor", "viewer"]),
   status: z.enum(invitationStatuses),
   expiresAt: z.string().datetime(),
   invitedByUserId: z.string().min(1).optional(),

@@ -328,9 +328,13 @@ export class MemoryRepository {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
   }
 
-  async updateInvitation(invitationId, tripId, patch) {
+  async updateInvitation(invitationId, tripId, patch, options = {}) {
     const invitation = this.invitations.get(invitationId);
     if (!invitation || invitation.tripId !== tripId) return undefined;
+    if (options.expectedStatuses
+      && !options.expectedStatuses.includes(invitation.status)) return undefined;
+    if (options.requireUnexpired
+      && Date.parse(invitation.expiresAt) <= Date.now()) return undefined;
     for (const field of ["role", "status", "acceptedByUserId", "expiresAt", "acceptedAt"]) {
       if (Object.hasOwn(patch, field)) invitation[field] = clone(patch[field]);
     }
@@ -340,12 +344,17 @@ export class MemoryRepository {
   async acceptInvitation(invitationId, userId) {
     const invitation = this.invitations.get(invitationId);
     if (!invitation) return undefined;
+    if (this.trips.get(invitation.tripId)?.ownerId === userId) return undefined;
     if (invitation.status === "accepted") {
       if (invitation.acceptedByUserId !== userId) return undefined;
       const existing = await this.getMember(invitation.tripId, userId);
       return existing?.status === "active" ? existing : undefined;
     }
     if (invitation.status !== "pending") return undefined;
+    if (Date.parse(invitation.expiresAt) <= Date.now()) {
+      invitation.status = "expired";
+      return undefined;
+    }
 
     const key = `${invitation.tripId}:${userId}`;
     const now = new Date().toISOString();

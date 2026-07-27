@@ -145,6 +145,14 @@ describe("Nuogo shared contracts", () => {
       status: "pending",
       expiresAt: "2026-08-03T10:00:00.000Z"
     }).status).toBe("pending");
+
+    expect(() => tripInvitationSchema.parse({
+      id: "invite-owner",
+      tripId: "trip-1",
+      role: "owner",
+      status: "pending",
+      expiresAt: "2026-08-03T10:00:00.000Z"
+    })).toThrow();
   });
 
   it("accepts an equal expense with a participant exclusion", () => {

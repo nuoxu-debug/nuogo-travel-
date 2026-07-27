@@ -213,6 +213,21 @@ describe("trip invitation and member API", () => {
     expect(await repository.getMember(tripId, unrelated.id)).toBeUndefined();
   });
 
+  it("does not let the owner accept an invitation to their own trip", async () => {
+    const created = await createInvitation("editor");
+
+    const response = await request(app)
+      .post(`/api/invitations/${created.body.token}/accept`)
+      .set(owner.auth)
+      .expect(409);
+    expect(response.body.error.code).toBe("TRIP_OWNER_IMMUTABLE");
+
+    const ownerMembership = await repository.getMember(tripId, owner.id);
+    expect(ownerMembership).toMatchObject({ role: "owner", status: "active" });
+    expect(await repository.getInvitationByTokenHash(hashInvitationToken(created.body.token)))
+      .toMatchObject({ status: "pending" });
+  });
+
   it("lets an owner list and revoke invitations without exposing token hashes", async () => {
     const created = await createInvitation("viewer");
     const listed = await request(app)
@@ -239,6 +254,17 @@ describe("trip invitation and member API", () => {
       .set(member.auth)
       .expect(200);
     expect(declined.body.invitation).toMatchObject({ status: "declined" });
+
+    const preview = await request(app)
+      .get(`/api/invitations/${created.body.token}`)
+      .expect(409);
+    expect(preview.body.error.code).toBe("INVITATION_CONSUMED");
+
+    const repeatedDecline = await request(app)
+      .post(`/api/invitations/${created.body.token}/decline`)
+      .set(member.auth)
+      .expect(409);
+    expect(repeatedDecline.body.error.code).toBe("INVITATION_CONSUMED");
 
     const acceptance = await request(app)
       .post(`/api/invitations/${created.body.token}/accept`)

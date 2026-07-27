@@ -1,4 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import {
+  tripInvitationSchema,
+  tripMemberSchema
+} from "@nuogo/shared/schemas";
 import { MemoryRepository } from "../src/repositories/memory.js";
 import { MySqlRepository } from "../src/repositories/mysql.js";
 import { validActivity, validVisitDetails } from "./helpers.js";
@@ -131,6 +135,83 @@ describe("repository adapters", () => {
       .toMatchObject({ status: "accepted", acceptedByUserId: firstUser.id });
   });
 
+  it("does not let a memory invitation overwrite its trip owner membership", async () => {
+    const repository = new MemoryRepository();
+    repository.trips.set("trip-1", {
+      id: "trip-1",
+      ownerId: "owner-1",
+      revision: 0,
+      variants: []
+    });
+    repository.members.set("trip-1:owner-1", {
+      id: "owner-member",
+      tripId: "trip-1",
+      userId: "owner-1",
+      role: "owner",
+      status: "active",
+      joinedAt: "2026-08-01T00:00:00.000Z"
+    });
+    const invitation = await repository.createInvitation({
+      id: "invite-1",
+      tripId: "trip-1",
+      tokenHash: "a".repeat(64),
+      role: "editor",
+      status: "pending",
+      invitedByUserId: "owner-1",
+      expiresAt: "2099-01-01T00:00:00.000Z"
+    });
+
+    await expect(repository.acceptInvitation(invitation.id, "owner-1"))
+      .resolves.toBeUndefined();
+    await expect(repository.getMember("trip-1", "owner-1")).resolves.toMatchObject({
+      id: "owner-member",
+      role: "owner",
+      status: "active"
+    });
+    await expect(repository.getInvitationByTokenHash("a".repeat(64)))
+      .resolves.toMatchObject({ status: "pending" });
+  });
+
+  it("conditionally transitions memory invitations without overwriting newer state", async () => {
+    const repository = new MemoryRepository();
+    await repository.createInvitation({
+      id: "invite-1",
+      tripId: "trip-1",
+      tokenHash: "a".repeat(64),
+      role: "editor",
+      status: "accepted",
+      invitedByUserId: "owner-1",
+      expiresAt: "2099-01-01T00:00:00.000Z"
+    });
+    await repository.createInvitation({
+      id: "invite-expired",
+      tripId: "trip-1",
+      tokenHash: "b".repeat(64),
+      role: "viewer",
+      status: "pending",
+      invitedByUserId: "owner-1",
+      expiresAt: "2000-01-01T00:00:00.000Z"
+    });
+
+    await expect(repository.updateInvitation(
+      "invite-1",
+      "trip-1",
+      { status: "revoked" },
+      { expectedStatuses: ["pending"], requireUnexpired: true }
+    )).resolves.toBeUndefined();
+    await expect(repository.getInvitationByTokenHash("a".repeat(64)))
+      .resolves.toMatchObject({ status: "accepted" });
+
+    await expect(repository.updateInvitation(
+      "invite-expired",
+      "trip-1",
+      { status: "declined" },
+      { expectedStatuses: ["pending"], requireUnexpired: true }
+    )).resolves.toBeUndefined();
+    await expect(repository.getInvitationByTokenHash("b".repeat(64)))
+      .resolves.toMatchObject({ status: "pending" });
+  });
+
   it("persists exact expense allocations", async () => {
     const repository = new MemoryRepository();
     repository.expenses = new Map();
@@ -184,8 +265,7 @@ describe("repository adapters", () => {
       name: "Member",
       role: "editor",
       status: "active",
-      joinedAt: "2026-08-01T00:00:00.000Z",
-      removedAt: null
+      joinedAt: "2026-08-01T00:00:00.000Z"
     };
     const connection = {
       beginTransaction: vi.fn(),
@@ -199,7 +279,9 @@ describe("repository adapters", () => {
             tripId: "trip-1",
             role: "editor",
             status: "pending",
-            acceptedByUserId: null
+            acceptedByUserId: null,
+            expiresAt: "2099-01-01T00:00:00.000Z",
+            ownerId: "user-1"
           }]];
         }
         if (sql.startsWith("INSERT INTO trip_members")) return [{ affectedRows: 1 }];
@@ -219,7 +301,7 @@ describe("repository adapters", () => {
     expect(connection.rollback).not.toHaveBeenCalled();
     expect(connection.release).toHaveBeenCalledOnce();
     expect(connection.execute).toHaveBeenCalledWith(
-      expect.stringContaining("WHERE id = ?"),
+      expect.stringContaining("FOR UPDATE"),
       ["invite-1"]
     );
     expect(connection.execute).toHaveBeenCalledWith(
@@ -246,7 +328,9 @@ describe("repository adapters", () => {
             tripId: "trip-1",
             role: "editor",
             status: "pending",
-            acceptedByUserId: null
+            acceptedByUserId: null,
+            expiresAt: "2099-01-01T00:00:00.000Z",
+            ownerId: "user-1"
           }]];
         }
         if (sql.startsWith("INSERT INTO trip_members")) return [{ affectedRows: 1 }];
@@ -263,6 +347,138 @@ describe("repository adapters", () => {
     expect(connection.commit).not.toHaveBeenCalled();
     expect(connection.rollback).toHaveBeenCalledOnce();
     expect(connection.release).toHaveBeenCalledOnce();
+  });
+
+  it("rejects an expired MySQL invitation after locking it", async () => {
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      execute: vi.fn(async (sql) => {
+        if (sql.includes("FROM trip_invitations")) {
+          return [[{
+            id: "invite-1",
+            tripId: "trip-1",
+            role: "editor",
+            status: "pending",
+            acceptedByUserId: null,
+            expiresAt: "2000-01-01T00:00:00.000Z",
+            ownerId: "user-1"
+          }]];
+        }
+        if (sql.startsWith("UPDATE trip_invitations")) return [{ affectedRows: 1 }];
+        throw new Error(`Unexpected SQL: ${sql}`);
+      })
+    };
+    const repository = new MySqlRepository({
+      getConnection: vi.fn(async () => connection),
+      query: vi.fn()
+    });
+
+    await expect(repository.acceptInvitation("invite-1", "user-2"))
+      .resolves.toBeUndefined();
+    expect(connection.execute).toHaveBeenCalledWith(
+      expect.stringContaining("SET status = 'expired'"),
+      ["invite-1"]
+    );
+    expect(connection.execute.mock.calls.some(([sql]) =>
+      sql.startsWith("INSERT INTO trip_members")
+    )).toBe(false);
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(connection.rollback).not.toHaveBeenCalled();
+  });
+
+  it("does not let a MySQL invitation overwrite its trip owner membership", async () => {
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      execute: vi.fn(async (sql) => {
+        if (sql.includes("FROM trip_invitations")) {
+          return [[{
+            id: "invite-1",
+            tripId: "trip-1",
+            role: "editor",
+            status: "pending",
+            acceptedByUserId: null,
+            expiresAt: "2099-01-01T00:00:00.000Z",
+            ownerId: "owner-1"
+          }]];
+        }
+        throw new Error(`Unexpected SQL: ${sql}`);
+      })
+    };
+    const repository = new MySqlRepository({
+      getConnection: vi.fn(async () => connection),
+      query: vi.fn()
+    });
+
+    await expect(repository.acceptInvitation("invite-1", "owner-1"))
+      .resolves.toBeUndefined();
+    expect(connection.execute.mock.calls.some(([sql]) =>
+      sql.startsWith("INSERT INTO trip_members")
+    )).toBe(false);
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(connection.rollback).not.toHaveBeenCalled();
+  });
+
+  it("uses an atomic pending-and-unexpired condition for MySQL invitation transitions", async () => {
+    const execute = vi.fn(async (sql) => {
+      if (sql.startsWith("UPDATE trip_invitations")) return [{ affectedRows: 0 }];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    });
+    const repository = new MySqlRepository({ execute, query: vi.fn() });
+
+    await expect(repository.updateInvitation(
+      "invite-1",
+      "trip-1",
+      { status: "revoked" },
+      { expectedStatuses: ["pending"], requireUnexpired: true }
+    )).resolves.toBeUndefined();
+    expect(execute).toHaveBeenCalledWith(
+      expect.stringMatching(/status IN \(\?\).*expires_at > CURRENT_TIMESTAMP/s),
+      ["revoked", "invite-1", "trip-1", "pending"]
+    );
+  });
+
+  it("normalizes nullable MySQL collaboration timestamps for shared schemas", async () => {
+    const member = {
+      id: "member-1",
+      tripId: "trip-1",
+      userId: "user-2",
+      name: "Member",
+      role: "viewer",
+      status: "active",
+      joinedAt: "2026-08-01T00:00:00.000Z",
+      removedAt: null
+    };
+    const invitation = {
+      id: "invite-1",
+      tripId: "trip-1",
+      role: "viewer",
+      status: "pending",
+      invitedByUserId: "owner-1",
+      acceptedByUserId: null,
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      acceptedAt: null
+    };
+    const execute = vi.fn(async (sql) => {
+      if (sql.includes("FROM trip_members m")) return [[member]];
+      if (sql.includes("FROM trip_invitations")) return [[invitation]];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    });
+    const repository = new MySqlRepository({ execute, query: vi.fn() });
+
+    const mappedMember = await repository.getMember("trip-1", "user-2");
+    const mappedInvitation = await repository.getInvitationByTokenHash("a".repeat(64));
+    expect(mappedMember).not.toHaveProperty("removedAt");
+    expect(mappedInvitation).not.toHaveProperty("acceptedByUserId");
+    expect(mappedInvitation).not.toHaveProperty("acceptedAt");
+    expect(() => tripMemberSchema.parse(mappedMember)).not.toThrow();
+    expect(() => tripInvitationSchema.parse(mappedInvitation)).not.toThrow();
   });
 
   it("stores expense and participant amounts as integer fen", async () => {
