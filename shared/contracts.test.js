@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { chinaCities } from "./constants.js";
-import { itineraryVariantSchema, preferenceSchema } from "./schemas.js";
+import {
+  expenseInputSchema,
+  expenseSummarySchema,
+  itineraryVariantSchema,
+  preferenceSchema,
+  tripInvitationSchema,
+  tripMemberSchema,
+  tripRevisionSchema
+} from "./schemas.js";
 
 const validActivity = {
   id: "activity-1",
@@ -116,5 +124,65 @@ describe("Nuogo shared contracts", () => {
     expect(variant.days[0].activities[0].imageUrl)
       .toBe("/api/attractions/attraction-huangshan-1/image");
     expect(variant.days[0].activities[0].locationIsEstimated).toBe(true);
+  });
+
+  it("validates an editor membership and a pending invitation", () => {
+    expect(tripMemberSchema.parse({
+      id: "member-1",
+      tripId: "trip-1",
+      userId: "user-2",
+      name: "Li Wei",
+      role: "editor",
+      status: "active",
+      joinedAt: "2026-07-27T10:00:00.000Z"
+    }).role).toBe("editor");
+
+    expect(tripInvitationSchema.parse({
+      id: "invite-1",
+      tripId: "trip-1",
+      role: "viewer",
+      status: "pending",
+      expiresAt: "2026-08-03T10:00:00.000Z"
+    }).status).toBe("pending");
+  });
+
+  it("accepts an equal expense with a participant exclusion", () => {
+    const value = expenseInputSchema.parse({
+      description: "Tunxi dinner",
+      category: "food",
+      amountFen: 30000,
+      expenseDate: "2026-08-10",
+      paidByUserId: "user-1",
+      participantUserIds: ["user-1", "user-2", "user-3"],
+      note: ""
+    });
+    expect(value.participantUserIds).not.toContain("user-4");
+  });
+
+  it("rejects empty expense participants and invalid revisions", () => {
+    expect(() => expenseInputSchema.parse({
+      description: "Taxi",
+      category: "transportation",
+      amountFen: 8000,
+      expenseDate: "2026-08-10",
+      paidByUserId: "user-1",
+      participantUserIds: []
+    })).toThrow();
+    expect(() => tripRevisionSchema.parse({ expectedRevision: -1 })).toThrow();
+  });
+
+  it("validates a per-member balance summary", () => {
+    const summary = expenseSummarySchema.parse({
+      totalSpentFen: 30000,
+      members: [{
+        userId: "user-1",
+        name: "Chen",
+        paidFen: 30000,
+        shareFen: 10000,
+        netFen: 20000
+      }],
+      settlements: []
+    });
+    expect(summary.members[0].netFen).toBe(20000);
   });
 });
