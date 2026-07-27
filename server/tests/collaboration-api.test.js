@@ -454,10 +454,15 @@ describe("trip invitation and member API", () => {
       .set(member.auth)
       .send({
         expectedRevision: 5,
+        status: "upcoming",
         title: { en: "Huangshan Team Trip", zh: "黄山结伴行" }
       })
       .expect(200);
     expect(tripUpdate.body.revision).toBe(6);
+    expect(tripUpdate.body.trip).toMatchObject({
+      status: "upcoming",
+      title: { en: "Huangshan Team Trip" }
+    });
 
     const selected = await request(app)
       .post(`/api/trips/${tripId}/select-variant`)
@@ -485,5 +490,33 @@ describe("trip invitation and member API", () => {
       "trip.updated",
       "trip.variant_selected"
     ]));
+  });
+
+  it("rejects empty activity and trip patches without consuming a revision or logging", async () => {
+    const initial = await repository.getTrip(tripId);
+    const activity = initial.variants[0].days[0].activities[0];
+
+    const emptyActivity = await request(app)
+      .patch(`/api/activities/${activity.id}`)
+      .set(owner.auth)
+      .send({ expectedRevision: 0 })
+      .expect(400);
+    expect(emptyActivity.body.error.code).toBe("VALIDATION_ERROR");
+
+    const unsupportedTrip = await request(app)
+      .patch(`/api/trips/${tripId}`)
+      .set(owner.auth)
+      .send({ expectedRevision: 99, unsupported: true })
+      .expect(400);
+    expect(unsupportedTrip.body.error.code).toBe("VALIDATION_ERROR");
+
+    expect(await repository.getTrip(tripId)).toMatchObject({
+      revision: 0,
+      title: initial.title,
+      status: initial.status
+    });
+    expect((await repository.findActivityContext(activity.id)).activity)
+      .toMatchObject(activity);
+    expect(await repository.listTripActivity(tripId, 50)).toEqual([]);
   });
 });

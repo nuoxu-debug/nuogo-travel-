@@ -21,9 +21,17 @@ function CompareContent() {
     try {
       const body = await apiRequest(`/trips/${trip.id}/select-variant`, {
         method: "POST",
-        body: JSON.stringify({ variantId: variant.id })
+        body: JSON.stringify({
+          variantId: variant.id,
+          expectedRevision: trip.revision
+        })
       });
-      const next = { ...trip, ...body.trip, variants: body.trip.variants ?? trip.variants };
+      const next = {
+        ...trip,
+        ...body.trip,
+        variants: body.trip.variants ?? trip.variants,
+        revision: body.revision
+      };
       setTrip(next);
       navigate(`/trip/${trip.id}`);
     } catch (requestError) {

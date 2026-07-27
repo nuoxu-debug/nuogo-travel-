@@ -322,7 +322,27 @@ export class MySqlRepository {
     return ids.map((id) => tripsById.get(id)).filter(Boolean);
   }
 
-  async mutateWithRevision(tripId, expectedRevision, mutation) {
+  async insertTripActivity(executor, input) {
+    const id = input.id ?? randomUUID();
+    await executor.execute(
+      `INSERT INTO trip_activity_log
+        (id, trip_id, actor_user_id, action, entity_type, entity_id, summary_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id, input.tripId, input.actorUserId, input.action,
+        input.entityType, input.entityId, json(input.summary)
+      ]
+    );
+    return id;
+  }
+
+  async mutateWithRevision(
+    tripId,
+    expectedRevision,
+    actorUserId,
+    audit,
+    mutation
+  ) {
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -340,6 +360,13 @@ export class MySqlRepository {
         await connection.rollback();
         return undefined;
       }
+      if (audit) {
+        await this.insertTripActivity(connection, {
+          ...audit,
+          tripId,
+          actorUserId
+        });
+      }
       await connection.commit();
       return expectedRevision + 1;
     } catch (error) {
@@ -350,7 +377,7 @@ export class MySqlRepository {
     }
   }
 
-  async updateTrip(id, _actorId, patch, expectedRevision) {
+  async updateTrip(id, actorId, patch, expectedRevision, audit) {
     const fields = [];
     const values = [];
     if (patch.status) {
@@ -363,13 +390,19 @@ export class MySqlRepository {
     }
     if (!fields.length) return this.getTrip(id);
     values.push(id);
-    const revision = await this.mutateWithRevision(id, expectedRevision, async (connection) => {
-      await connection.execute(
-        `UPDATE trips SET ${fields.join(", ")} WHERE id = ?`,
-        values
-      );
-      return true;
-    });
+    const revision = await this.mutateWithRevision(
+      id,
+      expectedRevision,
+      actorId,
+      audit,
+      async (connection) => {
+        await connection.execute(
+          `UPDATE trips SET ${fields.join(", ")} WHERE id = ?`,
+          values
+        );
+        return true;
+      }
+    );
     if (revision === undefined) return undefined;
     return { ...await this.getTrip(id), revision };
   }
@@ -396,16 +429,22 @@ export class MySqlRepository {
     return this.createTrip(ownerId, source.preferences, variants);
   }
 
-  async selectVariant(id, _actorId, variantId, expectedRevision) {
-    const revision = await this.mutateWithRevision(id, expectedRevision, async (connection) => {
-      await connection.execute(
-        `UPDATE trips t SET selected_variant_id = ?
-         WHERE t.id = ?
-           AND EXISTS (SELECT 1 FROM itinerary_variants v WHERE v.id = ? AND v.trip_id = t.id)`,
-        [variantId, id, variantId]
-      );
-      return true;
-    });
+  async selectVariant(id, actorId, variantId, expectedRevision, audit) {
+    const revision = await this.mutateWithRevision(
+      id,
+      expectedRevision,
+      actorId,
+      audit,
+      async (connection) => {
+        await connection.execute(
+          `UPDATE trips t SET selected_variant_id = ?
+           WHERE t.id = ?
+             AND EXISTS (SELECT 1 FROM itinerary_variants v WHERE v.id = ? AND v.trip_id = t.id)`,
+          [variantId, id, variantId]
+        );
+        return true;
+      }
+    );
     if (revision === undefined) return undefined;
     return { ...await this.getTrip(id), revision };
   }
@@ -438,12 +477,14 @@ export class MySqlRepository {
     return undefined;
   }
 
-  async addActivity(tripId, dayId, _actorId, activity, expectedRevision) {
+  async addActivity(tripId, dayId, actorId, activity, expectedRevision, audit) {
     const context = await this.findDayContext(tripId, dayId);
     if (!context) return undefined;
     const revision = await this.mutateWithRevision(
       tripId,
       expectedRevision,
+      actorId,
+      audit,
       async (connection) => {
         await this.insertActivity(connection, dayId, activity);
         return true;
@@ -453,7 +494,7 @@ export class MySqlRepository {
     return { ...await this.findActivityContext(activity.id), revision };
   }
 
-  async updateActivity(activityId, _actorId, patch, expectedRevision) {
+  async updateActivity(activityId, actorId, patch, expectedRevision, audit) {
     const context = await this.findActivityContext(activityId);
     if (!context) return undefined;
     const mapping = {
@@ -496,6 +537,8 @@ export class MySqlRepository {
     const revision = await this.mutateWithRevision(
       context.trip.id,
       expectedRevision,
+      actorId,
+      audit,
       async (connection) => {
         if (!fields.length) return true;
         await connection.execute(
@@ -509,12 +552,14 @@ export class MySqlRepository {
     return { ...await this.findActivityContext(activityId), revision };
   }
 
-  async deleteActivity(activityId, _actorId, expectedRevision) {
+  async deleteActivity(activityId, actorId, expectedRevision, audit) {
     const context = await this.findActivityContext(activityId);
     if (!context) return undefined;
     const revision = await this.mutateWithRevision(
       context.trip.id,
       expectedRevision,
+      actorId,
+      audit,
       async (connection) => {
         const [result] = await connection.execute(
           "DELETE FROM activities WHERE id = ?",
@@ -528,7 +573,7 @@ export class MySqlRepository {
     return { ...current, activity: context.activity, revision };
   }
 
-  async reorderDay(tripId, dayId, _actorId, activityIds, expectedRevision) {
+  async reorderDay(tripId, dayId, actorId, activityIds, expectedRevision, audit) {
     const context = await this.findDayContext(tripId, dayId);
     if (!context) return undefined;
     const existing = new Set(context.day.activities.map((item) => item.id));
@@ -537,6 +582,8 @@ export class MySqlRepository {
     const revision = await this.mutateWithRevision(
       tripId,
       expectedRevision,
+      actorId,
+      audit,
       async (connection) => {
         for (const [order, activityId] of activityIds.entries()) {
           await connection.execute(
@@ -551,12 +598,14 @@ export class MySqlRepository {
     return { ...await this.findDayContext(tripId, dayId), revision };
   }
 
-  async replaceDay(tripId, dayId, _actorId, activities, expectedRevision) {
+  async replaceDay(tripId, dayId, actorId, activities, expectedRevision, audit) {
     const context = await this.findDayContext(tripId, dayId);
     if (!context) return undefined;
     const revision = await this.mutateWithRevision(
       tripId,
       expectedRevision,
+      actorId,
+      audit,
       async (connection) => {
         await connection.execute("DELETE FROM activities WHERE day_id = ?", [dayId]);
         for (const activity of activities) {
@@ -974,16 +1023,7 @@ export class MySqlRepository {
   }
 
   async appendTripActivity(input) {
-    const id = input.id ?? randomUUID();
-    await this.pool.execute(
-      `INSERT INTO trip_activity_log
-        (id, trip_id, actor_user_id, action, entity_type, entity_id, summary_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        id, input.tripId, input.actorUserId, input.action,
-        input.entityType, input.entityId, json(input.summary)
-      ]
-    );
+    const id = await this.insertTripActivity(this.pool, input);
     const [rows] = await this.pool.execute(
       `SELECT l.id, l.trip_id AS tripId, l.actor_user_id AS actorUserId,
               u.name AS actorName, l.action, l.entity_type AS entityType,

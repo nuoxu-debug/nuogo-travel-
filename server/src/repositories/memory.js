@@ -83,14 +83,49 @@ export class MemoryRepository {
     return clone(this.trips.get(id));
   }
 
-  async updateTrip(id, _actorId, patch, expectedRevision) {
-    const trip = this.trips.get(id);
+  async mutateWithRevision(tripId, expectedRevision, actorUserId, audit, mutation) {
+    const trip = this.trips.get(tripId);
     if (!trip || trip.revision !== expectedRevision) return undefined;
-    Object.assign(trip, patch, {
-      revision: expectedRevision + 1,
-      updatedAt: new Date().toISOString()
-    });
-    return clone(trip);
+    const tripSnapshot = clone(trip);
+    const activitySnapshot = clone([...this.tripActivity.entries()]);
+    try {
+      if (await mutation(trip) === false) {
+        this.trips.set(tripId, tripSnapshot);
+        this.tripActivity = new Map(activitySnapshot);
+        return undefined;
+      }
+      trip.revision = expectedRevision + 1;
+      trip.updatedAt = new Date().toISOString();
+      if (audit) {
+        await this.appendTripActivity({
+          ...audit,
+          tripId,
+          actorUserId
+        });
+      }
+      return trip.revision;
+    } catch (error) {
+      this.trips.set(tripId, tripSnapshot);
+      this.tripActivity = new Map(activitySnapshot);
+      throw error;
+    }
+  }
+
+  async updateTrip(id, actorId, patch, expectedRevision, audit) {
+    const trip = this.trips.get(id);
+    if (!trip) return undefined;
+    const revision = await this.mutateWithRevision(
+      id,
+      expectedRevision,
+      actorId,
+      audit,
+      (current) => {
+        Object.assign(current, clone(patch));
+        return true;
+      }
+    );
+    if (revision === undefined) return undefined;
+    return this.getTrip(id);
   }
 
   async deleteTrip(id, ownerId) {
@@ -149,14 +184,22 @@ export class MemoryRepository {
     return clone(copy);
   }
 
-  async selectVariant(id, _actorId, variantId, expectedRevision) {
+  async selectVariant(id, actorId, variantId, expectedRevision, audit) {
     const trip = this.trips.get(id);
-    if (!trip || trip.revision !== expectedRevision) return undefined;
+    if (!trip) return undefined;
     if (!trip.variants.some((variant) => variant.id === variantId)) return undefined;
-    trip.selectedVariantId = variantId;
-    trip.revision = expectedRevision + 1;
-    trip.updatedAt = new Date().toISOString();
-    return clone(trip);
+    const revision = await this.mutateWithRevision(
+      id,
+      expectedRevision,
+      actorId,
+      audit,
+      (current) => {
+        current.selectedVariantId = variantId;
+        return true;
+      }
+    );
+    if (revision === undefined) return undefined;
+    return this.getTrip(id);
   }
 
   async findActivityContext(activityId) {
@@ -181,56 +224,101 @@ export class MemoryRepository {
     return undefined;
   }
 
-  async addActivity(tripId, dayId, _actorId, activity, expectedRevision) {
+  async addActivity(tripId, dayId, actorId, activity, expectedRevision, audit) {
     const context = await this.findDayContext(tripId, dayId);
-    if (!context || context.trip.revision !== expectedRevision) return undefined;
-    context.day.activities.push(clone(activity));
-    context.trip.revision = expectedRevision + 1;
-    context.trip.updatedAt = new Date().toISOString();
-    return clone({ ...context, activity, revision: context.trip.revision });
+    if (!context) return undefined;
+    const revision = await this.mutateWithRevision(
+      tripId,
+      expectedRevision,
+      actorId,
+      audit,
+      () => {
+        context.day.activities.push(clone(activity));
+        return true;
+      }
+    );
+    if (revision === undefined) return undefined;
+    return clone({ ...await this.findActivityContext(activity.id), revision });
   }
 
-  async updateActivity(activityId, _actorId, patch, expectedRevision) {
+  async updateActivity(activityId, actorId, patch, expectedRevision, audit) {
     const context = await this.findActivityContext(activityId);
-    if (!context || context.trip.revision !== expectedRevision) return undefined;
-    Object.assign(context.activity, clone(patch));
-    context.trip.revision = expectedRevision + 1;
-    context.trip.updatedAt = new Date().toISOString();
-    return clone({ ...context, revision: context.trip.revision });
+    if (!context) return undefined;
+    const revision = await this.mutateWithRevision(
+      context.trip.id,
+      expectedRevision,
+      actorId,
+      audit,
+      () => {
+        Object.assign(context.activity, clone(patch));
+        return true;
+      }
+    );
+    if (revision === undefined) return undefined;
+    return clone({ ...await this.findActivityContext(activityId), revision });
   }
 
-  async deleteActivity(activityId, _actorId, expectedRevision) {
+  async deleteActivity(activityId, actorId, expectedRevision, audit) {
     const context = await this.findActivityContext(activityId);
-    if (!context || context.trip.revision !== expectedRevision) return undefined;
-    const [activity] = context.day.activities.splice(context.index, 1);
-    context.day.activities.forEach((item, index) => { item.order = index; });
-    context.trip.revision = expectedRevision + 1;
-    context.trip.updatedAt = new Date().toISOString();
-    return clone({ ...context, activity, revision: context.trip.revision });
+    if (!context) return undefined;
+    let activity;
+    const revision = await this.mutateWithRevision(
+      context.trip.id,
+      expectedRevision,
+      actorId,
+      audit,
+      () => {
+        [activity] = context.day.activities.splice(context.index, 1);
+        context.day.activities.forEach((item, index) => { item.order = index; });
+        return true;
+      }
+    );
+    if (revision === undefined) return undefined;
+    return clone({
+      ...await this.findDayContext(context.trip.id, context.day.id),
+      activity,
+      revision
+    });
   }
 
-  async reorderDay(tripId, dayId, _actorId, activityIds, expectedRevision) {
+  async reorderDay(tripId, dayId, actorId, activityIds, expectedRevision, audit) {
     const context = await this.findDayContext(tripId, dayId);
-    if (!context || context.trip.revision !== expectedRevision) return undefined;
+    if (!context) return undefined;
     const existing = new Map(context.day.activities.map((activity) => [activity.id, activity]));
     if (
       activityIds.length !== existing.size ||
       new Set(activityIds).size !== existing.size ||
       activityIds.some((id) => !existing.has(id))
     ) return null;
-    context.day.activities = activityIds.map((id, order) => ({ ...existing.get(id), order }));
-    context.trip.revision = expectedRevision + 1;
-    context.trip.updatedAt = new Date().toISOString();
-    return clone({ ...context, revision: context.trip.revision });
+    const revision = await this.mutateWithRevision(
+      tripId,
+      expectedRevision,
+      actorId,
+      audit,
+      () => {
+        context.day.activities = activityIds.map((id, order) => ({ ...existing.get(id), order }));
+        return true;
+      }
+    );
+    if (revision === undefined) return undefined;
+    return clone({ ...await this.findDayContext(tripId, dayId), revision });
   }
 
-  async replaceDay(tripId, dayId, _actorId, activities, expectedRevision) {
+  async replaceDay(tripId, dayId, actorId, activities, expectedRevision, audit) {
     const context = await this.findDayContext(tripId, dayId);
-    if (!context || context.trip.revision !== expectedRevision) return undefined;
-    context.day.activities = clone(activities);
-    context.trip.revision = expectedRevision + 1;
-    context.trip.updatedAt = new Date().toISOString();
-    return clone({ ...context, revision: context.trip.revision });
+    if (!context) return undefined;
+    const revision = await this.mutateWithRevision(
+      tripId,
+      expectedRevision,
+      actorId,
+      audit,
+      () => {
+        context.day.activities = clone(activities);
+        return true;
+      }
+    );
+    if (revision === undefined) return undefined;
+    return clone({ ...await this.findDayContext(tripId, dayId), revision });
   }
 
   async createShare(tripId, ownerId, permission) {

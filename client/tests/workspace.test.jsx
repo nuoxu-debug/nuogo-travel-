@@ -12,13 +12,27 @@ describe("comparison and editable workspace", () => {
   it("compares three variants and selects one", async () => {
     fetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ trip: { ...demoTrip(), selectedVariantId: "variant-food" } })
+      json: async () => ({
+        trip: { ...demoTrip(), selectedVariantId: "variant-food", revision: 1 },
+        revision: 1
+      })
     });
     render(<App initialPath="/compare/trip-1" />);
     expect(screen.getAllByText(/4 day itinerary/i)).toHaveLength(3);
     await userEvent.click(screen.getAllByRole("button", { name: "Choose this plan" })[1]);
     expect(await screen.findByText("Trip workspace")).toBeInTheDocument();
     expect(screen.getByText("Food-Focused: 4 day itinerary")).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/trips/trip-1/select-variant",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          variantId: "variant-food",
+          expectedRevision: 0
+        })
+      })
+    );
+    expect(JSON.parse(sessionStorage.getItem("nuogo-trip-trip-1")).revision).toBe(1);
   });
 
   it("shows a recovery action when package selection fails", async () => {
@@ -203,29 +217,64 @@ describe("comparison and editable workspace", () => {
     }).length).toBeGreaterThan(0);
   });
 
-  it("edits one activity and refreshes the displayed cost", async () => {
-    fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        activity: {
-          ...demoTrip().variants[0].days[0].activities[0],
-          estimatedCost: 25
-        },
-        budget: {
-          categories: { scenicTickets: 25, localFood: 155, transportation: 0, accommodation: 0 },
-          total: 180,
-          remaining: 4620,
-          limit: 4800,
-          overBudget: false
-        }
+  it("uses the latest revision across sequential activity edits", async () => {
+    const source = demoTrip().variants[0].days[0].activities[0];
+    const budget = {
+      categories: { scenicTickets: 25, localFood: 155, transportation: 0, accommodation: 0 },
+      total: 180,
+      remaining: 4620,
+      limit: 4800,
+      overBudget: false
+    };
+    fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          activity: { ...source, estimatedCost: 25 },
+          budget,
+          revision: 1
+        })
       })
-    });
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          activity: { ...source, estimatedCost: 30 },
+          budget: {
+            ...budget,
+            categories: { ...budget.categories, scenicTickets: 30 },
+            total: 185,
+            remaining: 4615
+          },
+          revision: 2
+        })
+      });
     render(<App initialPath="/trip/trip-1" />);
+
     await userEvent.click(screen.getByRole("button", { name: "Edit Jinli Ancient Street" }));
     const cost = screen.getByLabelText("Estimated cost");
     await userEvent.clear(cost);
     await userEvent.type(cost, "25");
     await userEvent.click(screen.getByRole("button", { name: "Save activity" }));
     expect((await screen.findAllByText("¥25")).length).toBeGreaterThan(0);
+
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({
+      id: "jinli-budget",
+      estimatedCost: 25,
+      expectedRevision: 0
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit Jinli Ancient Street" }));
+    const nextCost = screen.getByLabelText("Estimated cost");
+    await userEvent.clear(nextCost);
+    await userEvent.type(nextCost, "30");
+    await userEvent.click(screen.getByRole("button", { name: "Save activity" }));
+
+    expect((await screen.findAllByText("¥30")).length).toBeGreaterThan(0);
+    expect(JSON.parse(fetch.mock.calls[1][1].body)).toMatchObject({
+      id: "jinli-budget",
+      estimatedCost: 30,
+      expectedRevision: 1
+    });
+    expect(JSON.parse(sessionStorage.getItem("nuogo-trip-trip-1")).revision).toBe(2);
   });
 });

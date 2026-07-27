@@ -22,6 +22,13 @@ function versionConflict() {
   return error;
 }
 
+function validationError(message) {
+  const error = new Error(message);
+  error.code = "VALIDATION_ERROR";
+  error.status = 400;
+  return error;
+}
+
 function expectedRevision(body) {
   return tripRevisionSchema.parse({
     expectedRevision: body.expectedRevision
@@ -34,24 +41,6 @@ async function authorizeContext(repository, context, userId) {
     await getTripAccess(repository, context.trip.id, userId),
     ["editor"]
   );
-}
-
-async function recordMutation(repository, {
-  tripId,
-  actorUserId,
-  action,
-  entityType,
-  entityId,
-  summary = {}
-}) {
-  await repository.appendTripActivity({
-    tripId,
-    actorUserId,
-    action,
-    entityType,
-    entityId,
-    summary
-  });
 }
 
 function budgetFor(context) {
@@ -117,17 +106,15 @@ export function createActivitiesRouter({
         req.params.dayId,
         req.user.id,
         activity,
-        revision
+        revision,
+        {
+          action: "activity.created",
+          entityType: "activity",
+          entityId: activity.id,
+          summary: { dayId: req.params.dayId }
+        }
       );
       if (!saved) throw versionConflict();
-      await recordMutation(repository, {
-        tripId: req.params.tripId,
-        actorUserId: req.user.id,
-        action: "activity.created",
-        entityType: "activity",
-        entityId: activity.id,
-        summary: { dayId: req.params.dayId }
-      });
       res.status(201).json({
         activity: saved.activity,
         budget: budgetFor(saved),
@@ -150,6 +137,9 @@ export function createActivitiesRouter({
       if (patch.estimatedCost !== undefined) patch.estimatedCost = Number(patch.estimatedCost);
       const current = await repository.findActivityContext(req.params.activityId);
       await authorizeContext(repository, current, req.user.id);
+      if (!Object.keys(patch).length) {
+        throw validationError("Provide a supported activity field to update.");
+      }
       const revision = expectedRevision(req.body);
       const changesSourcedFacts = [
         "name",
@@ -175,17 +165,15 @@ export function createActivitiesRouter({
         req.params.activityId,
         req.user.id,
         patch,
-        revision
+        revision,
+        {
+          action: "activity.updated",
+          entityType: "activity",
+          entityId: req.params.activityId,
+          summary: { fields: Object.keys(patch) }
+        }
       );
       if (!context) throw versionConflict();
-      await recordMutation(repository, {
-        tripId: current.trip.id,
-        actorUserId: req.user.id,
-        action: "activity.updated",
-        entityType: "activity",
-        entityId: req.params.activityId,
-        summary: { fields: Object.keys(patch) }
-      });
       res.json({
         activity: context.activity,
         budget: budgetFor(context),
@@ -204,17 +192,15 @@ export function createActivitiesRouter({
       const context = await repository.deleteActivity(
         req.params.activityId,
         req.user.id,
-        revision
+        revision,
+        {
+          action: "activity.deleted",
+          entityType: "activity",
+          entityId: req.params.activityId,
+          summary: { dayId: current.day.id }
+        }
       );
       if (!context) throw versionConflict();
-      await recordMutation(repository, {
-        tripId: current.trip.id,
-        actorUserId: req.user.id,
-        action: "activity.deleted",
-        entityType: "activity",
-        entityId: req.params.activityId,
-        summary: { dayId: current.day.id }
-      });
       res.json({
         deletedId: req.params.activityId,
         budget: budgetFor(context),
@@ -235,7 +221,13 @@ export function createActivitiesRouter({
         req.params.dayId,
         req.user.id,
         req.body.activityIds ?? [],
-        revision
+        revision,
+        {
+          action: "day.reordered",
+          entityType: "day",
+          entityId: req.params.dayId,
+          summary: { activityIds: req.body.activityIds ?? [] }
+        }
       );
       if (context === null) {
         const error = new Error("Reorder list must contain every activity exactly once.");
@@ -244,14 +236,6 @@ export function createActivitiesRouter({
         throw error;
       }
       if (!context) throw versionConflict();
-      await recordMutation(repository, {
-        tripId: req.params.tripId,
-        actorUserId: req.user.id,
-        action: "day.reordered",
-        entityType: "day",
-        entityId: req.params.dayId,
-        summary: { activityIds: req.body.activityIds ?? [] }
-      });
       res.json({
         day: context.day,
         budget: budgetFor(context),
@@ -279,15 +263,13 @@ export function createActivitiesRouter({
         imageUrl: undefined,
         imageAttribution: undefined,
         visitDetails: undefined
-      }, revision);
-      if (!context) throw versionConflict();
-      await recordMutation(repository, {
-        tripId: current.trip.id,
-        actorUserId: req.user.id,
+      }, revision, {
         action: "activity.cheaper_alternative",
         entityType: "activity",
-        entityId: req.params.activityId
+        entityId: req.params.activityId,
+        summary: {}
       });
+      if (!context) throw versionConflict();
       res.json({
         activity: context.activity,
         budget: budgetFor(context),
@@ -321,16 +303,15 @@ export function createActivitiesRouter({
         req.params.activityId,
         req.user.id,
         { ...patch },
-        revision
+        revision,
+        {
+          action: "activity.regenerated",
+          entityType: "activity",
+          entityId: req.params.activityId,
+          summary: {}
+        }
       );
       if (!context) throw versionConflict();
-      await recordMutation(repository, {
-        tripId: current.trip.id,
-        actorUserId: req.user.id,
-        action: "activity.regenerated",
-        entityType: "activity",
-        entityId: req.params.activityId
-      });
       res.json({
         activity: context.activity,
         budget: budgetFor(context),
@@ -362,16 +343,15 @@ export function createActivitiesRouter({
         req.params.dayId,
         req.user.id,
         activities,
-        revision
+        revision,
+        {
+          action: "day.regenerated",
+          entityType: "day",
+          entityId: req.params.dayId,
+          summary: {}
+        }
       );
       if (!context) throw versionConflict();
-      await recordMutation(repository, {
-        tripId: req.params.tripId,
-        actorUserId: req.user.id,
-        action: "day.regenerated",
-        entityType: "day",
-        entityId: req.params.dayId
-      });
       res.json({
         day: context.day,
         budget: budgetFor(context),

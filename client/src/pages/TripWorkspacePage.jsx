@@ -27,6 +27,14 @@ function updateActivity(trip, variantId, dayId, activity) {
   };
 }
 
+function mutationBody(trip, values = {}) {
+  return { ...values, expectedRevision: trip.revision };
+}
+
+function withRevision(trip, revision) {
+  return { ...trip, revision };
+}
+
 const newActivityTemplate = {
   name: { en: "New activity", zh: "新行程点" },
   description: { en: "Add your own stop to this day.", zh: "为当天添加自定义行程点。" },
@@ -76,13 +84,22 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
 
   async function saveActivity(values) {
     if (values.id) {
-      const body = await apiRequest(`/activities/${values.id}`, { method: "PATCH", body: JSON.stringify(values) });
-      setTrip((current) => updateActivity(current, variant.id, day.id, body.activity));
+      const body = await apiRequest(`/activities/${values.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(mutationBody(trip, values))
+      });
+      setTrip((current) => withRevision(
+        updateActivity(current, variant.id, day.id, body.activity),
+        body.revision
+      ));
       setBudgetOverride(body.budget);
       setSelectedActivityId(body.activity.id);
     } else {
-      const body = await apiRequest(`/trips/${trip.id}/days/${day.id}/activities`, { method: "POST", body: JSON.stringify(values) });
-      setTrip((current) => ({
+      const body = await apiRequest(`/trips/${trip.id}/days/${day.id}/activities`, {
+        method: "POST",
+        body: JSON.stringify(mutationBody(trip, values))
+      });
+      setTrip((current) => withRevision({
         ...current,
         variants: current.variants.map((item) => item.id !== variant.id ? item : {
           ...item,
@@ -91,7 +108,7 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
             activities: [...currentDay.activities, body.activity]
           })
         })
-      }));
+      }, body.revision));
       setBudgetOverride(body.budget);
       setSelectedActivityId(body.activity.id);
     }
@@ -99,8 +116,11 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
   }
 
   async function removeActivity(target) {
-    const body = await apiRequest(`/activities/${target.id}`, { method: "DELETE" });
-    setTrip((current) => ({
+    const body = await apiRequest(`/activities/${target.id}`, {
+      method: "DELETE",
+      body: JSON.stringify(mutationBody(trip))
+    });
+    setTrip((current) => withRevision({
       ...current,
       variants: current.variants.map((item) => item.id !== variant.id ? item : {
         ...item,
@@ -109,20 +129,32 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
           activities: currentDay.activities.filter((item) => item.id !== target.id)
         })
       })
-    }));
+    }, body.revision));
     setBudgetOverride(body.budget);
   }
 
   async function regenerateActivity(target) {
-    const body = await apiRequest(`/activities/${target.id}/regenerate`, { method: "POST" });
-    setTrip((current) => updateActivity(current, variant.id, day.id, body.activity));
+    const body = await apiRequest(`/activities/${target.id}/regenerate`, {
+      method: "POST",
+      body: JSON.stringify(mutationBody(trip))
+    });
+    setTrip((current) => withRevision(
+      updateActivity(current, variant.id, day.id, body.activity),
+      body.revision
+    ));
     setBudgetOverride(body.budget);
   }
 
   async function cheaper() {
     if (!activity) return;
-    const body = await apiRequest(`/activities/${activity.id}/cheaper-alternative`, { method: "POST" });
-    setTrip((current) => updateActivity(current, variant.id, day.id, body.activity));
+    const body = await apiRequest(`/activities/${activity.id}/cheaper-alternative`, {
+      method: "POST",
+      body: JSON.stringify(mutationBody(trip))
+    });
+    setTrip((current) => withRevision(
+      updateActivity(current, variant.id, day.id, body.activity),
+      body.revision
+    ));
     setBudgetOverride(body.budget);
   }
 
@@ -148,10 +180,13 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
       })
     }));
     try {
-      await apiRequest(`/trips/${trip.id}/days/${day.id}/reorder`, {
+      const body = await apiRequest(`/trips/${trip.id}/days/${day.id}/reorder`, {
         method: "PATCH",
-        body: JSON.stringify({ activityIds: activities.map((item) => item.id) })
+        body: JSON.stringify(mutationBody(trip, {
+          activityIds: activities.map((item) => item.id)
+        }))
       });
+      setTrip((current) => withRevision(current, body.revision));
     } catch {
       setTrip((current) => ({
         ...current,
@@ -164,14 +199,17 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
   }
 
   async function regenerateDay() {
-    const body = await apiRequest(`/trips/${trip.id}/days/${day.id}/regenerate`, { method: "POST" });
-    setTrip((current) => ({
+    const body = await apiRequest(`/trips/${trip.id}/days/${day.id}/regenerate`, {
+      method: "POST",
+      body: JSON.stringify(mutationBody(trip))
+    });
+    setTrip((current) => withRevision({
       ...current,
       variants: current.variants.map((item) => item.id !== variant.id ? item : {
         ...item,
         days: item.days.map((currentDay) => currentDay.id === day.id ? body.day : currentDay)
       })
-    }));
+    }, body.revision));
     setBudgetOverride(body.budget);
   }
 

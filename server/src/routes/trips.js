@@ -20,6 +20,13 @@ function versionConflict() {
   return error;
 }
 
+function validationError(message) {
+  const error = new Error(message);
+  error.code = "VALIDATION_ERROR";
+  error.status = 400;
+  return error;
+}
+
 function publicAccess(access) {
   return {
     role: access.role,
@@ -103,21 +110,22 @@ export function createTripsRouter({
       const patch = {};
       if (["draft", "upcoming", "completed"].includes(req.body.status)) patch.status = req.body.status;
       if (req.body.title?.en && req.body.title?.zh) patch.title = req.body.title;
+      if (!Object.keys(patch).length) {
+        throw validationError("Provide a supported trip field to update.");
+      }
       const trip = await repository.updateTrip(
         req.params.tripId,
         req.user.id,
         patch,
-        revision
+        revision,
+        {
+          action: "trip.updated",
+          entityType: "trip",
+          entityId: req.params.tripId,
+          summary: { fields: Object.keys(patch) }
+        }
       );
       if (!trip) throw versionConflict();
-      await repository.appendTripActivity({
-        tripId: req.params.tripId,
-        actorUserId: req.user.id,
-        action: "trip.updated",
-        entityType: "trip",
-        entityId: req.params.tripId,
-        summary: { fields: Object.keys(patch) }
-      });
       res.json({ trip, revision: trip.revision });
     } catch (error) {
       next(error);
@@ -159,17 +167,15 @@ export function createTripsRouter({
         req.params.tripId,
         req.user.id,
         req.body.variantId,
-        revision
+        revision,
+        {
+          action: "trip.variant_selected",
+          entityType: "variant",
+          entityId: req.body.variantId,
+          summary: {}
+        }
       );
       if (!trip) throw versionConflict();
-      await repository.appendTripActivity({
-        tripId: req.params.tripId,
-        actorUserId: req.user.id,
-        action: "trip.variant_selected",
-        entityType: "variant",
-        entityId: req.body.variantId,
-        summary: {}
-      });
       res.json({ trip, revision: trip.revision });
     } catch (error) {
       next(error);

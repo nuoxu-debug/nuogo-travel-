@@ -5,7 +5,7 @@ import {
 } from "@nuogo/shared/schemas";
 import { MemoryRepository } from "../src/repositories/memory.js";
 import { MySqlRepository } from "../src/repositories/mysql.js";
-import { validActivity, validVisitDetails } from "./helpers.js";
+import { validActivity, validVariant, validVisitDetails } from "./helpers.js";
 
 const requiredMethods = [
   "createUser", "findUserByEmail", "findUserById", "createTrip", "listTrips",
@@ -722,6 +722,7 @@ describe("repository adapters", () => {
       execute: vi.fn(async (sql) => {
         if (sql.startsWith("UPDATE trips")) return [{ affectedRows: 1 }];
         if (sql.startsWith("UPDATE activities")) return [{ affectedRows: 1 }];
+        if (sql.startsWith("INSERT INTO trip_activity_log")) return [{ affectedRows: 1 }];
         throw new Error(`Unexpected SQL: ${sql}`);
       })
     };
@@ -737,7 +738,13 @@ describe("repository adapters", () => {
       "activity-1",
       "editor-1",
       { estimatedCost: 420 },
-      3
+      3,
+      {
+        action: "activity.updated",
+        entityType: "activity",
+        entityId: "activity-1",
+        summary: { fields: ["estimatedCost"] }
+      }
     );
 
     expect(result).toMatchObject({ revision: 4, activity: { estimatedCost: 420 } });
@@ -751,6 +758,19 @@ describe("repository adapters", () => {
       2,
       expect.stringContaining("UPDATE activities"),
       [420, "activity-1"]
+    );
+    expect(connection.execute).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining("INSERT INTO trip_activity_log"),
+      [
+        expect.any(String),
+        "trip-1",
+        "editor-1",
+        "activity.updated",
+        "activity",
+        "activity-1",
+        JSON.stringify({ fields: ["estimatedCost"] })
+      ]
     );
     expect(connection.commit).toHaveBeenCalledOnce();
     expect(connection.rollback).not.toHaveBeenCalled();
@@ -789,6 +809,94 @@ describe("repository adapters", () => {
     expect(connection.commit).not.toHaveBeenCalled();
     expect(connection.rollback).toHaveBeenCalledOnce();
     expect(connection.release).toHaveBeenCalledOnce();
+  });
+
+  it("rolls back a MySQL activity update when its audit write fails", async () => {
+    const failure = new Error("activity log insert failed");
+    const current = {
+      trip: { id: "trip-1", ownerId: "owner-1", revision: 3 },
+      variant: { id: "variant-1" },
+      day: { id: "day-1" },
+      activity: { id: "activity-1", estimatedCost: 200 }
+    };
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      execute: vi.fn(async (sql) => {
+        if (sql.startsWith("UPDATE trips")) return [{ affectedRows: 1 }];
+        if (sql.startsWith("UPDATE activities")) return [{ affectedRows: 1 }];
+        if (sql.startsWith("INSERT INTO trip_activity_log")) throw failure;
+        throw new Error(`Unexpected SQL: ${sql}`);
+      })
+    };
+    const repository = new MySqlRepository({
+      getConnection: vi.fn(async () => connection),
+      query: vi.fn()
+    });
+    vi.spyOn(repository, "findActivityContext").mockResolvedValue(current);
+
+    await expect(repository.updateActivity(
+      "activity-1",
+      "editor-1",
+      { estimatedCost: 420 },
+      3,
+      {
+        action: "activity.updated",
+        entityType: "activity",
+        entityId: "activity-1",
+        summary: { fields: ["estimatedCost"] }
+      }
+    )).rejects.toBe(failure);
+
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(connection.rollback).toHaveBeenCalledOnce();
+    expect(connection.release).toHaveBeenCalledOnce();
+  });
+
+  it("rolls back a memory activity update when its audit write fails", async () => {
+    const repository = new MemoryRepository();
+    const trip = {
+      id: "trip-1",
+      ownerId: "owner-1",
+      revision: 0,
+      updatedAt: "2026-08-01T00:00:00.000Z",
+      variants: [validVariant({
+        tripId: "trip-1",
+        days: [{
+          id: "day-1",
+          dayNumber: 1,
+          date: "2026-08-10",
+          title: { en: "Day", zh: "第一天" },
+          activities: [validActivity({
+            id: "activity-1",
+            estimatedCost: 200
+          })]
+        }]
+      })]
+    };
+    repository.trips.set(trip.id, structuredClone(trip));
+    const failure = new Error("activity log insert failed");
+    vi.spyOn(repository, "appendTripActivity").mockRejectedValue(failure);
+
+    await expect(repository.updateActivity(
+      "activity-1",
+      "editor-1",
+      { estimatedCost: 420 },
+      0,
+      {
+        action: "activity.updated",
+        entityType: "activity",
+        entityId: "activity-1",
+        summary: { fields: ["estimatedCost"] }
+      }
+    )).rejects.toBe(failure);
+
+    expect(await repository.getTrip("trip-1")).toMatchObject({ revision: 0 });
+    expect((await repository.findActivityContext("activity-1")).activity.estimatedCost)
+      .toBe(200);
+    expect(await repository.listTripActivity("trip-1", 50)).toEqual([]);
   });
 
   it("commits a MySQL revision when an activity update already has the requested value", async () => {

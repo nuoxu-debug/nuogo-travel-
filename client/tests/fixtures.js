@@ -66,6 +66,7 @@ export function demoTrip() {
     endDate: "2026-08-13",
     totalBudget: 4800,
     selectedVariantId: "variant-budget",
+    revision: 0,
     preferences: {
       destination: "chengdu",
       departureCity: "shanghai",
