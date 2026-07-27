@@ -331,7 +331,9 @@ export class MemoryRepository {
   async updateInvitation(invitationId, tripId, patch) {
     const invitation = this.invitations.get(invitationId);
     if (!invitation || invitation.tripId !== tripId) return undefined;
-    Object.assign(invitation, clone(patch));
+    for (const field of ["role", "status", "acceptedByUserId", "expiresAt", "acceptedAt"]) {
+      if (Object.hasOwn(patch, field)) invitation[field] = clone(patch[field]);
+    }
     return clone(invitation);
   }
 

@@ -59,6 +59,78 @@ describe("repository adapters", () => {
       .filter(({ userId }) => userId === member.id)).toHaveLength(1);
   });
 
+  it("ignores plain tokens and identity fields when updating a memory invitation", async () => {
+    const repository = new MemoryRepository();
+    await repository.createInvitation({
+      id: "invite-1",
+      tripId: "trip-1",
+      tokenHash: "a".repeat(64),
+      role: "editor",
+      status: "pending",
+      invitedByUserId: "owner-1",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      createdAt: "2026-08-01T00:00:00.000Z"
+    });
+
+    const updated = await repository.updateInvitation("invite-1", "trip-1", {
+      role: "viewer",
+      status: "accepted",
+      acceptedByUserId: "member-1",
+      expiresAt: "2099-02-01T00:00:00.000Z",
+      acceptedAt: "2026-08-02T00:00:00.000Z",
+      id: "invite-2",
+      tripId: "trip-2",
+      token: "plain-invitation-token",
+      tokenHash: "b".repeat(64),
+      invitedByUserId: "attacker-1",
+      createdAt: "2026-08-03T00:00:00.000Z"
+    });
+
+    expect(updated).toMatchObject({
+      id: "invite-1",
+      tripId: "trip-1",
+      tokenHash: "a".repeat(64),
+      role: "viewer",
+      status: "accepted",
+      invitedByUserId: "owner-1",
+      expiresAt: "2099-02-01T00:00:00.000Z",
+      acceptedByUserId: "member-1",
+      acceptedAt: "2026-08-02T00:00:00.000Z",
+      createdAt: "2026-08-01T00:00:00.000Z"
+    });
+    expect(updated).not.toHaveProperty("token");
+    await expect(repository.getInvitationByTokenHash("b".repeat(64))).resolves.toBeUndefined();
+  });
+
+  it("rejects a consumed memory invitation for a different user", async () => {
+    const repository = new MemoryRepository();
+    const firstUser = await repository.createUser({
+      name: "First Member",
+      email: "first@example.com",
+      passwordHash: "hash"
+    });
+    const secondUser = await repository.createUser({
+      name: "Second Member",
+      email: "second@example.com",
+      passwordHash: "hash"
+    });
+    const invitation = await repository.createInvitation({
+      id: "invite-1",
+      tripId: "trip-1",
+      tokenHash: "a".repeat(64),
+      role: "editor",
+      status: "pending",
+      invitedByUserId: "owner-1",
+      expiresAt: "2099-01-01T00:00:00.000Z"
+    });
+
+    await repository.acceptInvitation(invitation.id, firstUser.id);
+    await expect(repository.acceptInvitation(invitation.id, secondUser.id)).resolves.toBeUndefined();
+    expect(await repository.getMember("trip-1", secondUser.id)).toBeUndefined();
+    expect(await repository.getInvitationByTokenHash("a".repeat(64)))
+      .toMatchObject({ status: "accepted", acceptedByUserId: firstUser.id });
+  });
+
   it("persists exact expense allocations", async () => {
     const repository = new MemoryRepository();
     repository.expenses = new Map();
@@ -104,6 +176,95 @@ describe("repository adapters", () => {
     expect(parameters).not.toContain("plain-invitation-token");
   });
 
+  it("accepts a MySQL invitation in one parameterized transaction", async () => {
+    const member = {
+      id: "member-1",
+      tripId: "trip-1",
+      userId: "user-2",
+      name: "Member",
+      role: "editor",
+      status: "active",
+      joinedAt: "2026-08-01T00:00:00.000Z",
+      removedAt: null
+    };
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      execute: vi.fn(async (sql) => {
+        if (sql.includes("FROM trip_invitations")) {
+          return [[{
+            id: "invite-1",
+            tripId: "trip-1",
+            role: "editor",
+            status: "pending",
+            acceptedByUserId: null
+          }]];
+        }
+        if (sql.startsWith("INSERT INTO trip_members")) return [{ affectedRows: 1 }];
+        if (sql.startsWith("UPDATE trip_invitations")) return [{ affectedRows: 1 }];
+        if (sql.includes("FROM trip_members m")) return [[member]];
+        throw new Error(`Unexpected SQL: ${sql}`);
+      })
+    };
+    const repository = new MySqlRepository({
+      getConnection: vi.fn(async () => connection),
+      query: vi.fn()
+    });
+
+    await expect(repository.acceptInvitation("invite-1", "user-2")).resolves.toEqual(member);
+    expect(connection.beginTransaction).toHaveBeenCalledOnce();
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(connection.rollback).not.toHaveBeenCalled();
+    expect(connection.release).toHaveBeenCalledOnce();
+    expect(connection.execute).toHaveBeenCalledWith(
+      expect.stringContaining("WHERE id = ?"),
+      ["invite-1"]
+    );
+    expect(connection.execute).toHaveBeenCalledWith(
+      expect.stringContaining("ON DUPLICATE KEY UPDATE"),
+      [expect.any(String), "trip-1", "user-2", "editor"]
+    );
+    expect(connection.execute).toHaveBeenCalledWith(
+      expect.stringContaining("SET status = 'accepted'"),
+      ["user-2", "invite-1"]
+    );
+  });
+
+  it("rolls back MySQL invitation acceptance when its status update fails", async () => {
+    const failure = new Error("invitation update failed");
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      execute: vi.fn(async (sql) => {
+        if (sql.includes("FROM trip_invitations")) {
+          return [[{
+            id: "invite-1",
+            tripId: "trip-1",
+            role: "editor",
+            status: "pending",
+            acceptedByUserId: null
+          }]];
+        }
+        if (sql.startsWith("INSERT INTO trip_members")) return [{ affectedRows: 1 }];
+        if (sql.startsWith("UPDATE trip_invitations")) throw failure;
+        throw new Error(`Unexpected SQL: ${sql}`);
+      })
+    };
+    const repository = new MySqlRepository({
+      getConnection: vi.fn(async () => connection),
+      query: vi.fn()
+    });
+
+    await expect(repository.acceptInvitation("invite-1", "user-2")).rejects.toBe(failure);
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(connection.rollback).toHaveBeenCalledOnce();
+    expect(connection.release).toHaveBeenCalledOnce();
+  });
+
   it("stores expense and participant amounts as integer fen", async () => {
     const connection = {
       beginTransaction: vi.fn(),
@@ -144,6 +305,143 @@ describe("repository adapters", () => {
     ]);
   });
 
+  it("replaces MySQL expense participants in one parameterized transaction", async () => {
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      execute: vi.fn(async (sql) => {
+        if (sql.includes("SELECT trip_id AS tripId")) return [[{ tripId: "trip-1" }]];
+        return [{ affectedRows: 1 }];
+      })
+    };
+    const execute = vi.fn(async (sql) => {
+      if (!sql.includes("FROM trip_expenses e")) throw new Error(`Unexpected SQL: ${sql}`);
+      return [[
+        {
+          id: "expense-1",
+          tripId: "trip-1",
+          description: "Updated dinner",
+          category: "food",
+          amountFen: 12000,
+          expenseDate: "2026-08-11",
+          paidByUserId: "user-2",
+          paidByName: "Payer",
+          createdByUserId: "user-1",
+          createdByName: "Creator",
+          note: "Updated",
+          createdAt: "2026-08-01T00:00:00.000Z",
+          updatedAt: "2026-08-02T00:00:00.000Z",
+          participantUserId: "user-2",
+          participantName: "Payer",
+          participantShareFen: 7000
+        },
+        {
+          id: "expense-1",
+          tripId: "trip-1",
+          description: "Updated dinner",
+          category: "food",
+          amountFen: 12000,
+          expenseDate: "2026-08-11",
+          paidByUserId: "user-2",
+          paidByName: "Payer",
+          createdByUserId: "user-1",
+          createdByName: "Creator",
+          note: "Updated",
+          createdAt: "2026-08-01T00:00:00.000Z",
+          updatedAt: "2026-08-02T00:00:00.000Z",
+          participantUserId: "user-3",
+          participantName: "Guest",
+          participantShareFen: 5000
+        }
+      ]];
+    });
+    const repository = new MySqlRepository({
+      execute,
+      getConnection: vi.fn(async () => connection),
+      query: vi.fn()
+    });
+    const input = {
+      description: "Updated dinner",
+      category: "food",
+      amountFen: 12000,
+      expenseDate: "2026-08-11",
+      paidByUserId: "user-2",
+      note: "Updated"
+    };
+
+    const expense = await repository.updateExpense("expense-1", input, [
+      { userId: "user-2", shareFen: 7000 },
+      { userId: "user-3", shareFen: 5000 }
+    ]);
+
+    expect(expense.participants).toEqual([
+      { userId: "user-2", name: "Payer", shareFen: 7000 },
+      { userId: "user-3", name: "Guest", shareFen: 5000 }
+    ]);
+    expect(connection.beginTransaction).toHaveBeenCalledOnce();
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(connection.rollback).not.toHaveBeenCalled();
+    expect(connection.release).toHaveBeenCalledOnce();
+    expect(connection.execute).toHaveBeenCalledWith(
+      expect.stringContaining("UPDATE trip_expenses"),
+      ["Updated dinner", "food", 12000, "2026-08-11", "user-2", "Updated", "expense-1"]
+    );
+    expect(connection.execute).toHaveBeenCalledWith(
+      "DELETE FROM expense_participants WHERE expense_id = ?",
+      ["expense-1"]
+    );
+    const participantInserts = connection.execute.mock.calls
+      .filter(([sql]) => sql.startsWith("INSERT INTO expense_participants"));
+    expect(participantInserts.map(([, values]) => values)).toEqual([
+      ["expense-1", "user-2", 7000],
+      ["expense-1", "user-3", 5000]
+    ]);
+  });
+
+  it("rolls back a MySQL expense update when participant replacement fails", async () => {
+    const failure = new Error("participant insert failed");
+    let participantInsertCount = 0;
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      execute: vi.fn(async (sql) => {
+        if (sql.includes("SELECT trip_id AS tripId")) return [[{ tripId: "trip-1" }]];
+        if (sql.startsWith("INSERT INTO expense_participants")) {
+          participantInsertCount += 1;
+          if (participantInsertCount === 2) throw failure;
+        }
+        return [{ affectedRows: 1 }];
+      })
+    };
+    const execute = vi.fn();
+    const repository = new MySqlRepository({
+      execute,
+      getConnection: vi.fn(async () => connection),
+      query: vi.fn()
+    });
+
+    await expect(repository.updateExpense("expense-1", {
+      description: "Updated dinner",
+      category: "food",
+      amountFen: 12000,
+      expenseDate: "2026-08-11",
+      paidByUserId: "user-2",
+      note: "Updated"
+    }, [
+      { userId: "user-2", shareFen: 7000 },
+      { userId: "user-3", shareFen: 5000 }
+    ])).rejects.toBe(failure);
+
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(connection.rollback).toHaveBeenCalledOnce();
+    expect(connection.release).toHaveBeenCalledOnce();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it("increments a trip revision only from the expected revision", async () => {
     const connection = {
       beginTransaction: vi.fn(),
@@ -163,6 +461,29 @@ describe("repository adapters", () => {
       expect.stringContaining("WHERE id = ? AND revision = ?"),
       ["trip-1", 4]
     );
+  });
+
+  it("returns undefined when the expected MySQL trip revision is stale", async () => {
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      execute: vi.fn(async () => [{ affectedRows: 0 }])
+    };
+    const repository = new MySqlRepository({
+      getConnection: vi.fn(async () => connection),
+      query: vi.fn()
+    });
+
+    await expect(repository.incrementTripRevision("trip-1", 4)).resolves.toBeUndefined();
+    expect(connection.execute).toHaveBeenCalledWith(
+      expect.stringContaining("WHERE id = ? AND revision = ?"),
+      ["trip-1", 4]
+    );
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(connection.rollback).not.toHaveBeenCalled();
+    expect(connection.release).toHaveBeenCalledOnce();
   });
 
   it("persists grounded activity provenance through the MySQL adapter", async () => {
