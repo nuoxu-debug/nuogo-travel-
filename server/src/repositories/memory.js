@@ -11,6 +11,10 @@ export class MemoryRepository {
     this.shares = new Map();
     this.votes = new Map();
     this.favorites = new Map();
+    this.members = new Map();
+    this.invitations = new Map();
+    this.expenses = new Map();
+    this.tripActivity = new Map();
   }
 
   async createUser(user) {
@@ -51,10 +55,20 @@ export class MemoryRepository {
       preferences: clone(preferences),
       variants: normalizedVariants,
       selectedVariantId: null,
+      revision: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
     this.trips.set(id, record);
+    const joinedAt = new Date().toISOString();
+    this.members.set(`${id}:${ownerId}`, {
+      id: randomUUID(),
+      tripId: id,
+      userId: ownerId,
+      role: "owner",
+      status: "active",
+      joinedAt
+    });
     return clone(record);
   }
 
@@ -79,6 +93,18 @@ export class MemoryRepository {
     const trip = this.trips.get(id);
     if (!trip || trip.ownerId !== ownerId) return false;
     this.trips.delete(id);
+    for (const [key, member] of this.members) {
+      if (member.tripId === id) this.members.delete(key);
+    }
+    for (const [invitationId, invitation] of this.invitations) {
+      if (invitation.tripId === id) this.invitations.delete(invitationId);
+    }
+    for (const [expenseId, expense] of this.expenses) {
+      if (expense.tripId === id) this.expenses.delete(expenseId);
+    }
+    for (const [activityId, activity] of this.tripActivity) {
+      if (activity.tripId === id) this.tripActivity.delete(activityId);
+    }
     return true;
   }
 
@@ -94,6 +120,7 @@ export class MemoryRepository {
     };
     copy.status = "draft";
     copy.selectedVariantId = null;
+    copy.revision = 0;
     copy.createdAt = new Date().toISOString();
     copy.updatedAt = copy.createdAt;
     copy.variants = copy.variants.map((variant) => ({
@@ -107,6 +134,14 @@ export class MemoryRepository {
       }))
     }));
     this.trips.set(tripId, copy);
+    this.members.set(`${tripId}:${ownerId}`, {
+      id: randomUUID(),
+      tripId,
+      userId: ownerId,
+      role: "owner",
+      status: "active",
+      joinedAt: copy.createdAt
+    });
     return clone(copy);
   }
 
@@ -243,5 +278,199 @@ export class MemoryRepository {
     if (!favorite || favorite.userId !== userId) return false;
     this.favorites.delete(favoriteId);
     return true;
+  }
+
+  async getMember(tripId, userId) {
+    const member = this.members.get(`${tripId}:${userId}`);
+    if (!member) return undefined;
+    return clone({
+      ...member,
+      name: this.users.get(member.userId)?.name
+    });
+  }
+
+  async listMembers(tripId) {
+    const members = [...this.members.values()]
+      .filter((member) => member.tripId === tripId)
+      .sort((a, b) => a.joinedAt.localeCompare(b.joinedAt));
+    return clone(members.map((member) => ({
+      ...member,
+      name: this.users.get(member.userId)?.name
+    })));
+  }
+
+  async createInvitation(input) {
+    const now = new Date().toISOString();
+    const invitation = {
+      id: input.id ?? randomUUID(),
+      tripId: input.tripId,
+      tokenHash: input.tokenHash,
+      role: input.role,
+      status: input.status ?? "pending",
+      invitedByUserId: input.invitedByUserId,
+      expiresAt: input.expiresAt,
+      createdAt: input.createdAt ?? now,
+      ...(input.acceptedByUserId ? { acceptedByUserId: input.acceptedByUserId } : {}),
+      ...(input.acceptedAt ? { acceptedAt: input.acceptedAt } : {})
+    };
+    this.invitations.set(invitation.id, invitation);
+    return clone(invitation);
+  }
+
+  async getInvitationByTokenHash(tokenHash) {
+    return clone([...this.invitations.values()]
+      .find((invitation) => invitation.tokenHash === tokenHash));
+  }
+
+  async listInvitations(tripId) {
+    return clone([...this.invitations.values()]
+      .filter((invitation) => invitation.tripId === tripId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+  }
+
+  async updateInvitation(invitationId, tripId, patch) {
+    const invitation = this.invitations.get(invitationId);
+    if (!invitation || invitation.tripId !== tripId) return undefined;
+    Object.assign(invitation, clone(patch));
+    return clone(invitation);
+  }
+
+  async acceptInvitation(invitationId, userId) {
+    const invitation = this.invitations.get(invitationId);
+    if (!invitation) return undefined;
+    if (invitation.status === "accepted") {
+      if (invitation.acceptedByUserId !== userId) return undefined;
+      const existing = await this.getMember(invitation.tripId, userId);
+      return existing?.status === "active" ? existing : undefined;
+    }
+    if (invitation.status !== "pending") return undefined;
+
+    const key = `${invitation.tripId}:${userId}`;
+    const now = new Date().toISOString();
+    const existing = this.members.get(key);
+    const member = {
+      id: existing?.id ?? randomUUID(),
+      tripId: invitation.tripId,
+      userId,
+      role: invitation.role,
+      status: "active",
+      joinedAt: existing?.joinedAt ?? now
+    };
+    this.members.set(key, member);
+    Object.assign(invitation, {
+      status: "accepted",
+      acceptedByUserId: userId,
+      acceptedAt: now
+    });
+    return this.getMember(invitation.tripId, userId);
+  }
+
+  async updateMember(tripId, memberId, role) {
+    const entry = [...this.members.entries()]
+      .find(([, member]) => member.tripId === tripId && member.id === memberId);
+    if (!entry) return undefined;
+    entry[1].role = role;
+    return this.getMember(tripId, entry[1].userId);
+  }
+
+  async removeMember(tripId, memberId) {
+    const entry = [...this.members.entries()]
+      .find(([, member]) => member.tripId === tripId && member.id === memberId);
+    if (!entry) return undefined;
+    entry[1].status = "removed";
+    entry[1].removedAt = new Date().toISOString();
+    return this.getMember(tripId, entry[1].userId);
+  }
+
+  async listExpenses(tripId) {
+    const expenses = [...this.expenses.values()]
+      .filter((expense) => expense.tripId === tripId)
+      .sort((a, b) => b.expenseDate.localeCompare(a.expenseDate)
+        || b.createdAt.localeCompare(a.createdAt));
+    return clone(expenses.map((expense) => this.hydrateExpense(expense)));
+  }
+
+  async getExpense(tripId, expenseId) {
+    const expense = this.expenses.get(expenseId);
+    return expense?.tripId === tripId ? clone(this.hydrateExpense(expense)) : undefined;
+  }
+
+  async createExpense(input, allocations) {
+    const now = new Date().toISOString();
+    const expense = {
+      ...clone(input),
+      id: input.id ?? randomUUID(),
+      participants: allocations.map(({ userId, shareFen }) => ({ userId, shareFen })),
+      createdAt: input.createdAt ?? now,
+      updatedAt: input.updatedAt ?? now
+    };
+    this.expenses.set(expense.id, expense);
+    return this.getExpense(expense.tripId, expense.id);
+  }
+
+  async updateExpense(expenseId, input, allocations) {
+    const expense = this.expenses.get(expenseId);
+    if (!expense) return undefined;
+    Object.assign(expense, {
+      description: input.description,
+      category: input.category,
+      amountFen: input.amountFen,
+      expenseDate: input.expenseDate,
+      paidByUserId: input.paidByUserId,
+      note: input.note,
+      participants: allocations.map(({ userId, shareFen }) => ({ userId, shareFen })),
+      updatedAt: new Date().toISOString()
+    });
+    return this.getExpense(expense.tripId, expenseId);
+  }
+
+  async deleteExpense(tripId, expenseId) {
+    const expense = this.expenses.get(expenseId);
+    if (!expense || expense.tripId !== tripId) return false;
+    return this.expenses.delete(expenseId);
+  }
+
+  async appendTripActivity(input) {
+    const activity = {
+      ...clone(input),
+      id: input.id ?? randomUUID(),
+      createdAt: input.createdAt ?? new Date().toISOString()
+    };
+    this.tripActivity.set(activity.id, activity);
+    return clone({
+      ...activity,
+      actorName: this.users.get(activity.actorUserId)?.name
+    });
+  }
+
+  async listTripActivity(tripId, limit) {
+    return clone([...this.tripActivity.values()]
+      .filter((activity) => activity.tripId === tripId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit)
+      .map((activity) => ({
+        ...activity,
+        actorName: this.users.get(activity.actorUserId)?.name
+      })));
+  }
+
+  async incrementTripRevision(tripId, expectedRevision) {
+    const trip = this.trips.get(tripId);
+    if (!trip || trip.revision !== expectedRevision) return undefined;
+    trip.revision += 1;
+    trip.updatedAt = new Date().toISOString();
+    return trip.revision;
+  }
+
+  hydrateExpense(expense) {
+    return {
+      ...expense,
+      paidByName: this.users.get(expense.paidByUserId)?.name,
+      createdByName: this.users.get(expense.createdByUserId)?.name,
+      participants: expense.participants.map((participant) => ({
+        ...participant,
+        name: this.users.get(participant.userId)?.name
+      }))
+    };
   }
 }

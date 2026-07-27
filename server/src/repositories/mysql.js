@@ -87,6 +87,11 @@ export class MySqlRepository {
           preferences.startDate, json(preferences.conflicts ?? [])
         ]
       );
+      await connection.execute(
+        `INSERT INTO trip_members (id, trip_id, user_id, role, status)
+         VALUES (?, ?, ?, 'owner', 'active')`,
+        [randomUUID(), tripId, ownerId]
+      );
 
       for (const variant of variants) {
         await connection.execute(
@@ -160,8 +165,8 @@ export class MySqlRepository {
     const [tripRows] = await this.pool.execute(
       `SELECT id, user_id AS ownerId, status, title_en, title_zh, destination,
               start_date AS startDate, end_date AS endDate, total_budget AS totalBudget,
-              selected_variant_id AS selectedVariantId, preferences_json, created_at AS createdAt,
-              updated_at AS updatedAt
+              selected_variant_id AS selectedVariantId, revision, preferences_json,
+              created_at AS createdAt, updated_at AS updatedAt
        FROM trips WHERE id IN (${placeholders})`,
       ids
     );
@@ -178,6 +183,7 @@ export class MySqlRepository {
       preferences: parseJson(row.preferences_json),
       variants: [],
       selectedVariantId: row.selectedVariantId,
+      revision: row.revision ?? 0,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt
     }]));
@@ -473,6 +479,440 @@ export class MySqlRepository {
       connection.release();
     }
     return this.findDayContext(tripId, dayId);
+  }
+
+  async getMember(tripId, userId) {
+    const [rows] = await this.pool.execute(
+      `SELECT m.id, m.trip_id AS tripId, m.user_id AS userId, u.name,
+              m.role, m.status, m.joined_at AS joinedAt, m.removed_at AS removedAt
+       FROM trip_members m
+       JOIN users u ON u.id = m.user_id
+       WHERE m.trip_id = ? AND m.user_id = ?
+       LIMIT 1`,
+      [tripId, userId]
+    );
+    return rows[0];
+  }
+
+  async listMembers(tripId) {
+    const [rows] = await this.pool.execute(
+      `SELECT m.id, m.trip_id AS tripId, m.user_id AS userId, u.name,
+              m.role, m.status, m.joined_at AS joinedAt, m.removed_at AS removedAt
+       FROM trip_members m
+       JOIN users u ON u.id = m.user_id
+       WHERE m.trip_id = ?
+       ORDER BY m.joined_at, m.id`,
+      [tripId]
+    );
+    return rows;
+  }
+
+  async createInvitation(input) {
+    const id = input.id ?? randomUUID();
+    await this.pool.execute(
+      `INSERT INTO trip_invitations
+        (id, trip_id, token_hash, role, status, invited_by_user_id, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id, input.tripId, input.tokenHash, input.role, input.status ?? "pending",
+        input.invitedByUserId, input.expiresAt
+      ]
+    );
+    return this.getInvitationByTokenHash(input.tokenHash);
+  }
+
+  async getInvitationByTokenHash(tokenHash) {
+    const [rows] = await this.pool.execute(
+      `SELECT id, trip_id AS tripId, token_hash AS tokenHash, role, status,
+              invited_by_user_id AS invitedByUserId,
+              accepted_by_user_id AS acceptedByUserId,
+              expires_at AS expiresAt, created_at AS createdAt, accepted_at AS acceptedAt
+       FROM trip_invitations
+       WHERE token_hash = ?
+       LIMIT 1`,
+      [tokenHash]
+    );
+    return rows[0];
+  }
+
+  async listInvitations(tripId) {
+    const [rows] = await this.pool.execute(
+      `SELECT id, trip_id AS tripId, token_hash AS tokenHash, role, status,
+              invited_by_user_id AS invitedByUserId,
+              accepted_by_user_id AS acceptedByUserId,
+              expires_at AS expiresAt, created_at AS createdAt, accepted_at AS acceptedAt
+       FROM trip_invitations
+       WHERE trip_id = ?
+       ORDER BY created_at DESC`,
+      [tripId]
+    );
+    return rows;
+  }
+
+  async updateInvitation(invitationId, tripId, patch) {
+    const mapping = {
+      role: "role",
+      status: "status",
+      acceptedByUserId: "accepted_by_user_id",
+      expiresAt: "expires_at",
+      acceptedAt: "accepted_at"
+    };
+    const fields = [];
+    const values = [];
+    for (const [key, value] of Object.entries(patch)) {
+      if (!mapping[key]) continue;
+      fields.push(`${mapping[key]} = ?`);
+      values.push(value ?? null);
+    }
+    if (fields.length) {
+      values.push(invitationId, tripId);
+      const [result] = await this.pool.execute(
+        `UPDATE trip_invitations
+         SET ${fields.join(", ")}
+         WHERE id = ? AND trip_id = ?`,
+        values
+      );
+      if (!result.affectedRows) return undefined;
+    }
+    const [rows] = await this.pool.execute(
+      `SELECT id, trip_id AS tripId, token_hash AS tokenHash, role, status,
+              invited_by_user_id AS invitedByUserId,
+              accepted_by_user_id AS acceptedByUserId,
+              expires_at AS expiresAt, created_at AS createdAt, accepted_at AS acceptedAt
+       FROM trip_invitations
+       WHERE id = ? AND trip_id = ?
+       LIMIT 1`,
+      [invitationId, tripId]
+    );
+    return rows[0];
+  }
+
+  async acceptInvitation(invitationId, userId) {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [invitations] = await connection.execute(
+        `SELECT id, trip_id AS tripId, role, status,
+                accepted_by_user_id AS acceptedByUserId
+         FROM trip_invitations
+         WHERE id = ?
+         LIMIT 1
+         FOR UPDATE`,
+        [invitationId]
+      );
+      const invitation = invitations[0];
+      if (!invitation) {
+        await connection.commit();
+        return undefined;
+      }
+      if (invitation.status === "accepted") {
+        if (invitation.acceptedByUserId !== userId) {
+          await connection.commit();
+          return undefined;
+        }
+        const [members] = await connection.execute(
+          `SELECT m.id, m.trip_id AS tripId, m.user_id AS userId, u.name,
+                  m.role, m.status, m.joined_at AS joinedAt, m.removed_at AS removedAt
+           FROM trip_members m
+           JOIN users u ON u.id = m.user_id
+           WHERE m.trip_id = ? AND m.user_id = ?
+           LIMIT 1`,
+          [invitation.tripId, userId]
+        );
+        await connection.commit();
+        return members[0]?.status === "active" ? members[0] : undefined;
+      }
+      if (invitation.status !== "pending") {
+        await connection.commit();
+        return undefined;
+      }
+
+      await connection.execute(
+        `INSERT INTO trip_members (id, trip_id, user_id, role, status)
+         VALUES (?, ?, ?, ?, 'active')
+         ON DUPLICATE KEY UPDATE
+           role = VALUES(role), status = 'active', removed_at = NULL`,
+        [randomUUID(), invitation.tripId, userId, invitation.role]
+      );
+      await connection.execute(
+        `UPDATE trip_invitations
+         SET status = 'accepted', accepted_by_user_id = ?, accepted_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND status = 'pending'`,
+        [userId, invitationId]
+      );
+      const [members] = await connection.execute(
+        `SELECT m.id, m.trip_id AS tripId, m.user_id AS userId, u.name,
+                m.role, m.status, m.joined_at AS joinedAt, m.removed_at AS removedAt
+         FROM trip_members m
+         JOIN users u ON u.id = m.user_id
+         WHERE m.trip_id = ? AND m.user_id = ?
+         LIMIT 1`,
+        [invitation.tripId, userId]
+      );
+      await connection.commit();
+      return members[0];
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async updateMember(tripId, memberId, role) {
+    const [result] = await this.pool.execute(
+      `UPDATE trip_members
+       SET role = ?
+       WHERE id = ? AND trip_id = ?`,
+      [role, memberId, tripId]
+    );
+    if (!result.affectedRows) return undefined;
+    const [rows] = await this.pool.execute(
+      `SELECT m.id, m.trip_id AS tripId, m.user_id AS userId, u.name,
+              m.role, m.status, m.joined_at AS joinedAt, m.removed_at AS removedAt
+       FROM trip_members m
+       JOIN users u ON u.id = m.user_id
+       WHERE m.id = ? AND m.trip_id = ?
+       LIMIT 1`,
+      [memberId, tripId]
+    );
+    return rows[0];
+  }
+
+  async removeMember(tripId, memberId) {
+    const [result] = await this.pool.execute(
+      `UPDATE trip_members
+       SET status = 'removed', removed_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND trip_id = ?`,
+      [memberId, tripId]
+    );
+    if (!result.affectedRows) return undefined;
+    const [rows] = await this.pool.execute(
+      `SELECT m.id, m.trip_id AS tripId, m.user_id AS userId, u.name,
+              m.role, m.status, m.joined_at AS joinedAt, m.removed_at AS removedAt
+       FROM trip_members m
+       JOIN users u ON u.id = m.user_id
+       WHERE m.id = ? AND m.trip_id = ?
+       LIMIT 1`,
+      [memberId, tripId]
+    );
+    return rows[0];
+  }
+
+  async listExpenses(tripId) {
+    return this.loadExpenses(tripId);
+  }
+
+  async getExpense(tripId, expenseId) {
+    const [expense] = await this.loadExpenses(tripId, expenseId);
+    return expense;
+  }
+
+  async loadExpenses(tripId, expenseId) {
+    const values = [tripId];
+    const expenseFilter = expenseId === undefined ? "" : " AND e.id = ?";
+    if (expenseId !== undefined) values.push(expenseId);
+    const [rows] = await this.pool.execute(
+      `SELECT e.id, e.trip_id AS tripId, e.description, e.category,
+              e.amount_fen AS amountFen, e.expense_date AS expenseDate,
+              e.paid_by_user_id AS paidByUserId, payer.name AS paidByName,
+              e.created_by_user_id AS createdByUserId, creator.name AS createdByName,
+              e.note, e.created_at AS createdAt, e.updated_at AS updatedAt,
+              p.user_id AS participantUserId, participant.name AS participantName,
+              p.share_fen AS participantShareFen
+       FROM trip_expenses e
+       JOIN users payer ON payer.id = e.paid_by_user_id
+       JOIN users creator ON creator.id = e.created_by_user_id
+       LEFT JOIN expense_participants p ON p.expense_id = e.id
+       LEFT JOIN users participant ON participant.id = p.user_id
+       WHERE e.trip_id = ?${expenseFilter}
+       ORDER BY e.expense_date DESC, e.created_at DESC, p.user_id`,
+      values
+    );
+    const expenses = new Map();
+    for (const row of rows) {
+      let expense = expenses.get(row.id);
+      if (!expense) {
+        expense = {
+          id: row.id,
+          tripId: row.tripId,
+          description: row.description,
+          category: row.category,
+          amountFen: row.amountFen,
+          expenseDate: publicDate(row.expenseDate),
+          paidByUserId: row.paidByUserId,
+          paidByName: row.paidByName,
+          createdByUserId: row.createdByUserId,
+          createdByName: row.createdByName,
+          note: row.note,
+          participants: [],
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt
+        };
+        expenses.set(row.id, expense);
+      }
+      if (row.participantUserId) {
+        expense.participants.push({
+          userId: row.participantUserId,
+          name: row.participantName,
+          shareFen: row.participantShareFen
+        });
+      }
+    }
+    return [...expenses.values()];
+  }
+
+  async createExpense(input, allocations) {
+    const connection = await this.pool.getConnection();
+    const id = input.id ?? randomUUID();
+    try {
+      await connection.beginTransaction();
+      await connection.execute(
+        `INSERT INTO trip_expenses
+          (id, trip_id, description, category, amount_fen, expense_date,
+           paid_by_user_id, created_by_user_id, note)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id, input.tripId, input.description, input.category, input.amountFen,
+          input.expenseDate, input.paidByUserId, input.createdByUserId, input.note
+        ]
+      );
+      for (const allocation of allocations) {
+        await connection.execute(
+          `INSERT INTO expense_participants (expense_id, user_id, share_fen)
+           VALUES (?, ?, ?)`,
+          [id, allocation.userId, allocation.shareFen]
+        );
+      }
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+    return this.getExpense(input.tripId, id);
+  }
+
+  async updateExpense(expenseId, input, allocations) {
+    const connection = await this.pool.getConnection();
+    let tripId;
+    try {
+      await connection.beginTransaction();
+      const [rows] = await connection.execute(
+        `SELECT trip_id AS tripId
+         FROM trip_expenses
+         WHERE id = ?
+         LIMIT 1
+         FOR UPDATE`,
+        [expenseId]
+      );
+      tripId = rows[0]?.tripId;
+      if (!tripId) {
+        await connection.commit();
+        return undefined;
+      }
+      await connection.execute(
+        `UPDATE trip_expenses
+         SET description = ?, category = ?, amount_fen = ?, expense_date = ?,
+             paid_by_user_id = ?, note = ?
+         WHERE id = ?`,
+        [
+          input.description, input.category, input.amountFen, input.expenseDate,
+          input.paidByUserId, input.note, expenseId
+        ]
+      );
+      await connection.execute(
+        "DELETE FROM expense_participants WHERE expense_id = ?",
+        [expenseId]
+      );
+      for (const allocation of allocations) {
+        await connection.execute(
+          `INSERT INTO expense_participants (expense_id, user_id, share_fen)
+           VALUES (?, ?, ?)`,
+          [expenseId, allocation.userId, allocation.shareFen]
+        );
+      }
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+    return this.getExpense(tripId, expenseId);
+  }
+
+  async deleteExpense(tripId, expenseId) {
+    const [result] = await this.pool.execute(
+      "DELETE FROM trip_expenses WHERE id = ? AND trip_id = ?",
+      [expenseId, tripId]
+    );
+    return result.affectedRows > 0;
+  }
+
+  async appendTripActivity(input) {
+    const id = input.id ?? randomUUID();
+    await this.pool.execute(
+      `INSERT INTO trip_activity_log
+        (id, trip_id, actor_user_id, action, entity_type, entity_id, summary_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id, input.tripId, input.actorUserId, input.action,
+        input.entityType, input.entityId, json(input.summary)
+      ]
+    );
+    const [rows] = await this.pool.execute(
+      `SELECT l.id, l.trip_id AS tripId, l.actor_user_id AS actorUserId,
+              u.name AS actorName, l.action, l.entity_type AS entityType,
+              l.entity_id AS entityId, l.summary_json, l.created_at AS createdAt
+       FROM trip_activity_log l
+       JOIN users u ON u.id = l.actor_user_id
+       WHERE l.id = ?
+       LIMIT 1`,
+      [id]
+    );
+    if (!rows[0]) return undefined;
+    const { summary_json, ...activity } = rows[0];
+    return { ...activity, summary: parseJson(summary_json) };
+  }
+
+  async listTripActivity(tripId, limit) {
+    const [rows] = await this.pool.execute(
+      `SELECT l.id, l.trip_id AS tripId, l.actor_user_id AS actorUserId,
+              u.name AS actorName, l.action, l.entity_type AS entityType,
+              l.entity_id AS entityId, l.summary_json, l.created_at AS createdAt
+       FROM trip_activity_log l
+       JOIN users u ON u.id = l.actor_user_id
+       WHERE l.trip_id = ?
+       ORDER BY l.created_at DESC, l.id DESC
+       LIMIT ?`,
+      [tripId, limit]
+    );
+    return rows.map(({ summary_json, ...row }) => ({
+      ...row,
+      summary: parseJson(summary_json)
+    }));
+  }
+
+  async incrementTripRevision(tripId, expectedRevision) {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [result] = await connection.execute(
+        `UPDATE trips
+         SET revision = revision + 1
+         WHERE id = ? AND revision = ?`,
+        [tripId, expectedRevision]
+      );
+      await connection.commit();
+      return result.affectedRows ? expectedRevision + 1 : undefined;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
 
   async createShare(tripId, ownerId, permission) {
