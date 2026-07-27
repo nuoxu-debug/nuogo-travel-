@@ -12,3 +12,4 @@ server/.cache/
 server/storage/attractions/
 artifacts/edge*/
 artifacts/chrome*/
+.worktrees/
