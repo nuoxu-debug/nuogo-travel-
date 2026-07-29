@@ -15,6 +15,7 @@ export class MemoryRepository {
     this.invitations = new Map();
     this.expenses = new Map();
     this.tripActivity = new Map();
+    this.tripMutationLocks = new Map();
   }
 
   async createUser(user) {
@@ -84,30 +85,56 @@ export class MemoryRepository {
   }
 
   async mutateWithRevision(tripId, expectedRevision, actorUserId, audit, mutation) {
-    const trip = this.trips.get(tripId);
-    if (!trip || trip.revision !== expectedRevision) return undefined;
-    const tripSnapshot = clone(trip);
-    const activitySnapshot = clone([...this.tripActivity.entries()]);
+    const previous = this.tripMutationLocks.get(tripId) ?? Promise.resolve();
+    let release;
+    const current = new Promise((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => current);
+    this.tripMutationLocks.set(tripId, tail);
+    await previous;
+
     try {
-      if (await mutation(trip) === false) {
+      const trip = this.trips.get(tripId);
+      if (!trip || trip.revision !== expectedRevision) return undefined;
+      const tripSnapshot = clone(trip);
+      const activitySnapshot = clone([...this.tripActivity.entries()]
+        .filter(([, activity]) => activity.tripId === tripId));
+      const restoreActivity = () => {
+        for (const [id, activity] of this.tripActivity) {
+          if (activity.tripId === tripId) this.tripActivity.delete(id);
+        }
+        for (const [id, activity] of activitySnapshot) {
+          this.tripActivity.set(id, activity);
+        }
+      };
+
+      try {
+        if (await mutation(trip) === false) {
+          this.trips.set(tripId, tripSnapshot);
+          restoreActivity();
+          return undefined;
+        }
+        trip.revision = expectedRevision + 1;
+        trip.updatedAt = new Date().toISOString();
+        if (audit) {
+          await this.appendTripActivity({
+            ...audit,
+            tripId,
+            actorUserId
+          });
+        }
+        return trip.revision;
+      } catch (error) {
         this.trips.set(tripId, tripSnapshot);
-        this.tripActivity = new Map(activitySnapshot);
-        return undefined;
+        restoreActivity();
+        throw error;
       }
-      trip.revision = expectedRevision + 1;
-      trip.updatedAt = new Date().toISOString();
-      if (audit) {
-        await this.appendTripActivity({
-          ...audit,
-          tripId,
-          actorUserId
-        });
+    } finally {
+      release();
+      if (this.tripMutationLocks.get(tripId) === tail) {
+        this.tripMutationLocks.delete(tripId);
       }
-      return trip.revision;
-    } catch (error) {
-      this.trips.set(tripId, tripSnapshot);
-      this.tripActivity = new Map(activitySnapshot);
-      throw error;
     }
   }
 

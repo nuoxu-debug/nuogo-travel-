@@ -899,6 +899,96 @@ describe("repository adapters", () => {
     expect(await repository.listTripActivity("trip-1", 50)).toEqual([]);
   });
 
+  it("allows exactly one concurrent memory mutation at the same expected revision", async () => {
+    const repository = new MemoryRepository();
+    repository.trips.set("trip-1", {
+      id: "trip-1",
+      ownerId: "owner-1",
+      title: "Original",
+      revision: 0,
+      variants: []
+    });
+
+    const results = await Promise.all([
+      repository.updateTrip("trip-1", "editor-1", { title: "First" }, 0),
+      repository.updateTrip("trip-1", "editor-2", { title: "Second" }, 0)
+    ]);
+
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(results.filter((result) => result === undefined)).toHaveLength(1);
+    expect(await repository.getTrip("trip-1")).toMatchObject({ revision: 1 });
+  });
+
+  it("does not erase another trip's successful mutation or audit during memory rollback", async () => {
+    const repository = new MemoryRepository();
+    repository.trips.set("trip-1", {
+      id: "trip-1",
+      ownerId: "owner-1",
+      title: "First trip",
+      revision: 0,
+      variants: []
+    });
+    repository.trips.set("trip-2", {
+      id: "trip-2",
+      ownerId: "owner-2",
+      title: "Second trip",
+      revision: 0,
+      variants: []
+    });
+    let releaseFailure;
+    let signalFailureStarted;
+    const failureStarted = new Promise((resolve) => {
+      signalFailureStarted = resolve;
+    });
+    const failureReleased = new Promise((resolve) => {
+      releaseFailure = resolve;
+    });
+    const failure = new Error("trip mutation failed");
+
+    const failedMutation = repository.mutateWithRevision(
+      "trip-1",
+      0,
+      "editor-1",
+      null,
+      async (trip) => {
+        trip.title = "Should roll back";
+        signalFailureStarted();
+        await failureReleased;
+        throw failure;
+      }
+    );
+    await failureStarted;
+
+    await expect(repository.updateTrip(
+      "trip-2",
+      "editor-2",
+      { title: "Committed" },
+      0,
+      {
+        action: "trip.updated",
+        entityType: "trip",
+        entityId: "trip-2",
+        summary: { fields: ["title"] }
+      }
+    )).resolves.toMatchObject({ title: "Committed", revision: 1 });
+
+    releaseFailure();
+    await expect(failedMutation).rejects.toBe(failure);
+
+    expect(await repository.getTrip("trip-1")).toMatchObject({
+      title: "First trip",
+      revision: 0
+    });
+    expect(await repository.getTrip("trip-2")).toMatchObject({
+      title: "Committed",
+      revision: 1
+    });
+    expect(await repository.listTripActivity("trip-2", 50)).toMatchObject([{
+      action: "trip.updated",
+      entityId: "trip-2"
+    }]);
+  });
+
   it("commits a MySQL revision when an activity update already has the requested value", async () => {
     const context = {
       trip: { id: "trip-1", ownerId: "owner-1", revision: 3 },
