@@ -22,7 +22,8 @@ const stages = {
   ]
 };
 
-export const pipelineDuration = import.meta.env.MODE === "test" ? 45 : 620;
+// Keep the first status observable under test runners with slower user-event scheduling.
+export const pipelineDuration = import.meta.env.MODE === "test" ? 150 : 620;
 
 export default function PipelineOverlay({ open }) {
   const { language } = useLanguage();

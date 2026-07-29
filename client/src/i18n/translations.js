@@ -1,3 +1,132 @@
+const collaborationTranslations = {
+  en: {
+    workspace: {
+      label: "Trip workspace",
+      route: "· Route 03",
+      loading: "Loading workspace",
+      unavailable: "Trip unavailable",
+      invite: "Invite",
+      members: "Members",
+      publicShare: "Public share",
+      addActivity: "Add activity",
+      conflict: "This trip changed. The latest version is now loaded.",
+      mutationFailed: "We could not save that change. Please try again."
+    },
+    collaboration: {
+      title: "Trip members",
+      close: "Close trip members",
+      memberWaypoints: "Trip member waypoints",
+      moreMembers: "{count} more members",
+      memberCount: "{count} travellers",
+      inviteSomeone: "Invite someone",
+      inviteBody: "Choose whether the next traveller can edit the itinerary or only view it.",
+      accessLabel: "Invitation access",
+      createInvitation: "Create invitation",
+      invitationUrl: "Invitation URL",
+      copyInvitation: "Copy invitation link",
+      activeMembers: "Active members",
+      refreshMembers: "Refresh members",
+      emptyMembers: "No members to show",
+      emptyMembersBody: "Refresh the list or invite a travel partner.",
+      roleFor: "Role for {name}",
+      removeNamed: "Remove {name}",
+      remove: "Remove",
+      confirmRemoval: "Confirm member removal",
+      confirmRemove: "Remove member",
+      pendingInvitations: "Pending invitations",
+      loadingInvitations: "Loading invitations",
+      noPendingInvitations: "No pending invitations.",
+      waitingToJoin: "Waiting to join",
+      requestFailed: "We could not update trip access. Please try again.",
+      revokeNamed: "Revoke {role} invitation",
+      revoke: "Revoke",
+      confirmRevoke: "Revoke invitation",
+      cancel: "Cancel",
+      roles: {
+        owner: "Owner",
+        editor: "Editor",
+        viewer: "Viewer"
+      }
+    },
+    share: {
+      dialogLabel: "Public trip sharing",
+      close: "Close public sharing",
+      title: "Public share",
+      body: "Create a bearer link for viewing or voting. This does not add a trip member.",
+      permission: "Public link permission",
+      view: "View only",
+      edit: "Can vote",
+      create: "Create public link",
+      url: "Public share URL",
+      copy: "Copy public share link",
+      requestFailed: "We could not create the public link. Please try again."
+    }
+  },
+  zh: {
+    workspace: {
+      label: "行程工作台",
+      route: "· 路线 03",
+      loading: "正在加载行程",
+      unavailable: "暂时无法打开此行程",
+      invite: "邀请同伴",
+      members: "成员",
+      publicShare: "公开分享",
+      addActivity: "添加活动",
+      conflict: "行程已被更新，现已加载最新版本。",
+      mutationFailed: "暂时无法保存此更改，请重试。"
+    },
+    collaboration: {
+      title: "行程成员",
+      close: "关闭行程成员",
+      memberWaypoints: "行程成员",
+      moreMembers: "还有 {count} 位成员",
+      memberCount: "{count} 位同行者",
+      inviteSomeone: "邀请同伴",
+      inviteBody: "选择新成员可以共同编辑行程，或仅查看内容。",
+      accessLabel: "邀请权限",
+      createInvitation: "创建邀请",
+      invitationUrl: "邀请链接",
+      copyInvitation: "复制邀请链接",
+      activeMembers: "当前成员",
+      refreshMembers: "刷新成员",
+      emptyMembers: "暂无成员",
+      emptyMembersBody: "刷新列表或邀请一位同行者。",
+      roleFor: "{name} 的权限",
+      removeNamed: "移除 {name}",
+      remove: "移除",
+      confirmRemoval: "确认移除成员",
+      confirmRemove: "确认移除",
+      pendingInvitations: "待接受邀请",
+      loadingInvitations: "正在加载邀请",
+      noPendingInvitations: "暂无待接受邀请。",
+      waitingToJoin: "等待加入",
+      requestFailed: "暂时无法更新行程权限，请重试。",
+      revokeNamed: "撤销{role}邀请",
+      revoke: "撤销",
+      confirmRevoke: "确认撤销",
+      cancel: "取消",
+      roles: {
+        owner: "创建者",
+        editor: "可编辑",
+        viewer: "仅查看"
+      }
+    },
+    share: {
+      dialogLabel: "公开分享行程",
+      close: "关闭公开分享",
+      title: "公开分享",
+      body: "创建可查看或投票的公开链接。通过此链接访问不会成为行程成员。",
+      permission: "公开链接权限",
+      view: "仅查看",
+      edit: "可投票",
+      create: "创建公开链接",
+      url: "公开分享链接",
+      copy: "复制公开分享链接",
+      requestFailed: "暂时无法创建公开链接，请重试。"
+    }
+  }
+};
+
 export const translations = {
   en: {
     nav: {
@@ -222,5 +351,12 @@ export const translations = {
 };
 
 export function translate(language, key) {
-  return key.split(".").reduce((value, part) => value?.[part], translations[language]) ?? key;
+  const parts = key.split(".");
+  return parts.reduce(
+    (value, part) => value?.[part],
+    collaborationTranslations[language]
+  ) ?? parts.reduce(
+    (value, part) => value?.[part],
+    translations[language]
+  ) ?? key;
 }

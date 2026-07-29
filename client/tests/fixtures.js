@@ -81,3 +81,38 @@ export function demoTrip() {
     variants: [variant("budget", 0), variant("food", 1), variant("leisure", 2)]
   };
 }
+
+export function demoMembers() {
+  return [
+    {
+      id: "member-owner",
+      tripId: "trip-1",
+      userId: "user-1",
+      name: "Chen Yu",
+      email: "chen@nuogo.test",
+      role: "owner",
+      status: "active",
+      joinedAt: "2026-07-20T08:00:00.000Z"
+    },
+    {
+      id: "member-editor",
+      tripId: "trip-1",
+      userId: "user-2",
+      name: "Li Wei",
+      email: "li@nuogo.test",
+      role: "editor",
+      status: "active",
+      joinedAt: "2026-07-21T08:00:00.000Z"
+    },
+    {
+      id: "member-viewer",
+      tripId: "trip-1",
+      userId: "user-3",
+      name: "Wang Min",
+      email: "wang@nuogo.test",
+      role: "viewer",
+      status: "active",
+      joinedAt: "2026-07-22T08:00:00.000Z"
+    }
+  ];
+}
