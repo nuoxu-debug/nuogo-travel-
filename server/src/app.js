@@ -8,6 +8,7 @@ import { createAuthRouter } from "./routes/auth.js";
 import { createActivitiesRouter } from "./routes/activities.js";
 import { createAttractionMediaRouter } from "./routes/attractionMedia.js";
 import { createCollaborationRouter } from "./routes/collaboration.js";
+import { createExpensesRouter } from "./routes/expenses.js";
 import { createFavoritesRouter } from "./routes/favorites.js";
 import { createLegacyMetaRouter, createMetaRouter } from "./routes/meta.js";
 import { createMembersRouter } from "./routes/members.js";
@@ -82,6 +83,10 @@ export function createApp({
     repository,
     authenticate,
     clientOrigin: config.clientOrigin
+  }));
+  app.use("/api", createExpensesRouter({
+    repository,
+    authenticate
   }));
   app.use("/api/favorites", createFavoritesRouter({ repository, authenticate }));
 

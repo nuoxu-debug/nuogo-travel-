@@ -519,4 +519,305 @@ describe("trip invitation and member API", () => {
       .toMatchObject(activity);
     expect(await repository.listTripActivity(tripId, 50)).toEqual([]);
   });
+
+  it("creates an exactly reconciled shared expense and returns a viewer-readable summary", async () => {
+    await acceptInvitation(member, "editor");
+    const viewer = await register("Sun Viewer", "expense-viewer@nuogo.test");
+    await acceptInvitation(viewer, "viewer");
+
+    const created = await request(app)
+      .post(`/api/trips/${tripId}/expenses`)
+      .set(member.auth)
+      .send({
+        description: "Hongcun lunch",
+        category: "food",
+        amountFen: 30001,
+        expenseDate: "2026-08-10",
+        paidByUserId: owner.id,
+        participantUserIds: [owner.id, member.id],
+        note: "Viewer did not join"
+      })
+      .expect(201);
+
+    expect(created.body.expense).toMatchObject({
+      tripId,
+      amountFen: 30001,
+      createdByUserId: member.id,
+      paidByUserId: owner.id
+    });
+    expect(created.body.expense.participants).toHaveLength(2);
+    expect(created.body.expense.participants.reduce(
+      (total, participant) => total + participant.shareFen,
+      0
+    )).toBe(30001);
+    expect(created.body.expense.participants.map(({ shareFen }) => shareFen).sort())
+      .toEqual([15000, 15001]);
+
+    const listed = await request(app)
+      .get(`/api/trips/${tripId}/expenses`)
+      .set(viewer.auth)
+      .expect(200);
+    expect(listed.body.expenses).toEqual([
+      expect.objectContaining({ id: created.body.expense.id, note: "Viewer did not join" })
+    ]);
+
+    const summary = await request(app)
+      .get(`/api/trips/${tripId}/expense-summary`)
+      .set(viewer.auth)
+      .expect(200);
+    expect(summary.body.totalSpentFen).toBe(30001);
+    expect(summary.body.members).toEqual(expect.arrayContaining([
+      expect.objectContaining({ userId: owner.id, paidFen: 30001 }),
+      expect.objectContaining({ userId: member.id }),
+      expect.objectContaining({ userId: viewer.id, paidFen: 0, shareFen: 0, netFen: 0 })
+    ]));
+    expect(summary.body.members.reduce((total, balance) => total + balance.netFen, 0)).toBe(0);
+    expect(summary.body.settlements.reduce(
+      (total, settlement) => total + settlement.amountFen,
+      0
+    )).toBe(15000);
+  });
+
+  it("enforces viewer and editor ownership rules while owners can manage every expense", async () => {
+    await acceptInvitation(member, "editor");
+    const viewer = await register("Zhou Viewer", "expense-readonly@nuogo.test");
+    await acceptInvitation(viewer, "viewer");
+    const input = {
+      description: "Shared taxi",
+      category: "transportation",
+      amountFen: 9000,
+      expenseDate: "2026-08-10",
+      paidByUserId: owner.id,
+      participantUserIds: [owner.id, member.id, viewer.id],
+      note: ""
+    };
+
+    const ownerExpense = await request(app)
+      .post(`/api/trips/${tripId}/expenses`)
+      .set(owner.auth)
+      .send(input)
+      .expect(201);
+
+    await request(app)
+      .post(`/api/trips/${tripId}/expenses`)
+      .set(viewer.auth)
+      .send(input)
+      .expect(403)
+      .expect(({ body }) => expect(body.error.code).toBe("TRIP_EDITOR_REQUIRED"));
+
+    await request(app)
+      .patch(`/api/trips/${tripId}/expenses/${ownerExpense.body.expense.id}`)
+      .set(member.auth)
+      .send({ ...input, description: "Editor overwrite" })
+      .expect(403)
+      .expect(({ body }) => expect(body.error.code).toBe("EXPENSE_CREATOR_REQUIRED"));
+
+    await request(app)
+      .delete(`/api/trips/${tripId}/expenses/${ownerExpense.body.expense.id}`)
+      .set(member.auth)
+      .expect(403)
+      .expect(({ body }) => expect(body.error.code).toBe("EXPENSE_CREATOR_REQUIRED"));
+
+    const editorExpense = await request(app)
+      .post(`/api/trips/${tripId}/expenses`)
+      .set(member.auth)
+      .send({ ...input, description: "Editor dinner" })
+      .expect(201);
+
+    const editorUpdated = await request(app)
+      .patch(`/api/trips/${tripId}/expenses/${editorExpense.body.expense.id}`)
+      .set(member.auth)
+      .send({ ...input, description: "Editor dinner updated", amountFen: 9001 })
+      .expect(200);
+    expect(editorUpdated.body.expense).toMatchObject({
+      description: "Editor dinner updated",
+      amountFen: 9001,
+      createdByUserId: member.id
+    });
+
+    const ownerUpdated = await request(app)
+      .patch(`/api/trips/${tripId}/expenses/${editorExpense.body.expense.id}`)
+      .set(owner.auth)
+      .send({ ...input, description: "Owner corrected dinner" })
+      .expect(200);
+    expect(ownerUpdated.body.expense.description).toBe("Owner corrected dinner");
+
+    await request(app)
+      .delete(`/api/trips/${tripId}/expenses/${editorExpense.body.expense.id}`)
+      .set(viewer.auth)
+      .expect(403)
+      .expect(({ body }) => expect(body.error.code).toBe("TRIP_EDITOR_REQUIRED"));
+
+    await request(app)
+      .delete(`/api/trips/${tripId}/expenses/${editorExpense.body.expense.id}`)
+      .set(owner.auth)
+      .expect(200);
+
+    const log = await request(app)
+      .get(`/api/trips/${tripId}/activity-log`)
+      .set(owner.auth)
+      .expect(200);
+    expect(log.body.activities.map(({ action }) => action)).toEqual(expect.arrayContaining([
+      "expense.created",
+      "expense.updated",
+      "expense.deleted"
+    ]));
+  });
+
+  it("rejects empty, duplicate, inactive, non-member, and cross-trip expense participants", async () => {
+    await acceptInvitation(member, "editor");
+    const otherTrip = await repository.createTrip(
+      unrelated.id,
+      validPreferences({ destination: "hefei" }),
+      [validVariant({ tripId: "other-trip", destination: "hefei" })]
+    );
+    const otherMember = await register("Other Trip Member", "other-trip-member@nuogo.test");
+    await repository.createInvitation({
+      tripId: otherTrip.id,
+      tokenHash: "other-trip-token",
+      role: "editor",
+      invitedByUserId: unrelated.id,
+      expiresAt: new Date(Date.now() + 60_000).toISOString()
+    });
+    const otherInvitation = await repository.getInvitationByTokenHash("other-trip-token");
+    await repository.acceptInvitation(otherInvitation.id, otherMember.id);
+
+    const validInput = {
+      description: "Mountain transfer",
+      category: "transportation",
+      amountFen: 12000,
+      expenseDate: "2026-08-11",
+      paidByUserId: owner.id,
+      participantUserIds: [owner.id, member.id],
+      note: ""
+    };
+
+    for (const participantUserIds of [[], [owner.id, owner.id]]) {
+      await request(app)
+        .post(`/api/trips/${tripId}/expenses`)
+        .set(member.auth)
+        .send({ ...validInput, participantUserIds })
+        .expect(400)
+        .expect(({ body }) => expect(body.error.code).toBe("VALIDATION_ERROR"));
+    }
+
+    await request(app)
+      .post(`/api/trips/${tripId}/expenses`)
+      .set(member.auth)
+      .send({ ...validInput, paidByUserId: unrelated.id })
+      .expect(400)
+      .expect(({ body }) => expect(body.error.code).toBe("EXPENSE_MEMBER_INVALID"));
+
+    await request(app)
+      .post(`/api/trips/${tripId}/expenses`)
+      .set(member.auth)
+      .send({ ...validInput, participantUserIds: [owner.id, otherMember.id] })
+      .expect(400)
+      .expect(({ body }) => expect(body.error.code).toBe("EXPENSE_MEMBER_INVALID"));
+
+    const memberRecord = await repository.getMember(tripId, member.id);
+    await repository.removeMember(tripId, memberRecord.id);
+    await request(app)
+      .post(`/api/trips/${tripId}/expenses`)
+      .set(owner.auth)
+      .send({ ...validInput, paidByUserId: member.id })
+      .expect(400)
+      .expect(({ body }) => expect(body.error.code).toBe("EXPENSE_MEMBER_INVALID"));
+  });
+
+  it("keeps removed members in historical summaries but excludes them from new expenses", async () => {
+    const { accepted } = await acceptInvitation(member, "editor");
+    await request(app)
+      .post(`/api/trips/${tripId}/expenses`)
+      .set(owner.auth)
+      .send({
+        description: "Hongcun tickets",
+        category: "attractions",
+        amountFen: 20800,
+        expenseDate: "2026-08-12",
+        paidByUserId: member.id,
+        participantUserIds: [owner.id, member.id],
+        note: ""
+      })
+      .expect(201);
+
+    await repository.removeMember(tripId, accepted.body.membership.id);
+
+    const summary = await request(app)
+      .get(`/api/trips/${tripId}/expense-summary`)
+      .set(owner.auth)
+      .expect(200);
+    expect(summary.body.members).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        userId: member.id,
+        name: "Li Member",
+        paidFen: 20800,
+        shareFen: 10400,
+        netFen: 10400
+      })
+    ]));
+
+    await request(app)
+      .post(`/api/trips/${tripId}/expenses`)
+      .set(owner.auth)
+      .send({
+        description: "Dinner after departure",
+        category: "food",
+        amountFen: 10000,
+        expenseDate: "2026-08-12",
+        paidByUserId: owner.id,
+        participantUserIds: [owner.id, member.id],
+        note: ""
+      })
+      .expect(400)
+      .expect(({ body }) => expect(body.error.code).toBe("EXPENSE_MEMBER_INVALID"));
+  });
+
+  it("denies unrelated and cross-trip access without exposing another trip expense", async () => {
+    await acceptInvitation(member, "editor");
+    const created = await request(app)
+      .post(`/api/trips/${tripId}/expenses`)
+      .set(owner.auth)
+      .send({
+        description: "Breakfast",
+        category: "food",
+        amountFen: 5000,
+        expenseDate: "2026-08-10",
+        paidByUserId: owner.id,
+        participantUserIds: [owner.id, member.id],
+        note: ""
+      })
+      .expect(201);
+
+    for (const endpoint of ["expenses", "expense-summary"]) {
+      await request(app)
+        .get(`/api/trips/${tripId}/${endpoint}`)
+        .set(unrelated.auth)
+        .expect(403)
+        .expect(({ body }) => expect(body.error.code).toBe("TRIP_MEMBER_REQUIRED"));
+    }
+
+    const otherTrip = await repository.createTrip(
+      unrelated.id,
+      validPreferences({ destination: "hefei" }),
+      [validVariant({ tripId: "cross-trip", destination: "hefei" })]
+    );
+    await request(app)
+      .patch(`/api/trips/${otherTrip.id}/expenses/${created.body.expense.id}`)
+      .set(unrelated.auth)
+      .send({
+        description: "Cross-trip overwrite",
+        category: "food",
+        amountFen: 5000,
+        expenseDate: "2026-08-10",
+        paidByUserId: unrelated.id,
+        participantUserIds: [unrelated.id],
+        note: ""
+      })
+      .expect(404)
+      .expect(({ body }) => expect(body.error.code).toBe("EXPENSE_NOT_FOUND"));
+
+    expect(await repository.getExpense(tripId, created.body.expense.id))
+      .toMatchObject({ description: "Breakfast" });
+  });
 });
