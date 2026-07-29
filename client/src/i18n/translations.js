@@ -56,7 +56,14 @@ export const translations = {
       signInJourneyBody: "Your saved plans, budgets, guides, and maps are waiting.",
       registerImageAlt: "Mountain landscape in China",
       registerJourneyLabel: "Build your first route",
-      registerJourneyBody: "Three itinerary options. One trip that feels like yours."
+      registerJourneyBody: "Three itinerary options. One trip that feels like yours.",
+      invalidCredentialsError: "Email or password is incorrect. Please try again.",
+      emailExistsError: "This email is already registered. Sign in or use another email.",
+      sessionExpiredError: "Your session has expired. Please sign in again.",
+      invalidSubmissionError: "Please review the submitted details and try again.",
+      serviceUnavailableError: "This sign-in option is currently unavailable.",
+      serverError: "Nuogo is temporarily unavailable. Please try again shortly.",
+      requestError: "Nuogo could not complete the request. Check your connection and try again."
     },
     invitation: {
       eyebrow: "Trip invitation",
@@ -88,7 +95,13 @@ export const translations = {
       notFoundTitle: "Invitation not found",
       unavailableBody: "This link can no longer be used. Ask the trip owner for a new invitation.",
       actionFailed: "We could not update this invitation. Please try again.",
-      backToPlanner: "Back to trip planner"
+      backToPlanner: "Back to trip planner",
+      checkMembership: "Check membership",
+      checkingMembership: "Checking membership",
+      membershipNotFound: "This invitation belongs to another account or is no longer available.",
+      authRequiredTitle: "Sign in to continue",
+      sessionExpiredBody: "Your session ended while responding. Sign in again to continue with this invitation.",
+      unknownDestination: "Destination unavailable"
     },
     common: {
       demo: "Demo mode",
@@ -153,7 +166,14 @@ export const translations = {
       signInJourneyBody: "已保存的行程、预算、向导和地图正在等你。",
       registerImageAlt: "中国山岳风光",
       registerJourneyLabel: "创建第一条路线",
-      registerJourneyBody: "三套行程方案，选出真正适合你的旅程。"
+      registerJourneyBody: "三套行程方案，选出真正适合你的旅程。",
+      invalidCredentialsError: "邮箱或密码不正确，请重试。",
+      emailExistsError: "该邮箱已注册，请直接登录或使用其他邮箱。",
+      sessionExpiredError: "登录状态已过期，请重新登录。",
+      invalidSubmissionError: "请检查填写的信息后重试。",
+      serviceUnavailableError: "当前登录服务暂不可用。",
+      serverError: "Nuogo服务暂时不可用，请稍后重试。",
+      requestError: "暂时无法完成请求，请检查网络后重试。"
     },
     invitation: {
       eyebrow: "行程邀请",
@@ -185,7 +205,13 @@ export const translations = {
       notFoundTitle: "找不到邀请",
       unavailableBody: "此链接已无法使用，请联系行程创建者重新发送邀请。",
       actionFailed: "暂时无法更新邀请，请重试。",
-      backToPlanner: "返回行程规划"
+      backToPlanner: "返回行程规划",
+      checkMembership: "检查成员身份",
+      checkingMembership: "正在检查成员身份",
+      membershipNotFound: "此邀请属于其他账户或已无法使用。",
+      authRequiredTitle: "登录后继续",
+      sessionExpiredBody: "回应邀请时登录状态已结束，请重新登录后继续。",
+      unknownDestination: "目的地信息暂不可用"
     },
     common: {
       demo: "演示模式",

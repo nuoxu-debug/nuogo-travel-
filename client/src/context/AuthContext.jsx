@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import { apiRequest } from "../api/client.js";
 import { clearAuthToken, getAuthToken, setAuthToken } from "../api/authToken.js";
 
@@ -31,54 +39,78 @@ export function safeReturnTo(value) {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(() => !getAuthToken());
+  const sessionRevision = useRef(0);
 
   useEffect(() => {
     const token = getAuthToken();
-    if (!token) {
-      setReady(true);
-      return;
-    }
+    if (!token) return undefined;
+
+    let active = true;
+    const revision = sessionRevision.current;
     apiRequest("/auth/me")
-      .then((body) => setUser(body.user))
-      .catch(() => clearAuthToken())
-      .finally(() => setReady(true));
+      .then((body) => {
+        if (active && revision === sessionRevision.current) setUser(body.user);
+      })
+      .catch(() => {
+        if (!active || revision !== sessionRevision.current) return;
+        clearAuthToken();
+        setUser(null);
+      })
+      .finally(() => {
+        if (active && revision === sessionRevision.current) setReady(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const establishSession = useCallback(async (request) => {
+    const revision = sessionRevision.current + 1;
+    sessionRevision.current = revision;
+    setReady(false);
+    try {
+      const body = await request();
+      if (revision === sessionRevision.current) {
+        setAuthToken(body.token);
+        setUser(body.user);
+      }
+      return body.user;
+    } finally {
+      if (revision === sessionRevision.current) setReady(true);
+    }
+  }, []);
+
+  const logout = useCallback(() => {
+    sessionRevision.current += 1;
+    clearAuthToken();
+    setUser(null);
+    setReady(true);
   }, []);
 
   const value = useMemo(() => ({
     user,
     ready,
-    async login(email, password) {
-      const body = await apiRequest("/auth/login", {
+    logout,
+    login(email, password) {
+      return establishSession(() => apiRequest("/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password })
-      });
-      setAuthToken(body.token);
-      setUser(body.user);
-      return body.user;
+      }));
     },
-    async loginAsGuest() {
-      const body = await apiRequest("/auth/guest", {
+    loginAsGuest() {
+      return establishSession(() => apiRequest("/auth/guest", {
         method: "POST"
-      });
-      setAuthToken(body.token);
-      setUser(body.user);
-      return body.user;
+      }));
     },
-    async register(name, email, password) {
-      const body = await apiRequest("/auth/register", {
+    register(name, email, password) {
+      return establishSession(() => apiRequest("/auth/register", {
         method: "POST",
         body: JSON.stringify({ name, email, password })
-      });
-      setAuthToken(body.token);
-      setUser(body.user);
-      return body.user;
-    },
-    logout() {
-      clearAuthToken();
-      setUser(null);
+      }));
     }
-  }), [ready, user]);
+  }), [establishSession, logout, ready, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

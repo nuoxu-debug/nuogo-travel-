@@ -4,11 +4,12 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import BrandLogo from "../components/BrandLogo.jsx";
 import { safeReturnTo, useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { localizeAuthError } from "../i18n/apiErrors.js";
 import AppShell from "../layout/AppShell.jsx";
 
 export default function RegisterPage() {
   const { t } = useLanguage();
-  const { register } = useAuth();
+  const { ready, register } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const returnTo = safeReturnTo(searchParams.get("returnTo"));
@@ -33,7 +34,7 @@ export default function RegisterPage() {
       await register(values.name.trim(), values.email, values.password);
       navigate(returnTo, { replace: true });
     } catch (error) {
-      setServerError(error.message);
+      setServerError(localizeAuthError(error, t));
     } finally {
       setBusy(false);
     }
@@ -68,7 +69,7 @@ export default function RegisterPage() {
               </label>
             ))}
             {serverError && <p role="alert" className="mt-5 border border-red-200 bg-red-50 p-3 text-sm text-red-800">{serverError}</p>}
-            <button disabled={busy} className="mt-7 flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-lake px-5 font-bold text-white shadow-lift transition-transform hover:-translate-y-0.5">
+            <button disabled={busy || !ready} className="mt-7 flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-lake px-5 font-bold text-white shadow-lift transition-transform hover:-translate-y-0.5 disabled:opacity-50">
               <UserPlus className="h-4 w-4" /> {busy ? t("common.loading") : t("auth.register")}
             </button>
             <p className="mt-6 text-center text-sm text-ink/60">

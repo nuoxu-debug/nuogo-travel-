@@ -1,16 +1,29 @@
 import { ArrowUpRight, LogOut, Menu, X } from "lucide-react";
 import { useState } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import BrandLogo from "../components/BrandLogo.jsx";
 import LanguageToggle from "../components/LanguageToggle.jsx";
 import ScrollProgress from "../components/ScrollProgress.jsx";
-import { useAuth } from "../context/AuthContext.jsx";
+import { safeReturnTo, useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
+
+function invitationContinuation(location) {
+  const requested = location.pathname.startsWith("/invite/")
+    ? `${location.pathname}${location.search}${location.hash}`
+    : new URLSearchParams(location.search).get("returnTo");
+  const safe = safeReturnTo(requested);
+  return safe.startsWith("/invite/")
+    ? `?returnTo=${encodeURIComponent(safe)}`
+    : "";
+}
 
 export default function AppShell({ children, dark = false, hideFooter = false }) {
   const { t } = useLanguage();
   const { user, logout } = useAuth();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
+  const continuation = invitationContinuation(location);
+  const authPath = (path) => `${path}${continuation}`;
   const foreground = dark ? "text-white" : "text-ink";
   const navClass = ({ isActive }) =>
     `text-sm font-bold transition-colors hover:text-lake ${isActive ? (dark ? "text-white" : "text-lake") : (dark ? "text-white/82" : "text-ink/70")}`;
@@ -42,8 +55,8 @@ export default function AppShell({ children, dark = false, hideFooter = false })
               </button>
             ) : (
               <>
-                <Link to="/login" className={`rounded-lg px-2 py-2 text-sm font-bold transition-colors hover:text-lake ${dark ? "text-white/82" : "text-ink/70"}`}>{t("nav.signIn")}</Link>
-                <Link to="/register" className={`group flex min-h-11 items-center gap-2 rounded-lg px-4 text-sm font-bold shadow-sm transition-transform hover:-translate-y-0.5 ${dark ? "bg-white text-ink" : "bg-lake text-white"}`}>
+                <Link to={authPath("/login")} className={`rounded-lg px-2 py-2 text-sm font-bold transition-colors hover:text-lake ${dark ? "text-white/82" : "text-ink/70"}`}>{t("nav.signIn")}</Link>
+                <Link to={authPath("/register")} className={`group flex min-h-11 items-center gap-2 rounded-lg px-4 text-sm font-bold shadow-sm transition-transform hover:-translate-y-0.5 ${dark ? "bg-white text-ink" : "bg-ink text-white"}`}>
                   {t("nav.register")} <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                 </Link>
               </>
@@ -52,7 +65,7 @@ export default function AppShell({ children, dark = false, hideFooter = false })
 
           <button
             type="button"
-            className={`grid h-10 w-10 place-items-center rounded-lg border transition-colors md:hidden ${dark ? "border-white/18 bg-white/10" : "border-ink/12 bg-white/80"}`}
+            className={`grid h-11 w-11 place-items-center rounded-lg border transition-colors md:hidden ${dark ? "border-white/18 bg-white/10" : "border-ink/12 bg-white/80"}`}
             aria-label={open ? t("shell.closeMenu") : t("shell.openMenu")}
             aria-expanded={open}
             aria-controls="mobile-navigation"
@@ -67,7 +80,12 @@ export default function AppShell({ children, dark = false, hideFooter = false })
             <Link to="/planner" className="min-h-11 rounded-lg px-3 py-3 font-bold" onClick={() => setOpen(false)}>{t("nav.plan")}</Link>
             {user && <Link to="/archive" className="min-h-11 rounded-lg px-3 py-3 font-bold" onClick={() => setOpen(false)}>{t("nav.archive")}</Link>}
             <div className="p-2"><LanguageToggle tone="light" /></div>
-            {!user && <Link to="/login" className="min-h-11 rounded-lg px-3 py-3 font-bold">{t("nav.signIn")}</Link>}
+            {!user && (
+              <>
+                <Link to={authPath("/login")} className="min-h-11 rounded-lg px-3 py-3 font-bold" onClick={() => setOpen(false)}>{t("nav.signIn")}</Link>
+                <Link to={authPath("/register")} className="min-h-11 rounded-lg bg-ink px-3 py-3 font-bold text-white" onClick={() => setOpen(false)}>{t("nav.register")}</Link>
+              </>
+            )}
           </nav>
         )}
       </header>

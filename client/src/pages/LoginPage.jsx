@@ -5,11 +5,12 @@ import BrandLogo from "../components/BrandLogo.jsx";
 import { safeReturnTo, useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useAnime } from "../hooks/useAnime.js";
+import { localizeAuthError } from "../i18n/apiErrors.js";
 import AppShell from "../layout/AppShell.jsx";
 
 export default function LoginPage() {
   const { language, t } = useLanguage();
-  const { login, loginAsGuest } = useAuth();
+  const { login, loginAsGuest, ready } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const returnTo = safeReturnTo(searchParams.get("returnTo"));
@@ -55,7 +56,7 @@ export default function LoginPage() {
       await login(values.email, values.password);
       navigate(returnTo, { replace: true });
     } catch (error) {
-      setServerError(error.message);
+      setServerError(localizeAuthError(error, t));
     } finally {
       setBusy(false);
     }
@@ -68,7 +69,7 @@ export default function LoginPage() {
       await loginAsGuest();
       navigate(returnTo, { replace: true });
     } catch (error) {
-      setServerError(error.message);
+      setServerError(localizeAuthError(error, t));
     } finally {
       setBusy(false);
     }
@@ -95,7 +96,7 @@ export default function LoginPage() {
 
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || !ready}
               onClick={continueAsGuest}
               className="auth-reveal group mt-8 flex min-h-14 w-full items-center justify-between rounded-lg bg-lake px-5 font-bold text-white opacity-0 shadow-lift transition-transform hover:-translate-y-0.5 disabled:opacity-50"
             >
@@ -150,7 +151,7 @@ export default function LoginPage() {
             </label>
 
             {serverError && <p role="alert" className="mt-5 border border-red-200 bg-red-50 p-3 text-sm text-red-800">{serverError}</p>}
-            <button disabled={busy} className="auth-reveal mt-7 flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-ink px-5 font-bold text-white opacity-0 shadow-lift transition-transform hover:-translate-y-0.5 disabled:opacity-50">
+            <button disabled={busy || !ready} className="auth-reveal mt-7 flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-ink px-5 font-bold text-white opacity-0 shadow-lift transition-transform hover:-translate-y-0.5 disabled:opacity-50">
               <LogIn className="h-4 w-4" /> {busy ? t("common.loading") : t("auth.signIn")}
             </button>
             <p className="auth-reveal mt-6 text-center text-sm text-ink/60 opacity-0">
