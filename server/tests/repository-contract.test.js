@@ -284,8 +284,66 @@ describe("repository adapters", () => {
     });
     expect(tripExpenseSchema.parse(mysqlExpense)).toMatchObject({
       paidByName: "Chen",
-      createdByName: "Li"
+      createdByName: "Li",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      updatedAt: "2026-08-01T00:00:00.000Z"
     });
+  });
+
+  it("normalizes MySQL driver Date expense timestamps and omits nullable timestamps", async () => {
+    const createdAt = new Date("2026-08-01T01:02:03.004Z");
+    const updatedAt = new Date("2026-08-02T05:06:07.008Z");
+    const rows = [
+      {
+        id: "expense-dates",
+        expenseDate: new Date("2026-08-10T00:00:00.000Z"),
+        createdAt,
+        updatedAt
+      },
+      {
+        id: "expense-nullable-dates",
+        expenseDate: "2026-08-11",
+        createdAt: null,
+        updatedAt: null
+      }
+    ];
+    const repository = new MySqlRepository({
+      query: vi.fn(),
+      execute: vi.fn(async (sql) => {
+        if (!sql.includes("FROM trip_expenses e")) throw new Error(`Unexpected SQL: ${sql}`);
+        const row = rows.shift();
+        return [[{
+          ...row,
+          tripId: "trip-1",
+          description: "Dinner",
+          category: "food",
+          amountFen: 10000,
+          paidByUserId: "user-1",
+          paidByName: "Chen",
+          createdByUserId: "user-2",
+          createdByName: "Li",
+          note: "",
+          participantUserId: "user-1",
+          participantName: "Chen",
+          participantShareFen: 10000
+        }]];
+      })
+    });
+
+    const datedExpense = await repository.getExpense("trip-1", "expense-dates");
+    expect(tripExpenseSchema.parse(datedExpense)).toMatchObject({
+      expenseDate: "2026-08-10",
+      createdAt: createdAt.toISOString(),
+      updatedAt: updatedAt.toISOString()
+    });
+
+    const nullableExpense = await repository.getExpense(
+      "trip-1",
+      "expense-nullable-dates"
+    );
+    expect(nullableExpense).not.toHaveProperty("createdAt");
+    expect(nullableExpense).not.toHaveProperty("updatedAt");
+    expect(() => tripExpenseSchema.parse(nullableExpense)).not.toThrow();
   });
 
   it.each(["create", "update", "delete"])(

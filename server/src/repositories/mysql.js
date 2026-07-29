@@ -20,6 +20,11 @@ function publicDate(value) {
   return value?.toISOString?.().slice(0, 10) ?? value;
 }
 
+function publicDateTime(value) {
+  if (typeof value === "string") return value;
+  return value?.toISOString?.() ?? value;
+}
+
 function withoutNulls(row, fields) {
   if (!row) return undefined;
   const normalized = { ...row };
@@ -917,8 +922,12 @@ export class MySqlRepository {
           createdByName: row.createdByName,
           note: row.note,
           participants: [],
-          createdAt: row.createdAt,
-          updatedAt: row.updatedAt
+          ...(row.createdAt === null || row.createdAt === undefined
+            ? {}
+            : { createdAt: publicDateTime(row.createdAt) }),
+          ...(row.updatedAt === null || row.updatedAt === undefined
+            ? {}
+            : { updatedAt: publicDateTime(row.updatedAt) })
         };
         expenses.set(row.id, expense);
       }
