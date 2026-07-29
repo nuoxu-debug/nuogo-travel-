@@ -4,6 +4,31 @@ import { clearAuthToken, getAuthToken, setAuthToken } from "../api/authToken.js"
 
 const AuthContext = createContext(null);
 
+export function safeReturnTo(value) {
+  if (typeof value !== "string") return "/planner";
+
+  const candidate = value.trim();
+  if (!candidate.startsWith("/") || candidate.startsWith("//")) return "/planner";
+
+  try {
+    let decoded = candidate;
+    for (let pass = 0; pass < 2; pass += 1) {
+      decoded = decodeURIComponent(decoded);
+      if (
+        decoded.startsWith("//")
+        || decoded.includes("\\")
+        || /[\u0000-\u001f\u007f]/.test(decoded)
+      ) {
+        return "/planner";
+      }
+    }
+  } catch {
+    return "/planner";
+  }
+
+  return candidate;
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);

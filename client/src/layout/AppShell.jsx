@@ -19,15 +19,16 @@ export default function AppShell({ children, dark = false, hideFooter = false })
     <div className="min-h-screen">
       <ScrollProgress />
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[120] focus:rounded-lg focus:bg-lake focus:px-4 focus:py-3 focus:text-sm focus:font-bold focus:text-white">
-        Skip to content
+        {t("shell.skipContent")}
       </a>
       <header className={`z-40 ${dark ? "absolute inset-x-0 top-0 border-b border-white/12 bg-ink/12 backdrop-blur-2xl" : "sticky top-0 border-b border-ink/10 bg-paper/78 backdrop-blur-2xl"}`}>
         <div className={`mx-auto flex h-[68px] max-w-[1440px] items-center justify-between px-5 sm:px-8 ${foreground}`}>
-          <Link to="/" className="group flex items-center gap-3 font-display text-xl font-extrabold" aria-label="Nuogo home">
+          <Link to="/" className="group flex items-center gap-3 font-display text-xl font-extrabold" aria-label={t("shell.home")}>
             <BrandLogo />
             <span>Nuogo</span>
             <span className={`hidden border-l pl-3 text-[10px] font-bold uppercase leading-4 sm:block ${dark ? "border-white/25 text-white/55" : "border-ink/15 text-ink/45"}`}>
-              China<br />travel studio
+              <span className="block">{t("shell.country")}</span>
+              <span className="block">{t("shell.studio")}</span>
             </span>
           </Link>
 
@@ -52,7 +53,9 @@ export default function AppShell({ children, dark = false, hideFooter = false })
           <button
             type="button"
             className={`grid h-10 w-10 place-items-center rounded-lg border transition-colors md:hidden ${dark ? "border-white/18 bg-white/10" : "border-ink/12 bg-white/80"}`}
-            aria-label={open ? "Close menu" : "Open menu"}
+            aria-label={open ? t("shell.closeMenu") : t("shell.openMenu")}
+            aria-expanded={open}
+            aria-controls="mobile-navigation"
             onClick={() => setOpen((value) => !value)}
           >
             {open ? <X /> : <Menu />}
@@ -60,7 +63,7 @@ export default function AppShell({ children, dark = false, hideFooter = false })
         </div>
 
         {open && (
-          <nav className="apple-material mx-4 grid gap-1 p-3 text-ink md:hidden">
+          <nav id="mobile-navigation" className="apple-material mx-4 grid gap-1 p-3 text-ink md:hidden">
             <Link to="/planner" className="min-h-11 rounded-lg px-3 py-3 font-bold" onClick={() => setOpen(false)}>{t("nav.plan")}</Link>
             {user && <Link to="/archive" className="min-h-11 rounded-lg px-3 py-3 font-bold" onClick={() => setOpen(false)}>{t("nav.archive")}</Link>}
             <div className="p-2"><LanguageToggle tone="light" /></div>

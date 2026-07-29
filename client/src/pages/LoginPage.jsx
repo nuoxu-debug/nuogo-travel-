@@ -1,8 +1,8 @@
 import { ArrowRight, Eye, EyeOff, LogIn, UserRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import BrandLogo from "../components/BrandLogo.jsx";
-import { useAuth } from "../context/AuthContext.jsx";
+import { safeReturnTo, useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useAnime } from "../hooks/useAnime.js";
 import AppShell from "../layout/AppShell.jsx";
@@ -11,6 +11,11 @@ export default function LoginPage() {
   const { language, t } = useLanguage();
   const { login, loginAsGuest } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnTo = safeReturnTo(searchParams.get("returnTo"));
+  const continuationQuery = returnTo === "/planner"
+    ? ""
+    : `?returnTo=${encodeURIComponent(returnTo)}`;
   const animate = useAnime();
   const formRef = useRef(null);
   const [show, setShow] = useState(false);
@@ -48,7 +53,7 @@ export default function LoginPage() {
     setServerError("");
     try {
       await login(values.email, values.password);
-      navigate("/planner");
+      navigate(returnTo, { replace: true });
     } catch (error) {
       setServerError(error.message);
     } finally {
@@ -61,7 +66,7 @@ export default function LoginPage() {
     setServerError("");
     try {
       await loginAsGuest();
-      navigate("/planner");
+      navigate(returnTo, { replace: true });
     } catch (error) {
       setServerError(error.message);
     } finally {
@@ -73,17 +78,17 @@ export default function LoginPage() {
     <AppShell>
       <section className="grid min-h-[calc(100vh-68px)] bg-paper lg:grid-cols-[1.05fr_.95fr]">
         <div className="relative hidden min-h-[680px] overflow-hidden lg:block">
-          <img src="https://images.unsplash.com/photo-1537531383496-f4749b8032cf?auto=format&fit=crop&w=1600&q=88" alt="Chinese mountain destination" className="absolute inset-0 h-full w-full object-cover" />
+          <img src="https://images.unsplash.com/photo-1537531383496-f4749b8032cf?auto=format&fit=crop&w=1600&q=88" alt={t("auth.signInImageAlt")} className="absolute inset-0 h-full w-full object-cover" />
           <div className="absolute inset-x-0 bottom-0 bg-ink/90 p-8 text-white">
-            <p className="text-xs font-extrabold uppercase text-gold">Continue your route</p>
-            <p className="mt-3 max-w-xl font-display text-3xl font-bold">Your saved plans, budgets, guides, and maps are waiting.</p>
+            <p className="text-xs font-extrabold uppercase text-gold">{t("auth.signInJourneyLabel")}</p>
+            <p className="mt-3 max-w-xl font-display text-3xl font-bold">{t("auth.signInJourneyBody")}</p>
           </div>
         </div>
         <div className="flex items-center justify-center border-l border-ink/10 px-5 py-16 sm:px-10">
           <form ref={formRef} onSubmit={submit} noValidate className="w-full max-w-md rounded-lg border border-ink/10 bg-white/78 p-6 shadow-panel backdrop-blur-2xl sm:p-8">
             <div className="auth-reveal mb-5 flex items-center gap-3 opacity-0">
               <BrandLogo />
-              <p className="text-xs font-bold uppercase text-lake">Nuogo account</p>
+              <p className="text-xs font-bold uppercase text-lake">{t("auth.accountLabel")}</p>
             </div>
             <h1 className="auth-reveal mt-4 font-display text-4xl font-bold opacity-0">{t("auth.welcome")}</h1>
             <p className="auth-reveal mt-3 text-ink/60 opacity-0">{t("auth.welcomeBody")}</p>
@@ -96,17 +101,17 @@ export default function LoginPage() {
             >
               <span className="flex items-center gap-3">
                 <UserRound className="h-5 w-5" />
-                {language === "zh" ? "访客身份继续" : "Continue as guest"}
+                {t("auth.continueAsGuest")}
               </span>
               <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
             </button>
             <p className="auth-reveal mt-3 text-center text-xs text-ink/45 opacity-0">
-              {language === "zh" ? "无需邮箱或密码，直接体验完整功能。" : "No email or password. Try the complete planner immediately."}
+              {t("auth.guestBody")}
             </p>
 
             <div className="auth-reveal my-7 flex items-center gap-4 text-xs font-bold uppercase text-ink/35 opacity-0">
               <span className="h-px flex-1 bg-ink/12" />
-              {language === "zh" ? "或使用账户" : "or use your account"}
+              {t("auth.accountDivider")}
               <span className="h-px flex-1 bg-ink/12" />
             </div>
 
@@ -144,12 +149,12 @@ export default function LoginPage() {
               {errors.password && <span className="mt-2 block text-sm font-medium text-vermilion">{errors.password}</span>}
             </label>
 
-            {serverError && <p role="alert" className="mt-5 border-l-4 border-vermilion bg-red-50 p-3 text-sm text-red-800">{serverError}</p>}
+            {serverError && <p role="alert" className="mt-5 border border-red-200 bg-red-50 p-3 text-sm text-red-800">{serverError}</p>}
             <button disabled={busy} className="auth-reveal mt-7 flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-ink px-5 font-bold text-white opacity-0 shadow-lift transition-transform hover:-translate-y-0.5 disabled:opacity-50">
               <LogIn className="h-4 w-4" /> {busy ? t("common.loading") : t("auth.signIn")}
             </button>
             <p className="auth-reveal mt-6 text-center text-sm text-ink/60 opacity-0">
-              {t("auth.noAccount")} <Link to="/register" className="font-bold text-lake">{t("auth.register")}</Link>
+              {t("auth.noAccount")} <Link to={`/register${continuationQuery}`} className="font-bold text-lake">{t("auth.register")}</Link>
             </p>
             <p className="auth-reveal mt-8 text-center text-xs text-ink/45 opacity-0">{t("auth.demoNote")}</p>
           </form>
