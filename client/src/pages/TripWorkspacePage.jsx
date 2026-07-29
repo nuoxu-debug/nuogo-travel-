@@ -1,5 +1,5 @@
 import { Plus, Share2, UserPlus, Users } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { apiRequest } from "../api/client.js";
 import ActivityDetailsDialog from "../components/ActivityDetailsDialog.jsx";
@@ -31,10 +31,6 @@ function updateActivity(trip, variantId, dayId, activity) {
 
 function mutationBody(trip, values = {}) {
   return { ...values, expectedRevision: trip.revision };
-}
-
-function withRevision(trip, revision) {
-  return { ...trip, revision };
 }
 
 const newActivityTemplate = {
@@ -69,9 +65,11 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
     loading,
     error,
     permission,
+    membersLoading,
+    membersError,
     refreshTrip,
     refreshMembers,
-    applyRevision
+    applyTripMutation
   } = useTrip();
   const { language, t } = useLanguage();
   const [activeDayId, setActiveDayId] = useState(null);
@@ -82,10 +80,16 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
   const [collaborationOpen, setCollaborationOpen] = useState(false);
   const [mutationStatus, setMutationStatus] = useState("");
   const [budgetOverride, setBudgetOverride] = useState(null);
-  const collaborationTriggerRef = useRef(null);
-  const readOnly = forceReadOnly || (
-    sharedToken ? permission === "view" : !access?.canEdit
-  );
+  const readOnly = forceReadOnly || Boolean(sharedToken) || !access?.canEdit;
+  const votingToken = sharedToken && permission === "edit" ? sharedToken : null;
+  const openCollaboration = useCallback(() => {
+    setCollaborationOpen(true);
+  }, []);
+  const closeCollaboration = useCallback(() => {
+    setCollaborationOpen(false);
+  }, []);
+  const openShare = useCallback(() => setShareOpen(true), []);
+  const closeShare = useCallback(() => setShareOpen(false), []);
 
   const variant = useMemo(() => {
     if (!trip) return null;
@@ -146,32 +150,18 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
     }
   }
 
-  function consumeRevision(revision) {
-    applyRevision(revision);
-  }
-
-  function openCollaboration(event) {
-    collaborationTriggerRef.current = event.currentTarget;
-    setCollaborationOpen(true);
-  }
-
-  function closeCollaboration() {
-    setCollaborationOpen(false);
-    window.setTimeout(() => collaborationTriggerRef.current?.focus(), 0);
-  }
-
   async function saveActivity(values) {
+    if (readOnly) return;
     if (values.id) {
       const body = await performMutation(() => apiRequest(`/activities/${values.id}`, {
         method: "PATCH",
         body: JSON.stringify(mutationBody(trip, values))
       }));
       if (!body) return;
-      consumeRevision(body.revision);
-      setTrip((current) => withRevision(
-        updateActivity(current, variant.id, day.id, body.activity),
-        body.revision
+      const applied = applyTripMutation(trip.id, body.revision, (current) => (
+        updateActivity(current, variant.id, day.id, body.activity)
       ));
+      if (!applied) return;
       setBudgetOverride(body.budget);
       setSelectedActivityId(body.activity.id);
     } else {
@@ -183,8 +173,7 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
         }
       ));
       if (!body) return;
-      consumeRevision(body.revision);
-      setTrip((current) => withRevision({
+      const applied = applyTripMutation(trip.id, body.revision, (current) => ({
         ...current,
         variants: current.variants.map((item) => item.id !== variant.id ? item : {
           ...item,
@@ -193,7 +182,8 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
             activities: [...currentDay.activities, body.activity]
           })
         })
-      }, body.revision));
+      }));
+      if (!applied) return;
       setBudgetOverride(body.budget);
       setSelectedActivityId(body.activity.id);
     }
@@ -201,13 +191,13 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
   }
 
   async function removeActivity(target) {
+    if (readOnly) return;
     const body = await performMutation(() => apiRequest(`/activities/${target.id}`, {
       method: "DELETE",
       body: JSON.stringify(mutationBody(trip))
     }));
     if (!body) return;
-    consumeRevision(body.revision);
-    setTrip((current) => withRevision({
+    const applied = applyTripMutation(trip.id, body.revision, (current) => ({
       ...current,
       variants: current.variants.map((item) => item.id !== variant.id ? item : {
         ...item,
@@ -216,11 +206,13 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
           activities: currentDay.activities.filter((item) => item.id !== target.id)
         })
       })
-    }, body.revision));
+    }));
+    if (!applied) return;
     setBudgetOverride(body.budget);
   }
 
   async function regenerateActivity(target) {
+    if (readOnly) return;
     const body = await performMutation(() => apiRequest(
       `/activities/${target.id}/regenerate`,
       {
@@ -229,16 +221,15 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
       }
     ));
     if (!body) return;
-    consumeRevision(body.revision);
-    setTrip((current) => withRevision(
-      updateActivity(current, variant.id, day.id, body.activity),
-      body.revision
+    const applied = applyTripMutation(trip.id, body.revision, (current) => (
+      updateActivity(current, variant.id, day.id, body.activity)
     ));
+    if (!applied) return;
     setBudgetOverride(body.budget);
   }
 
   async function cheaper() {
-    if (!activity) return;
+    if (readOnly || !activity) return;
     const body = await performMutation(() => apiRequest(
       `/activities/${activity.id}/cheaper-alternative`,
       {
@@ -247,25 +238,33 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
       }
     ));
     if (!body) return;
-    consumeRevision(body.revision);
-    setTrip((current) => withRevision(
-      updateActivity(current, variant.id, day.id, body.activity),
-      body.revision
+    const applied = applyTripMutation(trip.id, body.revision, (current) => (
+      updateActivity(current, variant.id, day.id, body.activity)
     ));
+    if (!applied) return;
     setBudgetOverride(body.budget);
   }
 
   async function favorite(target) {
+    if (readOnly) return;
+    const requestRevision = trip.revision;
     await apiRequest("/favorites", {
       method: "POST",
       body: JSON.stringify({ activityId: target.id })
     });
-    setTrip((current) => updateActivity(
-      current,
-      variant.id,
-      day.id,
-      { ...target, isFavorite: true }
-    ));
+    applyTripMutation(trip.id, requestRevision, (current) => {
+      const currentVariant = current.variants.find(({ id }) => id === variant.id);
+      const currentDay = currentVariant?.days.find(({ id }) => id === day.id);
+      const currentActivity = currentDay?.activities.find(({ id }) => id === target.id);
+      return currentActivity
+        ? updateActivity(
+            current,
+            variant.id,
+            day.id,
+            { ...currentActivity, isFavorite: true }
+          )
+        : current;
+    });
   }
 
   function recordVote(activityId, votes) {
@@ -281,6 +280,7 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
   }
 
   async function reorder(activities) {
+    if (readOnly) return;
     const body = await performMutation(() => apiRequest(
       `/trips/${trip.id}/days/${day.id}/reorder`,
       {
@@ -291,8 +291,7 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
       }
     ));
     if (!body) return;
-    consumeRevision(body.revision);
-    setTrip((current) => withRevision({
+    applyTripMutation(trip.id, body.revision, (current) => ({
       ...current,
       variants: current.variants.map((item) => item.id !== variant.id ? item : {
         ...item,
@@ -300,10 +299,11 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
           ? currentDay
           : { ...currentDay, activities })
       })
-    }, body.revision));
+    }));
   }
 
   async function regenerateDay() {
+    if (readOnly) return;
     const body = await performMutation(() => apiRequest(
       `/trips/${trip.id}/days/${day.id}/regenerate`,
       {
@@ -312,8 +312,7 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
       }
     ));
     if (!body) return;
-    consumeRevision(body.revision);
-    setTrip((current) => withRevision({
+    const applied = applyTripMutation(trip.id, body.revision, (current) => ({
       ...current,
       variants: current.variants.map((item) => item.id !== variant.id ? item : {
         ...item,
@@ -321,7 +320,8 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
           currentDay.id === day.id ? body.day : currentDay
         ))
       })
-    }, body.revision));
+    }));
+    if (!applied) return;
     setBudgetOverride(body.budget);
   }
 
@@ -366,7 +366,7 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
               {access?.isOwner && (
                 <button
                   type="button"
-                  onClick={() => setShareOpen(true)}
+                  onClick={openShare}
                   className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-ink/15 bg-white px-4 text-sm font-bold text-ink transition-colors hover:border-lake hover:text-lake"
                 >
                   <Share2 className="h-4 w-4" />
@@ -410,7 +410,7 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
             onFavorite={favorite}
             onAdd={() => setEditing(newActivityTemplate)}
             onReorder={reorder}
-            sharedToken={sharedToken}
+            sharedToken={votingToken}
             onVoted={recordVote}
           />
         </div>
@@ -457,7 +457,7 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
       <ShareDialog
         tripId={trip.id}
         open={shareOpen}
-        onClose={() => setShareOpen(false)}
+        onClose={closeShare}
       />
       <CollaborationDrawer
         tripId={trip.id}
@@ -466,6 +466,8 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
         access={access}
         members={members}
         onMembersChanged={refreshMembers}
+        membersLoading={membersLoading}
+        membersError={membersError}
       />
     </div>
   );

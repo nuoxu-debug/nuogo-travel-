@@ -89,7 +89,6 @@ export function demoMembers() {
       tripId: "trip-1",
       userId: "user-1",
       name: "Chen Yu",
-      email: "chen@nuogo.test",
       role: "owner",
       status: "active",
       joinedAt: "2026-07-20T08:00:00.000Z"
@@ -99,7 +98,6 @@ export function demoMembers() {
       tripId: "trip-1",
       userId: "user-2",
       name: "Li Wei",
-      email: "li@nuogo.test",
       role: "editor",
       status: "active",
       joinedAt: "2026-07-21T08:00:00.000Z"
@@ -109,7 +107,6 @@ export function demoMembers() {
       tripId: "trip-1",
       userId: "user-3",
       name: "Wang Min",
-      email: "wang@nuogo.test",
       role: "viewer",
       status: "active",
       joinedAt: "2026-07-22T08:00:00.000Z"

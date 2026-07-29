@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App.jsx";
+import { TripProvider, useTrip } from "../src/context/TripContext.jsx";
 import { demoMembers, demoTrip } from "./fixtures.js";
 
 const accessByRole = {
@@ -22,13 +23,24 @@ function response(body, { ok = true, status = 200 } = {}) {
   return { ok, status, json: async () => body };
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 function renderCollaborativeWorkspace({
   role = "owner",
   members = demoMembers(),
   invitations = [pendingInvitation],
   language = "en",
   mutation,
-  readTrip
+  readTrip,
+  readMembers
 } = {}) {
   localStorage.setItem("nuogo-token", `${role}-token`);
   localStorage.setItem("nuogo-language", language);
@@ -38,14 +50,18 @@ function renderCollaborativeWorkspace({
     if (url.endsWith("/auth/me")) {
       const member = members.find(({ role: memberRole }) => memberRole === role) ?? members[0];
       return response({
-        user: { id: member.userId, name: member.name, email: member.email }
+        user: {
+          id: member.userId,
+          name: member.name,
+          email: `${member.userId}@nuogo.test`
+        }
       });
     }
     if (url.endsWith("/trips/trip-1") && !options.method) {
       return response(readTrip?.() ?? { trip, access: accessByRole[role] });
     }
     if (url.endsWith("/trips/trip-1/members") && !options.method) {
-      return response({ members });
+      return readMembers?.() ?? response({ members });
     }
     if (url.endsWith("/trips/trip-1/invitations") && !options.method) {
       return response({ invitations });
@@ -55,6 +71,17 @@ function renderCollaborativeWorkspace({
   });
 
   return render(<App initialPath="/trip/trip-1" />);
+}
+
+function TripStateProbe() {
+  const { trip, access, members, loading } = useTrip();
+  return (
+    <output data-testid="trip-state">
+      {loading
+        ? "loading"
+        : `${trip?.id ?? "none"}:${trip?.revision ?? "none"}:${access?.role ?? "none"}:${members.length}`}
+    </output>
+  );
 }
 
 describe("map, collaboration, and archive", () => {
@@ -245,6 +272,244 @@ describe("map, collaboration, and archive", () => {
     expect(readsAfter).toBe(readsBefore + 1);
   });
 
+  it("resets route state and ignores stale responses when tripId changes", async () => {
+    localStorage.setItem("nuogo-token", "owner-token");
+    const firstRequest = deferred();
+    const secondTrip = { ...demoTrip(), id: "trip-2", revision: 1 };
+    sessionStorage.setItem(
+      "nuogo-trip-trip-1",
+      JSON.stringify({ ...demoTrip(), revision: 4 })
+    );
+
+    fetch.mockImplementation((url) => {
+      if (url.endsWith("/trips/trip-1")) return firstRequest.promise;
+      if (url.endsWith("/trips/trip-2")) {
+        return Promise.resolve(response({
+          trip: secondTrip,
+          access: accessByRole.viewer
+        }));
+      }
+      if (url.endsWith("/trips/trip-2/members")) {
+        return Promise.resolve(response({ members: [] }));
+      }
+      if (url.endsWith("/trips/trip-1/members")) {
+        return Promise.resolve(response({ members: demoMembers() }));
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    const { rerender } = render(
+      <TripProvider tripId="trip-1"><TripStateProbe /></TripProvider>
+    );
+    rerender(<TripProvider tripId="trip-2"><TripStateProbe /></TripProvider>);
+
+    expect(screen.getByTestId("trip-state")).toHaveTextContent("loading");
+    expect(await screen.findByText("trip-2:1:viewer:0")).toBeInTheDocument();
+
+    await act(async () => {
+      firstRequest.resolve(response({
+        trip: { ...demoTrip(), revision: 5 },
+        access: accessByRole.owner
+      }));
+      await firstRequest.promise;
+    });
+
+    expect(screen.getByTestId("trip-state")).toHaveTextContent("trip-2:1:viewer:0");
+  });
+
+  it("does not let a delayed mutation overwrite a newer polled trip", async () => {
+    sessionStorage.clear();
+    const intervalSpy = vi.spyOn(window, "setInterval");
+    const mutationRequest = deferred();
+    const latest = structuredClone(demoTrip());
+    latest.revision = 2;
+    latest.variants[0].days[0].activities[0].name.en = "Latest polled stop";
+    let tripReads = 0;
+
+    renderCollaborativeWorkspace({
+      readTrip: () => {
+        tripReads += 1;
+        return {
+          trip: tripReads > 1 ? latest : demoTrip(),
+          access: accessByRole.owner
+        };
+      },
+      mutation: (url) => {
+        if (url.endsWith("/activities/jinli-budget/cheaper-alternative")) {
+          return mutationRequest.promise;
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }
+    });
+
+    await userEvent.click(await screen.findByRole("button", {
+      name: "Find a cheaper alternative"
+    }));
+    const poll = intervalSpy.mock.calls.find(([, delay]) => delay === 20_000)?.[0];
+    await act(async () => {
+      await poll();
+    });
+    expect((await screen.findAllByText("Latest polled stop")).length).toBeGreaterThan(0);
+
+    const staleActivity = {
+      ...demoTrip().variants[0].days[0].activities[0],
+      name: { en: "Stale mutation stop", zh: "Stale mutation stop" }
+    };
+    await act(async () => {
+      mutationRequest.resolve(response({
+        activity: staleActivity,
+        budget: null,
+        revision: 1
+      }));
+      await mutationRequest.promise;
+    });
+
+    expect(screen.getAllByText("Latest polled stop").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Stale mutation stop")).not.toBeInTheDocument();
+    expect(JSON.parse(sessionStorage.getItem("nuogo-trip-trip-1")).revision).toBe(2);
+  });
+
+  it("contains collaboration focus through a polling rerender", async () => {
+    sessionStorage.clear();
+    const intervalSpy = vi.spyOn(window, "setInterval");
+    let reads = 0;
+    renderCollaborativeWorkspace({
+      readTrip: () => {
+        reads += 1;
+        return {
+          trip: { ...demoTrip(), revision: reads > 1 ? 1 : 0 },
+          access: accessByRole.owner
+        };
+      }
+    });
+
+    const trigger = await screen.findByRole("button", { name: "Members" });
+    await userEvent.click(trigger);
+    const close = screen.getByRole("button", { name: "Close trip members" });
+    expect(close).toHaveFocus();
+
+    await userEvent.tab({ shift: true });
+    expect(screen.getByRole("button", { name: "Revoke Viewer invitation" })).toHaveFocus();
+    await userEvent.tab();
+    expect(close).toHaveFocus();
+
+    const role = screen.getByLabelText("Role for Li Wei");
+    role.focus();
+    const poll = intervalSpy.mock.calls.find(([, delay]) => delay === 20_000)?.[0];
+    await act(async () => {
+      await poll();
+    });
+    expect(role).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it("contains public share focus and returns it to the public share trigger", async () => {
+    sessionStorage.clear();
+    renderCollaborativeWorkspace();
+
+    const trigger = await screen.findByRole("button", { name: "Public share" });
+    await userEvent.click(trigger);
+    const close = screen.getByRole("button", { name: "Close public sharing" });
+    expect(close).toHaveFocus();
+
+    await userEvent.tab({ shift: true });
+    expect(screen.getByRole("button", { name: "Create public link" })).toHaveFocus();
+    await userEvent.tab();
+    expect(close).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Public trip sharing" }))
+        .not.toBeInTheDocument();
+      expect(trigger).toHaveFocus();
+    });
+  });
+
+  it("shows member loading and recovers from a failed member refresh", async () => {
+    sessionStorage.clear();
+    const pendingMembers = deferred();
+    let memberReads = 0;
+    renderCollaborativeWorkspace({
+      readMembers: () => {
+        memberReads += 1;
+        if (memberReads === 1) return pendingMembers.promise;
+        return response({ members: demoMembers() });
+      }
+    });
+
+    await userEvent.click(await screen.findByRole("button", { name: "Members" }));
+    expect(screen.getByText("Loading trip members")).toBeInTheDocument();
+
+    await act(async () => {
+      pendingMembers.resolve(response({
+        error: { code: "REQUEST_FAILED", message: "Members unavailable" }
+      }, { ok: false, status: 503 }));
+      await pendingMembers.promise;
+    });
+
+    expect(await screen.findByText("Trip members could not be loaded.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Try loading members again" }));
+    expect(await screen.findByText("Chen Yu")).toBeInTheDocument();
+  });
+
+  it("sends owner role changes, member removals, and invitation revocations", async () => {
+    sessionStorage.clear();
+    renderCollaborativeWorkspace({
+      mutation: async (url, options) => {
+        if (url.endsWith("/members/member-editor") && options.method === "PATCH") {
+          return response({ member: { ...demoMembers()[1], role: "viewer" } });
+        }
+        if (url.endsWith("/members/member-viewer") && options.method === "DELETE") {
+          return response(null, { status: 204 });
+        }
+        if (url.endsWith("/invitations/invitation-1") && options.method === "DELETE") {
+          return response(null, { status: 204 });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }
+    });
+
+    await userEvent.click(await screen.findByRole("button", { name: "Members" }));
+    await userEvent.selectOptions(screen.getByLabelText("Role for Li Wei"), "viewer");
+    await userEvent.click(screen.getByRole("button", { name: "Remove Wang Min" }));
+    await userEvent.click(screen.getByRole("button", { name: "Remove member" }));
+    await userEvent.click(screen.getByRole("button", { name: "Revoke Viewer invitation" }));
+    await userEvent.click(screen.getByRole("button", { name: "Revoke invitation" }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/members/member-editor"),
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ role: "viewer" })
+        })
+      );
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/members/member-viewer"),
+        expect.objectContaining({ method: "DELETE" })
+      );
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/invitations/invitation-1"),
+        expect.objectContaining({ method: "DELETE" })
+      );
+    });
+  });
+
+  it("clears the trip polling interval on unmount", async () => {
+    sessionStorage.clear();
+    const intervalId = 731;
+    vi.spyOn(window, "setInterval").mockReturnValue(intervalId);
+    const clearSpy = vi.spyOn(window, "clearInterval");
+    const { unmount } = renderCollaborativeWorkspace();
+
+    await screen.findByRole("button", { name: "Members" });
+    unmount();
+
+    expect(clearSpy).toHaveBeenCalledWith(intervalId);
+  });
+
   it("classifies saved trips in the archive", async () => {
     fetch.mockResolvedValueOnce({
       ok: true,
@@ -255,18 +520,32 @@ describe("map, collaboration, and archive", () => {
     expect(screen.getByRole("tab", { name: "Drafts" })).toHaveAttribute("aria-selected", "true");
   });
 
-  it("lets members vote inside an editable shared trip", async () => {
-    fetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ trip: demoTrip(), permission: "edit", token: "sharetoken" })
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ activityId: "jinli-budget", votes: 1 })
-      });
+  it("keeps vote-enabled public shares itinerary read-only", async () => {
+    fetch.mockImplementation(async (url, options = {}) => {
+      if (url.endsWith("/shared/sharetoken") && !options.method) {
+        return response({ trip: demoTrip(), permission: "edit", token: "sharetoken" });
+      }
+      if (url.endsWith("/shared/sharetoken/votes") && options.method === "POST") {
+        return response({ activityId: "jinli-budget", votes: 1 });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
     render(<App initialPath="/shared/sharetoken" />);
-    await userEvent.click(await screen.findByRole("button", { name: "Vote for Jinli Ancient Street" }));
-    expect(await screen.findByRole("button", { name: "Vote for Jinli Ancient Street (1 vote)" })).toBeInTheDocument();
+    const vote = await screen.findByRole("button", { name: "Vote for Jinli Ancient Street" });
+    expect(screen.queryByRole("button", { name: "Edit Jinli Ancient Street" }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Regenerate Jinli Ancient Street" }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete Jinli Ancient Street" }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add activity" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Find a cheaper alternative" })).toBeDisabled();
+
+    await userEvent.click(vote);
+    expect(await screen.findByRole("button", {
+      name: "Vote for Jinli Ancient Street (1 vote)"
+    })).toBeInTheDocument();
+    expect(fetch.mock.calls.every(([url]) => url.includes("/shared/sharetoken"))).toBe(true);
   });
 });

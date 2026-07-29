@@ -14,6 +14,7 @@ import { createPortal } from "react-dom";
 import { apiRequest } from "../api/client.js";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useAnime } from "../hooks/useAnime.js";
+import { useDialogFocus } from "../hooks/useDialogFocus.js";
 
 function activeInvitations(invitations) {
   return invitations.filter(({ status }) => status === "pending");
@@ -25,10 +26,13 @@ export default function CollaborationDrawer({
   onClose,
   access,
   members,
-  onMembersChanged
+  onMembersChanged,
+  membersLoading,
+  membersError
 }) {
   const { t } = useLanguage();
   const animate = useAnime();
+  const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
   const rowsRef = useRef(null);
   const [invitations, setInvitations] = useState([]);
@@ -41,22 +45,12 @@ export default function CollaborationDrawer({
   const [confirming, setConfirming] = useState(null);
   const isOwner = Boolean(access?.isOwner);
 
-  useEffect(() => {
-    if (!open) return undefined;
-    closeButtonRef.current?.focus();
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    function keydown(event) {
-      if (event.key === "Escape") onClose();
-    }
-
-    document.addEventListener("keydown", keydown);
-    return () => {
-      document.removeEventListener("keydown", keydown);
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [onClose, open]);
+  useDialogFocus({
+    open,
+    containerRef: dialogRef,
+    initialFocusRef: closeButtonRef,
+    onClose
+  });
 
   useEffect(() => {
     if (!open || !isOwner) return;
@@ -161,9 +155,11 @@ export default function CollaborationDrawer({
       if (event.target === event.currentTarget) onClose();
     }}>
       <aside
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={t("collaboration.title")}
+        tabIndex={-1}
         className="ml-auto flex h-[100dvh] w-full max-w-[430px] flex-col border-l border-ink/10 bg-paper shadow-[-20px_0_60px_rgba(29,29,31,.16)]"
       >
         <header className="flex min-h-[72px] items-center justify-between border-b border-ink/10 px-5">
@@ -173,7 +169,7 @@ export default function CollaborationDrawer({
             </span>
             <div className="min-w-0">
               <h2 className="truncate text-lg font-extrabold">{t("collaboration.title")}</h2>
-              <p className="text-sm text-ink/65">
+              <p className="text-sm text-ink/70">
                 {t("collaboration.memberCount").replace("{count}", members.length)}
               </p>
             </div>
@@ -196,7 +192,7 @@ export default function CollaborationDrawer({
                 <UserPlus className="h-5 w-5 text-lake" />
                 <h3 className="font-extrabold">{t("collaboration.inviteSomeone")}</h3>
               </div>
-              <p className="mt-2 text-sm leading-6 text-ink/65">
+              <p className="mt-2 text-sm leading-6 text-ink/70">
                 {t("collaboration.inviteBody")}
               </p>
               <fieldset className="mt-4">
@@ -272,10 +268,31 @@ export default function CollaborationDrawer({
                 <RefreshCw className="h-4 w-4" />
               </button>
             </div>
-            {!members.length ? (
+            {membersLoading ? (
+              <div
+                role="status"
+                className="rounded-lg bg-mist px-4 py-5 text-center"
+              >
+                <LoaderCircle className="mx-auto h-5 w-5 animate-spin text-jade" />
+                <p className="mt-2 text-sm font-bold text-ink">
+                  {t("collaboration.loadingMembers")}
+                </p>
+              </div>
+            ) : membersError ? (
+              <div role="alert" className="rounded-lg bg-red-50 px-4 py-4 text-red-900">
+                <p className="text-sm font-bold">{t("collaboration.membersLoadFailed")}</p>
+                <button
+                  type="button"
+                  onClick={() => onMembersChanged().catch(() => {})}
+                  className="mt-2 min-h-11 rounded-lg border border-red-900/25 px-3 text-sm font-bold hover:bg-red-100"
+                >
+                  {t("collaboration.retryMembers")}
+                </button>
+              </div>
+            ) : !members.length ? (
               <div className="rounded-lg bg-mist px-4 py-6 text-center">
                 <p className="font-bold">{t("collaboration.emptyMembers")}</p>
-                <p className="mt-1 text-sm text-ink/65">{t("collaboration.emptyMembersBody")}</p>
+                <p className="mt-1 text-sm text-ink/70">{t("collaboration.emptyMembersBody")}</p>
               </div>
             ) : (
               <div ref={rowsRef} className="divide-y divide-ink/10">
@@ -291,7 +308,9 @@ export default function CollaborationDrawer({
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-extrabold">{member.name}</p>
-                          <p className="truncate text-xs text-ink/60">{member.email}</p>
+                          <p className="truncate text-xs text-ink/70">
+                            {t("collaboration.activeStatus")}
+                          </p>
                         </div>
                         {isOwner && !owner ? (
                           <select
@@ -305,7 +324,7 @@ export default function CollaborationDrawer({
                             <option value="viewer">{t("collaboration.roles.viewer")}</option>
                           </select>
                         ) : (
-                          <span className="text-xs font-bold text-ink/65">
+                          <span className="text-xs font-bold text-ink/70">
                             {t(`collaboration.roles.${member.role}`)}
                           </span>
                         )}
@@ -359,7 +378,7 @@ export default function CollaborationDrawer({
                   <div className="h-14 animate-pulse rounded-lg bg-mist" />
                 </div>
               ) : !pending.length ? (
-                <p className="mt-2 text-sm text-ink/65">{t("collaboration.noPendingInvitations")}</p>
+                <p className="mt-2 text-sm text-ink/70">{t("collaboration.noPendingInvitations")}</p>
               ) : (
                 <div className="mt-2 divide-y divide-ink/10">
                   {pending.map((invitation) => {
@@ -370,7 +389,7 @@ export default function CollaborationDrawer({
                       <div key={invitation.id} className="flex min-h-14 items-center justify-between gap-3 py-2">
                         <div>
                           <p className="text-sm font-bold">{role}</p>
-                          <p className="text-xs text-ink/60">{t("collaboration.waitingToJoin")}</p>
+                          <p className="text-xs text-ink/70">{t("collaboration.waitingToJoin")}</p>
                         </div>
                         {isConfirming ? (
                           <div className="flex items-center gap-1">

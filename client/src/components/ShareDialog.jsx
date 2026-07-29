@@ -1,11 +1,13 @@
 import { Check, Copy, Link2, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { apiRequest } from "../api/client.js";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { useDialogFocus } from "../hooks/useDialogFocus.js";
 
 export default function ShareDialog({ tripId, open, onClose }) {
   const { language, t } = useLanguage();
+  const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
   const [permission, setPermission] = useState("view");
   const [url, setUrl] = useState("");
@@ -13,15 +15,12 @@ export default function ShareDialog({ tripId, open, onClose }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (!open) return undefined;
-    closeButtonRef.current?.focus();
-    function keydown(event) {
-      if (event.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", keydown);
-    return () => document.removeEventListener("keydown", keydown);
-  }, [onClose, open]);
+  useDialogFocus({
+    open,
+    containerRef: dialogRef,
+    initialFocusRef: closeButtonRef,
+    onClose
+  });
 
   if (!open) return null;
 
@@ -54,10 +53,12 @@ export default function ShareDialog({ tripId, open, onClose }) {
       }}
     >
       <section
+        ref={dialogRef}
         className="w-full max-w-lg rounded-lg bg-paper p-6 shadow-[0_24px_70px_rgba(29,29,31,.24)]"
         role="dialog"
         aria-modal="true"
         aria-label={t("share.dialogLabel")}
+        tabIndex={-1}
       >
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">

@@ -1,8 +1,8 @@
 import { useLanguage } from "../context/LanguageContext.jsx";
 
 const tones = [
-  "bg-jade text-white",
-  "bg-lake text-white",
+  "bg-emerald-100 text-emerald-950",
+  "bg-sky-100 text-sky-950",
   "bg-amber-100 text-amber-950",
   "bg-rose-100 text-rose-950"
 ];
