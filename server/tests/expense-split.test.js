@@ -3,11 +3,20 @@ import { splitEqually, summarizeExpenses } from "../src/services/expenseSplit.js
 
 describe("expense splitting", () => {
   it("splits integer fen deterministically and preserves the total", () => {
-    expect(splitEqually(10000, ["user-c", "user-a", "user-b"])).toEqual([
+    const expected = [
       { userId: "user-a", shareFen: 3334 },
       { userId: "user-b", shareFen: 3333 },
       { userId: "user-c", shareFen: 3333 }
-    ]);
+    ];
+    const orders = [
+      ["user-c", "user-a", "user-b"],
+      ["user-a", "user-b", "user-c"],
+      ["user-b", "user-c", "user-a"]
+    ];
+
+    for (let repetition = 0; repetition < 10; repetition += 1) {
+      expect(splitEqually(10000, orders[repetition % orders.length])).toEqual(expected);
+    }
   });
 
   it("excludes travellers who did not participate", () => {

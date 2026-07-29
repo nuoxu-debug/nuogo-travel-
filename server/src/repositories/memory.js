@@ -16,6 +16,7 @@ export class MemoryRepository {
     this.expenses = new Map();
     this.tripActivity = new Map();
     this.tripMutationLocks = new Map();
+    this.expenseMutationLocks = new Map();
   }
 
   async createUser(user) {
@@ -534,39 +535,120 @@ export class MemoryRepository {
     return expense?.tripId === tripId ? clone(this.hydrateExpense(expense)) : undefined;
   }
 
-  async createExpense(input, allocations) {
-    const now = new Date().toISOString();
-    const expense = {
-      ...clone(input),
-      id: input.id ?? randomUUID(),
-      participants: allocations.map(({ userId, shareFen }) => ({ userId, shareFen })),
-      createdAt: input.createdAt ?? now,
-      updatedAt: input.updatedAt ?? now
+  async mutateExpense(tripId, actorUserId, audit, mutation) {
+    const previous = this.expenseMutationLocks.get(tripId) ?? Promise.resolve();
+    let release;
+    const current = new Promise((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => current);
+    this.expenseMutationLocks.set(tripId, tail);
+    await previous;
+
+    const expenseSnapshot = clone([...this.expenses.entries()]
+      .filter(([, expense]) => expense.tripId === tripId));
+    const auditId = audit?.id ?? (audit ? randomUUID() : undefined);
+    const previousAudit = auditId ? clone(this.tripActivity.get(auditId)) : undefined;
+    const restoreExpenses = () => {
+      for (const [id, expense] of this.expenses) {
+        if (expense.tripId === tripId) this.expenses.delete(id);
+      }
+      for (const [id, expense] of expenseSnapshot) this.expenses.set(id, expense);
     };
-    this.expenses.set(expense.id, expense);
-    return this.getExpense(expense.tripId, expense.id);
+
+    try {
+      const result = await mutation();
+      if (result === undefined || result === false) return result;
+      if (audit) {
+        await this.appendTripActivity({
+          ...audit,
+          id: auditId,
+          tripId,
+          actorUserId
+        });
+      }
+      return result;
+    } catch (error) {
+      restoreExpenses();
+      if (auditId) {
+        if (previousAudit) this.tripActivity.set(auditId, previousAudit);
+        else this.tripActivity.delete(auditId);
+      }
+      throw error;
+    } finally {
+      release();
+      if (this.expenseMutationLocks.get(tripId) === tail) {
+        this.expenseMutationLocks.delete(tripId);
+      }
+    }
   }
 
-  async updateExpense(expenseId, input, allocations) {
-    const expense = this.expenses.get(expenseId);
-    if (!expense) return undefined;
-    Object.assign(expense, {
+  async createExpense(input, allocations, actorUserId, audit) {
+    const now = new Date().toISOString();
+    const id = input.id ?? randomUUID();
+    const expense = {
+      id,
+      tripId: input.tripId,
       description: input.description,
       category: input.category,
       amountFen: input.amountFen,
       expenseDate: input.expenseDate,
       paidByUserId: input.paidByUserId,
+      createdByUserId: input.createdByUserId,
       note: input.note,
       participants: allocations.map(({ userId, shareFen }) => ({ userId, shareFen })),
-      updatedAt: new Date().toISOString()
-    });
-    return this.getExpense(expense.tripId, expenseId);
+      createdAt: input.createdAt ?? now,
+      updatedAt: input.updatedAt ?? now
+    };
+    const savedId = await this.mutateExpense(
+      input.tripId,
+      actorUserId,
+      audit ? { ...audit, entityId: audit.entityId ?? id } : undefined,
+      () => {
+        this.expenses.set(id, clone(expense));
+        return id;
+      }
+    );
+    return savedId ? this.getExpense(input.tripId, savedId) : undefined;
   }
 
-  async deleteExpense(tripId, expenseId) {
+  async updateExpense(expenseId, input, allocations, actorUserId, audit) {
     const expense = this.expenses.get(expenseId);
-    if (!expense || expense.tripId !== tripId) return false;
-    return this.expenses.delete(expenseId);
+    if (!expense) return undefined;
+    const savedId = await this.mutateExpense(
+      expense.tripId,
+      actorUserId,
+      audit ? { ...audit, entityId: audit.entityId ?? expenseId } : undefined,
+      () => {
+        const current = this.expenses.get(expenseId);
+        if (!current || current.tripId !== expense.tripId) return undefined;
+        Object.assign(current, {
+          description: input.description,
+          category: input.category,
+          amountFen: input.amountFen,
+          expenseDate: input.expenseDate,
+          paidByUserId: input.paidByUserId,
+          note: input.note,
+          participants: allocations.map(({ userId, shareFen }) => ({ userId, shareFen })),
+          updatedAt: new Date().toISOString()
+        });
+        return expenseId;
+      }
+    );
+    return savedId ? this.getExpense(expense.tripId, savedId) : undefined;
+  }
+
+  async deleteExpense(tripId, expenseId, actorUserId, audit) {
+    return this.mutateExpense(
+      tripId,
+      actorUserId,
+      audit ? { ...audit, entityId: audit.entityId ?? expenseId } : undefined,
+      () => {
+        const expense = this.expenses.get(expenseId);
+        if (!expense || expense.tripId !== tripId) return false;
+        return this.expenses.delete(expenseId);
+      }
+    );
   }
 
   async appendTripActivity(input) {

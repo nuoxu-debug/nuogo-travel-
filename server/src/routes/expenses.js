@@ -41,19 +41,16 @@ function requireExpenseOwner(access, expense, userId) {
   );
 }
 
-async function recordActivity(repository, tripId, userId, action, expense, summary = {}) {
-  await repository.appendTripActivity({
-    tripId,
-    actorUserId: userId,
+function expenseAudit(action, expense) {
+  return {
     action,
     entityType: "expense",
-    entityId: expense.id,
+    ...(expense.id ? { entityId: expense.id } : {}),
     summary: {
       description: expense.description,
-      amountFen: expense.amountFen,
-      ...summary
+      amountFen: expense.amountFen
     }
-  });
+  };
 }
 
 export function createExpensesRouter({ repository, authenticate }) {
@@ -77,17 +74,15 @@ export function createExpensesRouter({ repository, authenticate }) {
         ["editor"]
       );
       const input = await validatedExpenseInput(repository, access.trip.id, req.body);
-      const expense = await repository.createExpense({
-        ...input,
-        tripId: access.trip.id,
-        createdByUserId: req.user.id
-      }, splitEqually(input.amountFen, input.participantUserIds));
-      await recordActivity(
-        repository,
-        access.trip.id,
+      const expense = await repository.createExpense(
+        {
+          ...input,
+          tripId: access.trip.id,
+          createdByUserId: req.user.id
+        },
+        splitEqually(input.amountFen, input.participantUserIds),
         req.user.id,
-        "expense.created",
-        expense
+        expenseAudit("expense.created", input)
       );
       res.status(201).json({ expense });
     } catch (error) {
@@ -118,14 +113,9 @@ export function createExpensesRouter({ repository, authenticate }) {
         const expense = await repository.updateExpense(
           current.id,
           input,
-          splitEqually(input.amountFen, input.participantUserIds)
-        );
-        await recordActivity(
-          repository,
-          access.trip.id,
+          splitEqually(input.amountFen, input.participantUserIds),
           req.user.id,
-          "expense.updated",
-          expense
+          expenseAudit("expense.updated", { ...input, id: current.id })
         );
         res.json({ expense });
       } catch (error) {
@@ -153,13 +143,11 @@ export function createExpensesRouter({ repository, authenticate }) {
           throw apiError(404, "EXPENSE_NOT_FOUND", "Expense was not found.");
         }
         requireExpenseOwner(access, expense, req.user.id);
-        await repository.deleteExpense(access.trip.id, expense.id);
-        await recordActivity(
-          repository,
+        await repository.deleteExpense(
           access.trip.id,
+          expense.id,
           req.user.id,
-          "expense.deleted",
-          expense
+          expenseAudit("expense.deleted", expense)
         );
         res.json({ deletedId: expense.id });
       } catch (error) {

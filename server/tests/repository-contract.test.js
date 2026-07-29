@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  tripExpenseSchema,
   tripInvitationSchema,
   tripMemberSchema
 } from "@nuogo/shared/schemas";
@@ -230,6 +231,243 @@ describe("repository adapters", () => {
       { userId: "user-2", shareFen: 5000 }
     ]);
     expect(expense.participants.reduce((sum, item) => sum + item.shareFen, 0)).toBe(10000);
+  });
+
+  it("maps memory and MySQL expense responses to the strict shared contract", async () => {
+    const memory = new MemoryRepository();
+    memory.users.set("user-1", { id: "user-1", name: "Chen" });
+    memory.users.set("user-2", { id: "user-2", name: "Li" });
+    const memoryExpense = await memory.createExpense({
+      id: "expense-memory",
+      tripId: "trip-1",
+      description: "Dinner",
+      category: "food",
+      amountFen: 10000,
+      expenseDate: "2026-08-10",
+      paidByUserId: "user-1",
+      createdByUserId: "user-2",
+      note: ""
+    }, [
+      { userId: "user-1", shareFen: 5000 },
+      { userId: "user-2", shareFen: 5000 }
+    ]);
+
+    const mysql = new MySqlRepository({
+      query: vi.fn(),
+      execute: vi.fn(async (sql) => {
+        if (!sql.includes("FROM trip_expenses e")) throw new Error(`Unexpected SQL: ${sql}`);
+        return [[{
+          id: "expense-mysql",
+          tripId: "trip-1",
+          description: "Dinner",
+          category: "food",
+          amountFen: 10000,
+          expenseDate: "2026-08-10",
+          paidByUserId: "user-1",
+          paidByName: "Chen",
+          createdByUserId: "user-2",
+          createdByName: "Li",
+          note: "",
+          createdAt: "2026-08-01T00:00:00.000Z",
+          updatedAt: "2026-08-01T00:00:00.000Z",
+          participantUserId: "user-1",
+          participantName: "Chen",
+          participantShareFen: 10000
+        }]];
+      })
+    });
+    const mysqlExpense = await mysql.getExpense("trip-1", "expense-mysql");
+
+    expect(tripExpenseSchema.parse(memoryExpense)).toMatchObject({
+      paidByName: "Chen",
+      createdByName: "Li"
+    });
+    expect(tripExpenseSchema.parse(mysqlExpense)).toMatchObject({
+      paidByName: "Chen",
+      createdByName: "Li"
+    });
+  });
+
+  it.each(["create", "update", "delete"])(
+    "rolls back a memory expense %s when its audit write fails",
+    async (operation) => {
+      const repository = new MemoryRepository();
+      repository.users.set("user-1", { id: "user-1", name: "Chen" });
+      const input = {
+        id: "expense-1",
+        tripId: "trip-1",
+        description: "Dinner",
+        category: "food",
+        amountFen: 10000,
+        expenseDate: "2026-08-10",
+        paidByUserId: "user-1",
+        createdByUserId: "user-1",
+        note: ""
+      };
+      const allocations = [{ userId: "user-1", shareFen: 10000 }];
+      if (operation !== "create") {
+        await repository.createExpense(input, allocations);
+      }
+      const before = await repository.listExpenses("trip-1");
+      const failure = new Error("activity log insert failed");
+      vi.spyOn(repository, "appendTripActivity").mockRejectedValue(failure);
+      const audit = {
+        action: `expense.${operation}d`,
+        entityType: "expense",
+        summary: { amountFen: 10000 }
+      };
+
+      const mutation = operation === "create"
+        ? repository.createExpense(input, allocations, "user-1", audit)
+        : operation === "update"
+          ? repository.updateExpense("expense-1", {
+              ...input,
+              description: "Updated dinner"
+            }, allocations, "user-1", audit)
+          : repository.deleteExpense("trip-1", "expense-1", "user-1", audit);
+
+      await expect(mutation).rejects.toBe(failure);
+      expect(await repository.listExpenses("trip-1")).toEqual(before);
+      expect(await repository.listTripActivity("trip-1", 50)).toEqual([]);
+    }
+  );
+
+  it.each(["create", "update", "delete"])(
+    "rolls back a MySQL expense %s when its audit insert fails",
+    async (operation) => {
+      const failure = new Error("activity log insert failed");
+      const connection = {
+        beginTransaction: vi.fn(),
+        commit: vi.fn(),
+        rollback: vi.fn(),
+        release: vi.fn(),
+        execute: vi.fn(async (sql) => {
+          if (sql.includes("SELECT trip_id AS tripId")) {
+            return [[{ tripId: "trip-1" }]];
+          }
+          if (sql.startsWith("INSERT INTO trip_activity_log")) throw failure;
+          return [{ affectedRows: 1 }];
+        })
+      };
+      const pool = {
+        query: vi.fn(),
+        getConnection: vi.fn(async () => connection),
+        execute: vi.fn(async (sql) => {
+          if (sql.startsWith("DELETE FROM trip_expenses")) return [{ affectedRows: 1 }];
+          return [[]];
+        })
+      };
+      const repository = new MySqlRepository(pool);
+      const input = {
+        id: "expense-1",
+        tripId: "trip-1",
+        description: "Dinner",
+        category: "food",
+        amountFen: 10000,
+        expenseDate: "2026-08-10",
+        paidByUserId: "user-1",
+        createdByUserId: "user-1",
+        note: ""
+      };
+      const allocations = [{ userId: "user-1", shareFen: 10000 }];
+      const audit = {
+        action: `expense.${operation}d`,
+        entityType: "expense",
+        summary: { amountFen: 10000 }
+      };
+      const mutation = operation === "create"
+        ? repository.createExpense(input, allocations, "user-1", audit)
+        : operation === "update"
+          ? repository.updateExpense(
+              "expense-1",
+              input,
+              allocations,
+              "user-1",
+              audit
+            )
+          : repository.deleteExpense("trip-1", "expense-1", "user-1", audit);
+
+      await expect(mutation).rejects.toBe(failure);
+      expect(connection.commit).not.toHaveBeenCalled();
+      expect(connection.rollback).toHaveBeenCalledOnce();
+      expect(connection.release).toHaveBeenCalledOnce();
+    }
+  );
+
+  it("does not erase a concurrent successful memory expense during audit rollback", async () => {
+    const repository = new MemoryRepository();
+    repository.users.set("user-1", { id: "user-1", name: "Chen" });
+    let signalFailureStarted;
+    let releaseFailure;
+    const failureStarted = new Promise((resolve) => {
+      signalFailureStarted = resolve;
+    });
+    const failureReleased = new Promise((resolve) => {
+      releaseFailure = resolve;
+    });
+    const failure = new Error("activity log insert failed");
+    const appendTripActivity = repository.appendTripActivity.bind(repository);
+    vi.spyOn(repository, "appendTripActivity").mockImplementation(async (activity) => {
+      if (activity.action === "expense.failed") {
+        signalFailureStarted();
+        await failureReleased;
+        throw failure;
+      }
+      return appendTripActivity(activity);
+    });
+    const input = {
+      tripId: "trip-1",
+      category: "food",
+      amountFen: 10000,
+      expenseDate: "2026-08-10",
+      paidByUserId: "user-1",
+      createdByUserId: "user-1",
+      note: ""
+    };
+    const allocations = [{ userId: "user-1", shareFen: 10000 }];
+
+    const failed = repository.createExpense({
+      ...input,
+      id: "expense-failed",
+      description: "Failed dinner"
+    }, allocations, "user-1", {
+      action: "expense.failed",
+      entityType: "expense",
+      summary: {}
+    });
+    await Promise.race([
+      failureStarted,
+      new Promise((resolve) => setTimeout(resolve, 25))
+    ]);
+    await repository.appendTripActivity({
+      tripId: "trip-1",
+      actorUserId: "user-1",
+      action: "member.joined",
+      entityType: "member",
+      entityId: "member-1",
+      summary: {}
+    });
+    const succeeded = repository.createExpense({
+      ...input,
+      id: "expense-succeeded",
+      description: "Successful dinner"
+    }, allocations, "user-1", {
+      action: "expense.created",
+      entityType: "expense",
+      summary: {}
+    });
+    releaseFailure();
+
+    await expect(failed).rejects.toBe(failure);
+    await expect(succeeded).resolves.toMatchObject({ id: "expense-succeeded" });
+    expect(await repository.listExpenses("trip-1")).toEqual([
+      expect.objectContaining({ id: "expense-succeeded" })
+    ]);
+    expect(await repository.listTripActivity("trip-1", 50)).toHaveLength(2);
+    expect(await repository.listTripActivity("trip-1", 50)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: "member.joined", entityId: "member-1" }),
+      expect.objectContaining({ action: "expense.created", entityId: "expense-succeeded" })
+    ]));
   });
 
   it("looks up invitations by token hash without persisting the plain token", async () => {

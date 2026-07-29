@@ -195,6 +195,30 @@ describe("Nuogo shared contracts", () => {
     expect(summary.members[0].netFen).toBe(20000);
   });
 
+  it("accepts expense payer and creator display names", () => {
+    const expense = tripExpenseSchema.parse({
+      id: "expense-1",
+      tripId: "trip-1",
+      description: "Tunxi dinner",
+      category: "food",
+      amountFen: 30000,
+      expenseDate: "2026-08-10",
+      paidByUserId: "user-1",
+      paidByName: "Chen",
+      createdByUserId: "user-2",
+      createdByName: "Li",
+      note: "",
+      participants: [
+        { userId: "user-1", name: "Chen", shareFen: 15000 },
+        { userId: "user-2", name: "Li", shareFen: 15000 }
+      ]
+    });
+    expect(expense).toMatchObject({
+      paidByName: "Chen",
+      createdByName: "Li"
+    });
+  });
+
   it("rejects duplicate expense participants", () => {
     expect(() => tripExpenseSchema.parse({
       id: "expense-1",
@@ -204,7 +228,9 @@ describe("Nuogo shared contracts", () => {
       amountFen: 30000,
       expenseDate: "2026-08-10",
       paidByUserId: "user-1",
+      paidByName: "Chen",
       createdByUserId: "user-1",
+      createdByName: "Chen",
       note: "",
       participants: [
         { userId: "user-1", name: "Chen", shareFen: 15000 },
@@ -222,7 +248,9 @@ describe("Nuogo shared contracts", () => {
       amountFen: 30000,
       expenseDate: "2026-08-10",
       paidByUserId: "user-1",
+      paidByName: "Chen",
       createdByUserId: "user-1",
+      createdByName: "Chen",
       note: "",
       participants: [
         { userId: "user-1", name: "Chen", shareFen: 10000 },

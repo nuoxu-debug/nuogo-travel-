@@ -933,7 +933,7 @@ export class MySqlRepository {
     return [...expenses.values()];
   }
 
-  async createExpense(input, allocations) {
+  async createExpense(input, allocations, actorUserId, audit) {
     const connection = await this.pool.getConnection();
     const id = input.id ?? randomUUID();
     try {
@@ -955,6 +955,14 @@ export class MySqlRepository {
           [id, allocation.userId, allocation.shareFen]
         );
       }
+      if (audit) {
+        await this.insertTripActivity(connection, {
+          ...audit,
+          tripId: input.tripId,
+          actorUserId,
+          entityId: audit.entityId ?? id
+        });
+      }
       await connection.commit();
     } catch (error) {
       await connection.rollback();
@@ -965,7 +973,7 @@ export class MySqlRepository {
     return this.getExpense(input.tripId, id);
   }
 
-  async updateExpense(expenseId, input, allocations) {
+  async updateExpense(expenseId, input, allocations, actorUserId, audit) {
     const connection = await this.pool.getConnection();
     let tripId;
     try {
@@ -1004,6 +1012,14 @@ export class MySqlRepository {
           [expenseId, allocation.userId, allocation.shareFen]
         );
       }
+      if (audit) {
+        await this.insertTripActivity(connection, {
+          ...audit,
+          tripId,
+          actorUserId,
+          entityId: audit.entityId ?? expenseId
+        });
+      }
       await connection.commit();
     } catch (error) {
       await connection.rollback();
@@ -1014,12 +1030,34 @@ export class MySqlRepository {
     return this.getExpense(tripId, expenseId);
   }
 
-  async deleteExpense(tripId, expenseId) {
-    const [result] = await this.pool.execute(
-      "DELETE FROM trip_expenses WHERE id = ? AND trip_id = ?",
-      [expenseId, tripId]
-    );
-    return result.affectedRows > 0;
+  async deleteExpense(tripId, expenseId, actorUserId, audit) {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [result] = await connection.execute(
+        "DELETE FROM trip_expenses WHERE id = ? AND trip_id = ?",
+        [expenseId, tripId]
+      );
+      if (!result.affectedRows) {
+        await connection.rollback();
+        return false;
+      }
+      if (audit) {
+        await this.insertTripActivity(connection, {
+          ...audit,
+          tripId,
+          actorUserId,
+          entityId: audit.entityId ?? expenseId
+        });
+      }
+      await connection.commit();
+      return true;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
 
   async appendTripActivity(input) {

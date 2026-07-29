@@ -1,5 +1,5 @@
 import request from "supertest";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import { DemoPlanProvider } from "../src/providers/demoProvider.js";
 import { MemoryRepository } from "../src/repositories/memory.js";
@@ -572,10 +572,15 @@ describe("trip invitation and member API", () => {
       expect.objectContaining({ userId: viewer.id, paidFen: 0, shareFen: 0, netFen: 0 })
     ]));
     expect(summary.body.members.reduce((total, balance) => total + balance.netFen, 0)).toBe(0);
-    expect(summary.body.settlements.reduce(
-      (total, settlement) => total + settlement.amountFen,
-      0
-    )).toBe(15000);
+    const memberShareFen = created.body.expense.participants
+      .find(({ userId }) => userId === member.id).shareFen;
+    expect(summary.body.settlements).toEqual([{
+      fromUserId: member.id,
+      fromName: "Li Member",
+      toUserId: owner.id,
+      toName: "Chen Owner",
+      amountFen: memberShareFen
+    }]);
   });
 
   it("enforces viewer and editor ownership rules while owners can manage every expense", async () => {
@@ -613,6 +618,13 @@ describe("trip invitation and member API", () => {
       .expect(({ body }) => expect(body.error.code).toBe("EXPENSE_CREATOR_REQUIRED"));
 
     await request(app)
+      .patch(`/api/trips/${tripId}/expenses/${ownerExpense.body.expense.id}`)
+      .set(viewer.auth)
+      .send({ ...input, description: "Viewer overwrite" })
+      .expect(403)
+      .expect(({ body }) => expect(body.error.code).toBe("TRIP_EDITOR_REQUIRED"));
+
+    await request(app)
       .delete(`/api/trips/${tripId}/expenses/${ownerExpense.body.expense.id}`)
       .set(member.auth)
       .expect(403)
@@ -644,12 +656,23 @@ describe("trip invitation and member API", () => {
 
     await request(app)
       .delete(`/api/trips/${tripId}/expenses/${editorExpense.body.expense.id}`)
+      .set(member.auth)
+      .expect(200);
+
+    const editorExpenseForOwner = await request(app)
+      .post(`/api/trips/${tripId}/expenses`)
+      .set(member.auth)
+      .send({ ...input, description: "Editor taxi" })
+      .expect(201);
+
+    await request(app)
+      .delete(`/api/trips/${tripId}/expenses/${editorExpenseForOwner.body.expense.id}`)
       .set(viewer.auth)
       .expect(403)
       .expect(({ body }) => expect(body.error.code).toBe("TRIP_EDITOR_REQUIRED"));
 
     await request(app)
-      .delete(`/api/trips/${tripId}/expenses/${editorExpense.body.expense.id}`)
+      .delete(`/api/trips/${tripId}/expenses/${editorExpenseForOwner.body.expense.id}`)
       .set(owner.auth)
       .expect(200);
 
@@ -820,4 +843,52 @@ describe("trip invitation and member API", () => {
     expect(await repository.getExpense(tripId, created.body.expense.id))
       .toMatchObject({ description: "Breakfast" });
   });
+
+  it.each(["create", "update", "delete"])(
+    "rolls back an expense %s when its audit write fails",
+    async (operation) => {
+      await acceptInvitation(member, "editor");
+      const input = {
+        description: "Shared dinner",
+        category: "food",
+        amountFen: 10000,
+        expenseDate: "2026-08-10",
+        paidByUserId: owner.id,
+        participantUserIds: [owner.id, member.id],
+        note: ""
+      };
+      const existing = operation === "create"
+        ? undefined
+        : await repository.createExpense({
+            ...input,
+            tripId,
+            createdByUserId: member.id
+          }, [
+            { userId: owner.id, shareFen: 5000 },
+            { userId: member.id, shareFen: 5000 }
+          ]);
+      const before = await repository.listExpenses(tripId);
+      const activityBefore = await repository.listTripActivity(tripId, 50);
+      const failure = new Error("activity log insert failed");
+      vi.spyOn(repository, "appendTripActivity").mockRejectedValue(failure);
+
+      const requestBuilder = operation === "create"
+        ? request(app)
+            .post(`/api/trips/${tripId}/expenses`)
+            .set(member.auth)
+            .send(input)
+        : operation === "update"
+          ? request(app)
+              .patch(`/api/trips/${tripId}/expenses/${existing.id}`)
+              .set(member.auth)
+              .send({ ...input, description: "Should roll back", amountFen: 12000 })
+          : request(app)
+              .delete(`/api/trips/${tripId}/expenses/${existing.id}`)
+              .set(member.auth);
+
+      await requestBuilder.expect(500);
+      expect(await repository.listExpenses(tripId)).toEqual(before);
+      expect(await repository.listTripActivity(tripId, 50)).toEqual(activityBefore);
+    }
+  );
 });
