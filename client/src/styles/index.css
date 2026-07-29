@@ -280,6 +280,43 @@ textarea:focus-visible {
   background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
 }
 
+.expense-balance-table {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.expense-balance-table th,
+.expense-balance-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.expense-dialog {
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 420px) {
+  .expense-summary-band > div {
+    min-width: 0;
+  }
+
+  .expense-balance-table th,
+  .expense-balance-table td {
+    padding-right: 0.4rem;
+    padding-left: 0.4rem;
+    font-size: 0.6875rem;
+  }
+
+  .expense-balance-table th:first-child {
+    width: 31%;
+  }
+
+  .expense-dialog-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

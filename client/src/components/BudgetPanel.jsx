@@ -1,7 +1,6 @@
 import { AlertTriangle, ArrowDownRight, Coins } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { useLanguage } from "../context/LanguageContext.jsx";
-import { useAnime } from "../hooks/useAnime.js";
 
 const labels = {
   scenicTickets: { en: "Scenic tickets", zh: "景点门票" },
@@ -18,23 +17,7 @@ export function deriveBudget(variant, limit) {
 
 export default function BudgetPanel({ budget, onCheaper, disabled }) {
   const { language } = useLanguage();
-  const animate = useAnime();
-  const previous = useRef(budget.total);
-  const [displayed, setDisplayed] = useState(budget.total);
   const ratio = useMemo(() => Math.min(100, (budget.total / Math.max(1, budget.limit)) * 100), [budget]);
-
-  useEffect(() => {
-    const counter = { value: previous.current };
-    animate({
-      targets: counter,
-      value: budget.total,
-      round: 1,
-      duration: 650,
-      easing: "easeOutExpo",
-      update: () => setDisplayed(counter.value)
-    });
-    previous.current = budget.total;
-  }, [animate, budget.total]);
 
   return (
     <section className="rounded-lg border border-ink/10 bg-white/78 p-5 shadow-panel backdrop-blur-2xl">
@@ -45,7 +28,7 @@ export default function BudgetPanel({ budget, onCheaper, disabled }) {
         </span>
       </div>
       <p className="mt-5 text-xs font-bold uppercase text-ink/45">{language === "zh" ? "当前行程花费" : "Current plan cost"}</p>
-      <strong className="mt-1 block font-display text-4xl">¥{Number(displayed || budget.total).toLocaleString()}</strong>
+      <strong className="mt-1 block font-display text-4xl">¥{Number(budget.total).toLocaleString()}</strong>
       <div className="mt-4 h-2 overflow-hidden rounded-full bg-ink/10"><div className={`h-full rounded-full ${budget.overBudget ? "bg-vermilion" : "bg-jade"}`} style={{ width: `${ratio}%` }} /></div>
       <div className="mt-2 flex justify-between text-xs text-ink/45"><span>¥0</span><span>¥{budget.limit.toLocaleString()}</span></div>
       <dl className="mt-6 grid gap-3">

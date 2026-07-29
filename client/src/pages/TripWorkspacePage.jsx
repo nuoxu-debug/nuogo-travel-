@@ -4,9 +4,10 @@ import { useParams } from "react-router-dom";
 import { apiRequest } from "../api/client.js";
 import ActivityDetailsDialog from "../components/ActivityDetailsDialog.jsx";
 import ActivityModal from "../components/ActivityModal.jsx";
-import BudgetPanel, { deriveBudget } from "../components/BudgetPanel.jsx";
+import { deriveBudget } from "../components/BudgetPanel.jsx";
 import CollaborationDrawer from "../components/CollaborationDrawer.jsx";
 import DayTabs from "../components/DayTabs.jsx";
+import ExpenseWorkspace from "../components/ExpenseWorkspace.jsx";
 import GuidePanel from "../components/GuidePanel.jsx";
 import MemberAvatars from "../components/MemberAvatars.jsx";
 import RouteMap from "../components/RouteMap.jsx";
@@ -425,10 +426,13 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
           </div>
         </div>
         <div className="min-w-0">
-          <BudgetPanel
-            budget={budget}
+          <ExpenseWorkspace
+            tripId={trip.id}
+            access={sharedToken ? null : access}
+            members={members}
+            plannedBudget={budget}
             onCheaper={cheaper}
-            disabled={readOnly || !activity}
+            cheaperDisabled={readOnly || !activity}
           />
           {!readOnly && (
             <button
