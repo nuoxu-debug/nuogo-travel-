@@ -34,14 +34,17 @@ export default function SettlementList({ summary, currentUserId }) {
   }, [animate, summary]);
 
   return (
-    <div className="border-t border-ink/10">
+    <div
+      data-testid="expense-settlement-panel"
+      className="expense-settlement-panel border-t border-ink/10"
+    >
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <h3 className="text-sm font-extrabold">{t("expenses.balances")}</h3>
         <span className="text-xs font-semibold text-ink/65">{t("expenses.balanceHint")}</span>
       </div>
 
       <div className="expense-balance-table">
-        <table className="w-full table-fixed text-left text-xs">
+        <table className="expense-balance-grid w-full table-fixed text-left text-xs">
           <thead className="border-y border-ink/8 bg-ink/[0.025] text-ink/65">
             <tr>
               <th className="w-[34%] px-3 py-2 font-bold">{t("expenses.traveller")}</th>

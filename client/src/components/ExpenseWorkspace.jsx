@@ -36,6 +36,7 @@ export default function ExpenseWorkspace({
   const readAbortRef = useRef(null);
   const readSequenceRef = useRef(0);
   const hasGroupDataRef = useRef(false);
+  const staleGroupDataRef = useRef(false);
   const [tab, setTab] = useState("planned");
   const [expenses, setExpenses] = useState([]);
   const [summary, setSummary] = useState({
@@ -78,6 +79,7 @@ export default function ExpenseWorkspace({
       });
       setLoaded(true);
       hasGroupDataRef.current = true;
+      staleGroupDataRef.current = false;
       setError("");
       return true;
     } catch (loadError) {
@@ -94,6 +96,7 @@ export default function ExpenseWorkspace({
           ? t("expenses.staleRefresh")
           : t("expenses.loadFailed"))
       );
+      staleGroupDataRef.current = hasGroupDataRef.current;
       setLoaded(true);
       return false;
     } finally {
@@ -107,14 +110,20 @@ export default function ExpenseWorkspace({
     setSummary({ totalSpentFen: 0, members: [], settlements: [] });
     setLoaded(false);
     hasGroupDataRef.current = false;
+    staleGroupDataRef.current = false;
     setError("");
     readSequenceRef.current += 1;
     readAbortRef.current?.abort();
   }, [tripId]);
 
   useEffect(() => {
-    if (tab === "group" && !loaded && !loading) loadGroupData();
-  }, [loadGroupData, loaded, loading, tab]);
+    if (
+      tab === "group"
+      && (!hasGroupDataRef.current || staleGroupDataRef.current)
+    ) {
+      loadGroupData();
+    }
+  }, [loadGroupData, tab]);
 
   useEffect(() => {
     if (tab !== "group") return undefined;
@@ -173,6 +182,7 @@ export default function ExpenseWorkspace({
         : [body.expense, ...current]);
     }
     hasGroupDataRef.current = true;
+    staleGroupDataRef.current = true;
     setLoaded(true);
     const failureMessage = t("expenses.staleAfterSave");
     setError(failureMessage);
@@ -191,6 +201,7 @@ export default function ExpenseWorkspace({
       setExpenses((current) => current.filter(({ id }) => id !== deletedId));
       setConfirmDeleteId("");
       hasGroupDataRef.current = true;
+      staleGroupDataRef.current = true;
       const failureMessage = t("expenses.staleAfterDelete");
       setError(failureMessage);
       void loadGroupData({ failureMessage });
@@ -248,6 +259,17 @@ export default function ExpenseWorkspace({
         <div className="min-w-0">
           {loading && !loaded ? (
             <div aria-label={t("expenses.loading")} className="space-y-3 p-4">
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => loadGroupData()}
+                  aria-label={t("expenses.refreshLabel")}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-ink/15 px-3 text-sm font-bold text-ink/75 hover:border-lake hover:text-lake"
+                >
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  {t("expenses.refresh")}
+                </button>
+              </div>
               <div className="h-20 animate-pulse rounded-lg bg-ink/7" />
               <div className="h-14 animate-pulse rounded-lg bg-ink/7" />
               <div className="h-14 animate-pulse rounded-lg bg-ink/7" />

@@ -285,6 +285,11 @@ textarea:focus-visible {
   overflow: visible;
 }
 
+.expense-settlement-panel {
+  container-name: expense-panel;
+  container-type: inline-size;
+}
+
 .expense-balance-table th,
 .expense-balance-table td {
   white-space: nowrap;
@@ -299,13 +304,19 @@ textarea:focus-visible {
     min-width: 0;
   }
 
-  .expense-balance-table table,
-  .expense-balance-table tbody,
-  .expense-balance-table tr {
+  .expense-dialog-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container expense-panel (max-width: 36rem) {
+  .expense-balance-grid,
+  .expense-balance-grid tbody,
+  .expense-balance-grid tr {
     display: block;
   }
 
-  .expense-balance-table thead {
+  .expense-balance-grid thead {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -315,17 +326,17 @@ textarea:focus-visible {
     white-space: nowrap;
   }
 
-  .expense-balance-table tbody tr {
+  .expense-balance-grid tbody tr {
     padding: 0.65rem 0.75rem;
   }
 
-  .expense-balance-table tbody th {
+  .expense-balance-grid tbody th {
     width: auto;
     padding: 0 0 0.45rem;
     white-space: normal;
   }
 
-  .expense-balance-table tbody td {
+  .expense-balance-grid tbody td {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
@@ -337,16 +348,13 @@ textarea:focus-visible {
     overflow-wrap: anywhere;
   }
 
-  .expense-balance-table tbody td::before {
+  .expense-balance-grid tbody td::before {
     flex: 0 0 auto;
     content: attr(data-label);
     color: rgba(29, 29, 31, 0.65);
     font-weight: 700;
   }
 
-  .expense-dialog-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

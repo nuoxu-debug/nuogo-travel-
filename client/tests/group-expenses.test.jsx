@@ -475,6 +475,58 @@ describe("group expense workspace", () => {
     }
   });
 
+  it("starts a fresh load after an initial request is aborted by a mode switch", async () => {
+    const pendingExpenses = deferred();
+    const pendingSummary = deferred();
+    const signals = [];
+    let expenseReads = 0;
+    let summaryReads = 0;
+    const freshExpense = {
+      ...demoExpenses()[0],
+      description: "Fresh group receipt"
+    };
+
+    renderExpenseWorkspace({
+      request: (url, options) => {
+        if (url.endsWith("/trips/trip-1/expenses") && !options.method) {
+          expenseReads += 1;
+          if (expenseReads === 1) {
+            signals.push(options.signal);
+            return pendingExpenses.promise;
+          }
+          return response({ expenses: [freshExpense] });
+        }
+        if (url.endsWith("/trips/trip-1/expense-summary") && !options.method) {
+          summaryReads += 1;
+          if (summaryReads === 1) return pendingSummary.promise;
+          return response(demoExpenseSummary());
+        }
+        return undefined;
+      }
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Group expenses" }));
+    await waitFor(() => expect(expenseReads).toBe(1));
+    expect(screen.getByLabelText("Loading group expenses")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Refresh group expenses" }))
+      .toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Planned budget" }));
+    fireEvent.click(screen.getByRole("button", { name: "Group expenses" }));
+
+    expect(await screen.findByText("Fresh group receipt")).toBeInTheDocument();
+    expect(expenseReads).toBe(2);
+    expect(summaryReads).toBe(2);
+    expect(signals[0].aborted).toBe(true);
+    expect(screen.getByRole("button", { name: "Refresh group expenses" }))
+      .toBeInTheDocument();
+
+    pendingExpenses.resolve(response({ expenses: demoExpenses() }));
+    pendingSummary.resolve(response(demoExpenseSummary()));
+    await act(async () => {});
+    expect(screen.getByText("Fresh group receipt")).toBeInTheDocument();
+  });
+
   it("keeps a successful create when its summary refresh fails", async () => {
     const createdExpense = demoExpenses()[0];
     let mutated = false;
@@ -576,5 +628,13 @@ describe("group expense workspace", () => {
     }
     expect(within(row).getByText("¥12,345,678.90")).toBeVisible();
     expect(within(row).getByText("(you)")).toHaveClass("text-blue-800");
+  });
+
+  it("exposes a component-width responsive balance structure", async () => {
+    await openGroupExpenses();
+
+    const panel = screen.getByTestId("expense-settlement-panel");
+    expect(panel).toHaveClass("expense-settlement-panel");
+    expect(within(panel).getByRole("table")).toHaveClass("expense-balance-grid");
   });
 });
