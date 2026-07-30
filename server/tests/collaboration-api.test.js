@@ -796,6 +796,96 @@ describe("trip invitation and member API", () => {
       .expect(({ body }) => expect(body.error.code).toBe("EXPENSE_MEMBER_INVALID"));
   });
 
+  it("edits historical expenses with existing former members but rejects new former members", async () => {
+    const { accepted } = await acceptInvitation(member, "editor");
+    const formerOutsider = await register(
+      "Former Outsider",
+      "former-outsider@nuogo.test"
+    );
+    const outsiderInvitation = await createInvitation("viewer");
+    const outsiderAccepted = await request(app)
+      .post(`/api/invitations/${outsiderInvitation.body.token}/accept`)
+      .set(formerOutsider.auth)
+      .expect(200);
+
+    const created = await request(app)
+      .post(`/api/trips/${tripId}/expenses`)
+      .set(owner.auth)
+      .send({
+        description: "Historic mountain transfer",
+        category: "transportation",
+        amountFen: 18000,
+        expenseDate: "2026-08-11",
+        paidByUserId: member.id,
+        participantUserIds: [owner.id, member.id],
+        note: ""
+      })
+      .expect(201);
+
+    await repository.removeMember(tripId, accepted.body.membership.id);
+    await repository.removeMember(
+      tripId,
+      outsiderAccepted.body.membership.id
+    );
+
+    const updated = await request(app)
+      .patch(`/api/trips/${tripId}/expenses/${created.body.expense.id}`)
+      .set(owner.auth)
+      .send({
+        description: "Historic mountain transfer corrected",
+        category: "transportation",
+        amountFen: 18000,
+        expenseDate: "2026-08-11",
+        paidByUserId: member.id,
+        participantUserIds: [owner.id, member.id],
+        note: "Receipt checked"
+      })
+      .expect(200);
+
+    expect(updated.body.expense).toMatchObject({
+      description: "Historic mountain transfer corrected",
+      paidByUserId: member.id
+    });
+    expect(updated.body.expense.participants.map(({ userId }) => userId))
+      .toEqual([owner.id, member.id].sort());
+
+    for (const changes of [
+      { paidByUserId: formerOutsider.id },
+      { participantUserIds: [owner.id, member.id, formerOutsider.id] }
+    ]) {
+      await request(app)
+        .patch(`/api/trips/${tripId}/expenses/${created.body.expense.id}`)
+        .set(owner.auth)
+        .send({
+          description: "Invalid former member addition",
+          category: "transportation",
+          amountFen: 18000,
+          expenseDate: "2026-08-11",
+          paidByUserId: member.id,
+          participantUserIds: [owner.id, member.id],
+          note: "",
+          ...changes
+        })
+        .expect(400)
+        .expect(({ body }) => expect(body.error.code).toBe("EXPENSE_MEMBER_INVALID"));
+    }
+
+    await request(app)
+      .post(`/api/trips/${tripId}/expenses`)
+      .set(owner.auth)
+      .send({
+        description: "New expense with former payer",
+        category: "food",
+        amountFen: 5000,
+        expenseDate: "2026-08-12",
+        paidByUserId: member.id,
+        participantUserIds: [owner.id],
+        note: ""
+      })
+      .expect(400)
+      .expect(({ body }) => expect(body.error.code).toBe("EXPENSE_MEMBER_INVALID"));
+  });
+
   it("denies unrelated and cross-trip access without exposing another trip expense", async () => {
     await acceptInvitation(member, "editor");
     const created = await request(app)

@@ -57,27 +57,39 @@ export default function SettlementList({ summary, currentUserId }) {
                 data-balance-row
                 className={member.userId === currentUserId ? "bg-lake/[0.045]" : ""}
               >
-                <th className="truncate px-3 py-3 text-sm font-bold">
+                <th className="break-words px-3 py-3 text-sm font-bold">
                   {member.name}
                   {member.userId === currentUserId && (
-                    <span className="ml-1 text-[11px] font-semibold text-lake">
+                    <span className="ml-1 text-[11px] font-semibold text-blue-800">
                       {t("expenses.you")}
                     </span>
                   )}
                 </th>
-                <td className="px-2 py-3 text-right tabular-nums text-ink/75">
+                <td
+                  data-testid="balance-paid"
+                  data-label={t("expenses.paid")}
+                  className="px-2 py-3 text-right tabular-nums text-ink/75"
+                >
                   {formatFen(member.paidFen, language)}
                 </td>
-                <td className="px-2 py-3 text-right tabular-nums text-ink/75">
+                <td
+                  data-testid="balance-share"
+                  data-label={t("expenses.share")}
+                  className="px-2 py-3 text-right tabular-nums text-ink/75"
+                >
                   {formatFen(member.shareFen, language)}
                 </td>
-                <td className={`px-3 py-3 text-right font-extrabold tabular-nums ${
+                <td
+                  data-testid="balance-net"
+                  data-label={t("expenses.net")}
+                  className={`px-3 py-3 text-right font-extrabold tabular-nums ${
                   member.netFen > 0
                     ? "text-emerald-800"
                     : member.netFen < 0
                       ? "text-red-700"
                       : "text-ink/70"
-                }`}>
+                }`}
+                >
                   {signedFen(member.netFen, language)}
                 </td>
               </tr>
@@ -95,24 +107,28 @@ export default function SettlementList({ summary, currentUserId }) {
           </div>
         ) : (
           <ol className="mt-2 divide-y divide-ink/8">
-            {summary.settlements.map((settlement) => (
-              <li
-                key={`${settlement.fromUserId}-${settlement.toUserId}-${settlement.amountFen}`}
-                className="flex min-w-0 items-center gap-2 py-2.5 text-sm"
-              >
-                <span className="truncate font-bold">{settlement.fromName}</span>
-                <ArrowRight className="h-4 w-4 shrink-0 text-ink/50" aria-hidden="true" />
-                <span className="truncate font-bold">{settlement.toName}</span>
-                <strong className="ml-auto shrink-0 tabular-nums text-red-700">
-                  {formatFen(settlement.amountFen, language)}
-                </strong>
-                <span className="sr-only">
-                  {language === "zh"
-                    ? `${settlement.fromName} 向 ${settlement.toName} 支付 ${formatFen(settlement.amountFen, language)}`
-                    : `${settlement.fromName} pays ${settlement.toName} ${formatFen(settlement.amountFen, language)}`}
-                </span>
-              </li>
-            ))}
+            {summary.settlements.map((settlement) => {
+              const instruction = t("expenses.settlementInstruction")
+                .replace("{from}", settlement.fromName)
+                .replace("{to}", settlement.toName)
+                .replace("{amount}", formatFen(settlement.amountFen, language));
+              return (
+                <li
+                  key={`${settlement.fromUserId}-${settlement.toUserId}-${settlement.amountFen}`}
+                  aria-label={instruction}
+                  className="flex min-w-0 items-center gap-2 py-2.5 text-sm"
+                >
+                  <span aria-hidden="true" className="contents">
+                    <span className="truncate font-bold">{settlement.fromName}</span>
+                    <ArrowRight className="h-4 w-4 shrink-0 text-ink/50" />
+                    <span className="truncate font-bold">{settlement.toName}</span>
+                    <strong className="ml-auto shrink-0 tabular-nums text-red-700">
+                      {formatFen(settlement.amountFen, language)}
+                    </strong>
+                  </span>
+                </li>
+              );
+            })}
           </ol>
         )}
       </div>

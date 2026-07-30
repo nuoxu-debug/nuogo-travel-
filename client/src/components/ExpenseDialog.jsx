@@ -14,8 +14,49 @@ const categoryKeys = [
   "other"
 ];
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
+export function localCalendarDate(date = new Date()) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+export function parseYuanToFen(value) {
+  if (typeof value !== "string") return null;
+  const match = /^(0|[1-9]\d*)(?:\.(\d{1,2}))?$/.exec(value);
+  if (!match) return null;
+  const fen = (BigInt(match[1]) * 100n)
+    + BigInt((match[2] ?? "").padEnd(2, "0") || "0");
+  if (fen <= 0n || fen > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+  return Number(fen);
+}
+
+function formatFenInput(amountFen) {
+  const yuan = Math.floor(amountFen / 100);
+  const fen = amountFen % 100;
+  return fen ? `${yuan}.${String(fen).padStart(2, "0")}` : String(yuan);
+}
+
+function eligibleMembers(expense, members) {
+  const activeMembers = members.filter(({ status }) => status === "active");
+  if (!expense) return activeMembers;
+
+  const byId = new Map(activeMembers.map((member) => [member.userId, member]));
+  const referenced = [
+    {
+      userId: expense.paidByUserId,
+      name: expense.paidByName
+    },
+    ...expense.participants
+  ];
+  for (const member of referenced) {
+    if (!byId.has(member.userId)) {
+      byId.set(member.userId, {
+        userId: member.userId,
+        name: member.name,
+        status: "removed"
+      });
+    }
+  }
+  return [...byId.values()];
 }
 
 export function splitFenEqually(amountFen, participantUserIds) {
@@ -36,8 +77,8 @@ function initialValues(expense, members, currentUserId) {
   return {
     description: expense?.description ?? "",
     category: expense?.category ?? "food",
-    amount: expense ? String(expense.amountFen / 100) : "",
-    expenseDate: expense?.expenseDate ?? today(),
+    amount: expense ? formatFenInput(expense.amountFen) : "",
+    expenseDate: expense?.expenseDate ?? localCalendarDate(),
     paidByUserId: expense?.paidByUserId
       ?? activeMembers.find(({ userId }) => userId === currentUserId)?.userId
       ?? activeMembers[0]?.userId
@@ -60,15 +101,20 @@ export default function ExpenseDialog({
   const { language, t } = useLanguage();
   const dialogRef = useRef(null);
   const descriptionRef = useRef(null);
+  const amountRef = useRef(null);
+  const dateRef = useRef(null);
+  const payerRef = useRef(null);
+  const participantsRef = useRef(null);
   const [values, setValues] = useState(() => initialValues(expense, members, currentUserId));
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const [requestError, setRequestError] = useState("");
-  const activeMembers = useMemo(
-    () => members.filter(({ status }) => status === "active"),
-    [members]
+  const selectableMembers = useMemo(
+    () => eligibleMembers(expense, members),
+    [expense, members]
   );
-  const amountFen = Math.round(Number(values.amount) * 100);
+  const parsedAmountFen = parseYuanToFen(values.amount);
+  const amountFen = parsedAmountFen ?? 0;
   const shares = useMemo(
     () => splitFenEqually(amountFen, values.participantUserIds),
     [amountFen, values.participantUserIds]
@@ -115,8 +161,13 @@ export default function ExpenseDialog({
     event.preventDefault();
     const nextErrors = {};
     if (!values.description.trim()) nextErrors.description = t("expenses.validation.description");
-    if (!Number.isInteger(amountFen) || amountFen <= 0) {
+    if (
+      !values.amount
+      || /^(?:0|0\.0{1,2})$/.test(values.amount)
+    ) {
       nextErrors.amount = t("expenses.validation.amount");
+    } else if (parsedAmountFen === null) {
+      nextErrors.amount = t("expenses.validation.amountFormat");
     } else if (amountFen > 5_000_000) {
       nextErrors.amount = t("expenses.validation.amountLimit");
     }
@@ -126,7 +177,17 @@ export default function ExpenseDialog({
     if (!values.paidByUserId) nextErrors.payer = t("expenses.validation.payer");
     if (!values.expenseDate) nextErrors.date = t("expenses.validation.date");
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length) return;
+    if (Object.keys(nextErrors).length) {
+      const firstInvalid = [
+        ["description", descriptionRef],
+        ["amount", amountRef],
+        ["date", dateRef],
+        ["payer", payerRef],
+        ["participants", participantsRef]
+      ].find(([field]) => nextErrors[field]);
+      firstInvalid?.[1].current?.focus();
+      return;
+    }
 
     setBusy(true);
     setRequestError("");
@@ -224,11 +285,9 @@ export default function ExpenseDialog({
                 </span>
                 <input
                   aria-label={t("expenses.amount")}
-                  type="number"
+                  ref={amountRef}
+                  type="text"
                   inputMode="decimal"
-                  min="0.01"
-                  max="50000"
-                  step="0.01"
                   value={values.amount}
                   onChange={(event) => setField("amount", event.target.value)}
                   className="field-control pl-8 tabular-nums"
@@ -246,32 +305,58 @@ export default function ExpenseDialog({
             <label className="grid gap-1.5 text-sm font-bold">
               {t("expenses.date")}
               <input
+                ref={dateRef}
                 type="date"
                 value={values.expenseDate}
                 onChange={(event) => setField("expenseDate", event.target.value)}
                 className="field-control"
                 aria-invalid={Boolean(errors.date)}
+                aria-describedby={errors.date ? "expense-date-error" : undefined}
               />
+              {errors.date && (
+                <span id="expense-date-error" className="text-xs font-semibold text-red-700">
+                  {errors.date}
+                </span>
+              )}
             </label>
 
             <label className="grid gap-1.5 text-sm font-bold">
               {t("expenses.paidBy")}
               <select
+                ref={payerRef}
                 value={values.paidByUserId}
                 onChange={(event) => setField("paidByUserId", event.target.value)}
                 className="field-control"
                 aria-invalid={Boolean(errors.payer)}
+                aria-describedby={errors.payer ? "expense-payer-error" : undefined}
               >
-                {activeMembers.map((member) => (
-                  <option key={member.userId} value={member.userId}>{member.name}</option>
+                <option value="">{t("expenses.selectPayer")}</option>
+                {selectableMembers.map((member) => (
+                  <option key={member.userId} value={member.userId}>
+                    {member.name}
+                    {member.status === "removed"
+                      ? ` (${t("expenses.formerMember")})`
+                      : ""}
+                  </option>
                 ))}
               </select>
+              {errors.payer && (
+                <span id="expense-payer-error" className="text-xs font-semibold text-red-700">
+                  {errors.payer}
+                </span>
+              )}
             </label>
 
-            <fieldset className="sm:col-span-2">
+            <fieldset
+              ref={participantsRef}
+              tabIndex={-1}
+              aria-invalid={Boolean(errors.participants)}
+              aria-describedby={errors.participants ? "expense-participants-error" : undefined}
+              className="sm:col-span-2"
+            >
+              <legend className="text-sm font-bold">{t("expenses.splitBetween")}</legend>
               <div className="flex flex-wrap items-end justify-between gap-2">
                 <div>
-                  <legend className="text-sm font-bold">{t("expenses.splitBetween")}</legend>
                   <p className="mt-0.5 text-xs text-ink/65">{t("expenses.exclusionHint")}</p>
                 </div>
                 {shares.length > 0 && equalShare && (
@@ -284,8 +369,11 @@ export default function ExpenseDialog({
                 )}
               </div>
               <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                {activeMembers.map((member) => {
+                {selectableMembers.map((member) => {
                   const checked = values.participantUserIds.includes(member.userId);
+                  const formerLabel = member.status === "removed"
+                    ? t("expenses.formerMember")
+                    : "";
                   return (
                     <label
                       key={member.userId}
@@ -296,7 +384,9 @@ export default function ExpenseDialog({
                       }`}
                     >
                       <input
-                        aria-label={member.name}
+                        aria-label={formerLabel
+                          ? `${member.name}, ${formerLabel}`
+                          : member.name}
                         type="checkbox"
                         checked={checked}
                         onChange={() => toggleParticipant(member.userId)}
@@ -304,6 +394,11 @@ export default function ExpenseDialog({
                       />
                       <span className="min-w-0">
                         <span className="block truncate">{member.name}</span>
+                        {formerLabel && (
+                          <span className="block text-[11px] font-semibold text-amber-800">
+                            {formerLabel}
+                          </span>
+                        )}
                         {checked && shares.length > 0 && !equalShare && (
                           <span className="block text-[11px] font-semibold text-emerald-800">
                             {member.name} · {formatFen(shareByUserId.get(member.userId), language)}
@@ -316,7 +411,12 @@ export default function ExpenseDialog({
                 })}
               </div>
               {errors.participants && (
-                <p className="mt-2 text-xs font-semibold text-red-700">{errors.participants}</p>
+                <p
+                  id="expense-participants-error"
+                  className="mt-2 text-xs font-semibold text-red-700"
+                >
+                  {errors.participants}
+                </p>
               )}
             </fieldset>
 

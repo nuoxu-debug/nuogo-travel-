@@ -14,19 +14,32 @@ async function tripAccess(repository, tripId, userId, roles) {
   return requireTripRole(await getTripAccess(repository, tripId, userId), roles);
 }
 
-async function validatedExpenseInput(repository, tripId, body) {
+async function validatedExpenseInput(repository, tripId, body, currentExpense = null) {
   const input = expenseInputSchema.parse(body);
+  const members = await repository.listMembers(tripId);
   const activeUserIds = new Set(
-    (await repository.listMembers(tripId))
-      .filter(({ status }) => status === "active")
-      .map(({ userId }) => userId)
+    members.filter(({ status }) => status === "active").map(({ userId }) => userId)
   );
+  const existingUserIds = new Set(
+    currentExpense
+      ? [
+          currentExpense.paidByUserId,
+          ...currentExpense.participants.map(({ userId }) => userId)
+        ]
+      : []
+  );
+  const allowedUserIds = new Set(activeUserIds);
+  for (const { status, userId } of members) {
+    if (status === "removed" && existingUserIds.has(userId)) {
+      allowedUserIds.add(userId);
+    }
+  }
   const allUserIds = [input.paidByUserId, ...input.participantUserIds];
-  if (allUserIds.some((userId) => !activeUserIds.has(userId))) {
+  if (allUserIds.some((userId) => !allowedUserIds.has(userId))) {
     throw apiError(
       400,
       "EXPENSE_MEMBER_INVALID",
-      "The payer and participants must be active members of this trip."
+      "The payer and participants must be active trip members or former members already attached to this expense."
     );
   }
   return input;
@@ -109,7 +122,12 @@ export function createExpensesRouter({ repository, authenticate }) {
           throw apiError(404, "EXPENSE_NOT_FOUND", "Expense was not found.");
         }
         requireExpenseOwner(access, current, req.user.id);
-        const input = await validatedExpenseInput(repository, access.trip.id, req.body);
+        const input = await validatedExpenseInput(
+          repository,
+          access.trip.id,
+          req.body,
+          current
+        );
         const expense = await repository.updateExpense(
           current.id,
           input,

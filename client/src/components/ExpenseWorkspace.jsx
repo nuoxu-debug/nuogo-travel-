@@ -33,6 +33,9 @@ export default function ExpenseWorkspace({
   const { language, t } = useLanguage();
   const { user } = useAuth();
   const addButtonRef = useRef(null);
+  const readAbortRef = useRef(null);
+  const readSequenceRef = useRef(0);
+  const hasGroupDataRef = useRef(false);
   const [tab, setTab] = useState("planned");
   const [expenses, setExpenses] = useState([]);
   const [summary, setSummary] = useState({
@@ -52,15 +55,21 @@ export default function ExpenseWorkspace({
   );
   const showGroupExpenses = Boolean(access);
 
-  const loadGroupData = useCallback(async () => {
-    if (!tripId || !showGroupExpenses) return;
+  const loadGroupData = useCallback(async ({ failureMessage = "" } = {}) => {
+    if (!tripId || !showGroupExpenses) return false;
+    const sequence = readSequenceRef.current + 1;
+    readSequenceRef.current = sequence;
+    readAbortRef.current?.abort();
+    const controller = new AbortController();
+    readAbortRef.current = controller;
     setLoading(true);
-    setError("");
+    if (!failureMessage) setError("");
     try {
       const [expenseBody, summaryBody] = await Promise.all([
-        apiRequest(`/trips/${tripId}/expenses`),
-        apiRequest(`/trips/${tripId}/expense-summary`)
+        apiRequest(`/trips/${tripId}/expenses`, { signal: controller.signal }),
+        apiRequest(`/trips/${tripId}/expense-summary`, { signal: controller.signal })
       ]);
+      if (sequence !== readSequenceRef.current) return false;
       setExpenses(expenseBody.expenses ?? []);
       setSummary({
         totalSpentFen: summaryBody.totalSpentFen ?? 0,
@@ -68,11 +77,27 @@ export default function ExpenseWorkspace({
         settlements: summaryBody.settlements ?? []
       });
       setLoaded(true);
-    } catch {
-      setError(t("expenses.loadFailed"));
+      hasGroupDataRef.current = true;
+      setError("");
+      return true;
+    } catch (loadError) {
+      if (
+        controller.signal.aborted
+        || sequence !== readSequenceRef.current
+        || loadError?.name === "AbortError"
+      ) {
+        return false;
+      }
+      setError(
+        failureMessage
+        || (hasGroupDataRef.current
+          ? t("expenses.staleRefresh")
+          : t("expenses.loadFailed"))
+      );
       setLoaded(true);
+      return false;
     } finally {
-      setLoading(false);
+      if (sequence === readSequenceRef.current) setLoading(false);
     }
   }, [showGroupExpenses, t, tripId]);
 
@@ -81,12 +106,29 @@ export default function ExpenseWorkspace({
     setExpenses([]);
     setSummary({ totalSpentFen: 0, members: [], settlements: [] });
     setLoaded(false);
+    hasGroupDataRef.current = false;
     setError("");
+    readSequenceRef.current += 1;
+    readAbortRef.current?.abort();
   }, [tripId]);
 
   useEffect(() => {
     if (tab === "group" && !loaded && !loading) loadGroupData();
   }, [loadGroupData, loaded, loading, tab]);
+
+  useEffect(() => {
+    if (tab !== "group") return undefined;
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        loadGroupData();
+      }
+    }, 20_000);
+    return () => {
+      window.clearInterval(intervalId);
+      readSequenceRef.current += 1;
+      readAbortRef.current?.abort();
+    };
+  }, [loadGroupData, tab]);
 
   const currentBalance = useMemo(
     () => summary.members.find(({ userId }) => userId === user?.id) ?? {
@@ -114,7 +156,7 @@ export default function ExpenseWorkspace({
 
   async function saveExpense(input) {
     const editing = Boolean(dialogExpense);
-    await apiRequest(
+    const body = await apiRequest(
       editing
         ? `/trips/${tripId}/expenses/${dialogExpense.id}`
         : `/trips/${tripId}/expenses`,
@@ -123,18 +165,35 @@ export default function ExpenseWorkspace({
         body: JSON.stringify(input)
       }
     );
-    await loadGroupData();
+    if (body?.expense) {
+      setExpenses((current) => editing
+        ? current.map((expense) => (
+            expense.id === body.expense.id ? body.expense : expense
+          ))
+        : [body.expense, ...current]);
+    }
+    hasGroupDataRef.current = true;
+    setLoaded(true);
+    const failureMessage = t("expenses.staleAfterSave");
+    setError(failureMessage);
+    void loadGroupData({ failureMessage });
+    return body;
   }
 
   async function deleteExpense(expense) {
     setDeletingId(expense.id);
     setError("");
     try {
-      await apiRequest(`/trips/${tripId}/expenses/${expense.id}`, {
+      const body = await apiRequest(`/trips/${tripId}/expenses/${expense.id}`, {
         method: "DELETE"
       });
+      const deletedId = body?.deletedId ?? expense.id;
+      setExpenses((current) => current.filter(({ id }) => id !== deletedId));
       setConfirmDeleteId("");
-      await loadGroupData();
+      hasGroupDataRef.current = true;
+      const failureMessage = t("expenses.staleAfterDelete");
+      setError(failureMessage);
+      void loadGroupData({ failureMessage });
     } catch {
       setError(t("expenses.deleteFailed"));
     } finally {
@@ -145,14 +204,13 @@ export default function ExpenseWorkspace({
   return (
     <section className="overflow-hidden rounded-lg border border-ink/10 bg-white/82 shadow-panel backdrop-blur-2xl">
       <div
-        role="tablist"
+        role="group"
         aria-label={t("expenses.workspace")}
         className="grid grid-cols-2 border-b border-ink/10 bg-ink/[0.025] p-1"
       >
         <button
           type="button"
-          role="tab"
-          aria-selected={tab === "planned"}
+          aria-pressed={tab === "planned"}
           onClick={() => setTab("planned")}
           className={`min-h-11 rounded-md px-2 text-sm font-extrabold transition-colors ${
             tab === "planned"
@@ -165,8 +223,7 @@ export default function ExpenseWorkspace({
         {showGroupExpenses && (
           <button
             type="button"
-            role="tab"
-            aria-selected={tab === "group"}
+            aria-pressed={tab === "group"}
             onClick={() => setTab("group")}
             className={`min-h-11 rounded-md px-2 text-sm font-extrabold transition-colors ${
               tab === "group"
@@ -201,7 +258,7 @@ export default function ExpenseWorkspace({
               <p role="alert" className="mt-2 text-sm font-semibold text-ink/75">{error}</p>
               <button
                 type="button"
-                onClick={loadGroupData}
+                onClick={() => loadGroupData()}
                 className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg border border-ink/15 px-4 text-sm font-bold hover:border-lake hover:text-lake"
               >
                 <RefreshCw className="h-4 w-4" />
@@ -211,24 +268,35 @@ export default function ExpenseWorkspace({
           ) : (
             <>
               <div className="border-b border-ink/10 px-4 py-4">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-bold text-emerald-800">{t("expenses.actualSpending")}</p>
                     <strong className="mt-0.5 block text-2xl font-extrabold tabular-nums">
                       {formatFen(summary.totalSpentFen, language)}
                     </strong>
                   </div>
-                  {canCreate && (
+                  <div className="ml-auto flex flex-wrap justify-end gap-2">
                     <button
-                      ref={addButtonRef}
                       type="button"
-                      onClick={openCreate}
-                      className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg bg-ink px-3 text-sm font-bold text-white transition-transform hover:-translate-y-0.5 active:translate-y-0"
+                      onClick={() => loadGroupData()}
+                      aria-label={t("expenses.refreshLabel")}
+                      className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-ink/15 px-3 text-sm font-bold text-ink/75 hover:border-lake hover:text-lake"
                     >
-                      <Plus className="h-4 w-4" />
-                      {t("expenses.addExpense")}
+                      <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                      {t("expenses.refresh")}
                     </button>
-                  )}
+                    {canCreate && (
+                      <button
+                        ref={addButtonRef}
+                        type="button"
+                        onClick={openCreate}
+                        className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg bg-ink px-3 text-sm font-bold text-white transition-transform hover:-translate-y-0.5 active:translate-y-0"
+                      >
+                        <Plus className="h-4 w-4" />
+                        {t("expenses.addExpense")}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <dl className="expense-summary-band mt-4 grid grid-cols-2 divide-x divide-y divide-ink/8 border-y border-ink/8 sm:grid-cols-4 sm:divide-y-0">
@@ -266,9 +334,20 @@ export default function ExpenseWorkspace({
               </div>
 
               {error && (
-                <p role="alert" className="mx-4 mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">
-                  {error}
-                </p>
+                <div
+                  role="alert"
+                  className="mx-4 mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950"
+                >
+                  <p>{error}</p>
+                  <button
+                    type="button"
+                    onClick={() => loadGroupData()}
+                    aria-label={t("expenses.retryRefresh")}
+                    className="min-h-9 rounded-md border border-amber-900/20 px-3 text-xs font-extrabold hover:bg-amber-100"
+                  >
+                    {t("expenses.refresh")}
+                  </button>
+                </div>
               )}
 
               <div className="border-b border-ink/10">

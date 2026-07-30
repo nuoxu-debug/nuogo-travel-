@@ -282,13 +282,11 @@ textarea:focus-visible {
 
 .expense-balance-table {
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .expense-balance-table th,
 .expense-balance-table td {
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -301,15 +299,49 @@ textarea:focus-visible {
     min-width: 0;
   }
 
-  .expense-balance-table th,
-  .expense-balance-table td {
-    padding-right: 0.4rem;
-    padding-left: 0.4rem;
-    font-size: 0.6875rem;
+  .expense-balance-table table,
+  .expense-balance-table tbody,
+  .expense-balance-table tr {
+    display: block;
   }
 
-  .expense-balance-table th:first-child {
-    width: 31%;
+  .expense-balance-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .expense-balance-table tbody tr {
+    padding: 0.65rem 0.75rem;
+  }
+
+  .expense-balance-table tbody th {
+    width: auto;
+    padding: 0 0 0.45rem;
+    white-space: normal;
+  }
+
+  .expense-balance-table tbody td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.2rem 0;
+    overflow: visible;
+    text-align: right;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .expense-balance-table tbody td::before {
+    flex: 0 0 auto;
+    content: attr(data-label);
+    color: rgba(29, 29, 31, 0.65);
+    font-weight: 700;
   }
 
   .expense-dialog-grid {
