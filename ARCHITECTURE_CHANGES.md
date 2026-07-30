@@ -134,3 +134,73 @@ No existing success response shapes were intentionally changed.
 - Add an integrated E2E smoke test.
 - Add ESLint and optional type checking.
 - Add request logging with redaction and request IDs.
+
+## 15. Post-Baseline Feature Extension: Trip Collaboration And Expenses
+
+Date: 2026-07-30
+
+This section records a feature added after the pragmatic architecture baseline was frozen. It does not replace the baseline, change the deployment model, or introduce a new architectural style.
+
+Preserved boundaries:
+
+- React and Vite frontend.
+- Express modular-monolith API.
+- Existing MemoryRepository and MySqlRepository modes.
+- Existing Zod shared-contract boundary.
+- Existing bearer JWT authentication model.
+- Existing public share and voting behavior.
+
+Feature additions:
+
+- Authenticated trip membership with `owner`, `editor`, and `viewer` roles.
+- Seven-day editor/viewer invitation links with hashed token persistence.
+- Member role management, removal, and collaboration activity history.
+- Optimistic trip revision checks through `expectedRevision` and `TRIP_VERSION_CONFLICT`.
+- Actual group expense recording, flexible participant exclusion, deterministic equal splitting in integer fen, balances, and settlement instructions.
+- Planned itinerary budget remains separate from actual group expenses.
+
+Backend files added or extended:
+
+- `server/src/routes/members.js`
+- `server/src/routes/expenses.js`
+- `server/src/services/tripAccess.js`
+- `server/src/services/invitationTokens.js`
+- `server/src/services/expenseSplit.js`
+- `server/src/repositories/memory.js`
+- `server/src/repositories/mysql.js`
+- `server/src/routes/trips.js`
+- `server/src/routes/activities.js`
+
+Frontend files added or extended:
+
+- `client/src/pages/InvitationPage.jsx`
+- `client/src/pages/TripWorkspacePage.jsx`
+- `client/src/context/TripContext.jsx`
+- `client/src/components/CollaborationDrawer.jsx`
+- `client/src/components/MemberAvatars.jsx`
+- `client/src/components/ExpenseWorkspace.jsx`
+- `client/src/components/ExpenseDialog.jsx`
+- `client/src/components/SettlementList.jsx`
+
+Persistence additions:
+
+- `trips.revision`
+- `trip_members`
+- `trip_invitations`
+- `trip_expenses`
+- `expense_participants`
+- `trip_activity_log`
+
+Verification additions:
+
+- Shared collaboration and expense schemas.
+- Memory and mocked-MySQL repository contract tests.
+- Invitation/member/expense API authorization and transaction tests.
+- Invitation, collaborative workspace, revision-conflict, expense, settlement, mobile, focus, and reduced-motion frontend tests.
+- Deterministic MySQL demo rows in `database/seeds/001_demo.sql`; no live invitation token or external credential is seeded.
+- Playwright visual capture for desktop/mobile collaboration and group-expense states.
+
+Current build note:
+
+- The Task 12 production build emits 575.22 kB of JavaScript (176.75 kB gzip) and 58.55 kB of CSS (15.57 kB gzip).
+- Vite's existing chunk-size warning remains. Bundle optimization is intentionally outside this documentation and verification task.

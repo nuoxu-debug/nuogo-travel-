@@ -5,7 +5,7 @@ Use this checklist before the final-year project presentation.
 ## Core Flow
 
 - [ ] Landing page identifies Nuogo in the first viewport and all images load.
-- [ ] English is selected on first visit.
+- [ ] Chinese is selected on first visit.
 - [ ] Switching to Chinese translates the UI and persists after refresh.
 - [ ] Registration, logout, login, and invalid-field feedback work.
 - [ ] Planner offers supported mainland-China cities only and contains no open chat field.
@@ -26,11 +26,33 @@ Use this checklist before the final-year project presentation.
 
 ## Collaboration and Archive
 
-- [ ] View-only links hide mutation controls.
-- [ ] Edit links allow authenticated voting and prevent duplicate user votes.
+- [ ] Authenticated owner/editor/viewer memberships show only their permitted controls.
+- [ ] Public view-only links hide mutation controls.
+- [ ] Public voting links allow authenticated voting and prevent duplicate user votes without granting member access.
 - [ ] Favorites can be added, listed, dragged, and removed.
 - [ ] Archive filters draft, upcoming, and completed trips.
 - [ ] Duplicate and reuse-preference actions preserve the original trip.
+
+## Collaborative Trip And Split Expenses / 协作行程与费用分摊
+
+- [ ] **EN:** The owner creates an editor invitation from the trip-members drawer.
+  **中文：** 行程创建者可在“行程成员”抽屉中创建“可编辑”邀请。
+- [ ] **EN:** A second account signs in through the invitation page, accepts, and opens the same trip as an editor.
+  **中文：** 第二个账户通过邀请页面登录并接受邀请，随后以可编辑成员身份打开同一行程。
+- [ ] **EN:** The editor changes one itinerary activity; after refresh, the owner sees that change and the newer trip revision.
+  **中文：** 可编辑成员修改一项行程活动后，创建者刷新页面可看到修改内容与新的行程版本。
+- [ ] **EN:** A viewer can read the itinerary and expenses but cannot add, edit, delete, reorder, or regenerate itinerary content.
+  **中文：** 仅查看成员可查看行程与费用，但不能新增、编辑、删除、排序或重新生成行程内容。
+- [ ] **EN:** The editor records a CNY 300.00 shared expense and initially includes all three travellers.
+  **中文：** 可编辑成员记录一笔人民币 300.00 元的多人费用，并先勾选三位同行者。
+- [ ] **EN:** After excluding the traveller who did not participate, the preview shows CNY 150.00 for each of the two included travellers.
+  **中文：** 排除未参与该费用的同行者后，预览显示两位参与者每人分摊人民币 150.00 元。
+- [ ] **EN:** Every participant share adds up to the expense total; member net balances and suggested settlements reconcile to zero.
+  **中文：** 每笔费用的成员分摊总和等于费用总额，成员净结余与结清建议最终可核对为零。
+- [ ] **EN:** A public share remains read-only and cannot open member management or group expenses.
+  **中文：** 公开分享链接保持只读，不能进入成员管理或多人费用功能。
+- [ ] **EN:** Expired and revoked invitation links show their correct terminal states and no acceptance action.
+  **中文：** 已过期与已撤销的邀请链接显示正确终止状态，且不再提供接受操作。
 
 ## Quality
 
