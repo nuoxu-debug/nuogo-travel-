@@ -20,6 +20,39 @@ function publicDate(value) {
   return value?.toISOString?.().slice(0, 10) ?? value;
 }
 
+function publicDateTime(value) {
+  if (typeof value === "string") return value;
+  return value?.toISOString?.() ?? value;
+}
+
+function withoutNulls(row, fields) {
+  if (!row) return undefined;
+  const normalized = { ...row };
+  for (const field of fields) {
+    if (normalized[field] === null || normalized[field] === undefined) {
+      delete normalized[field];
+    }
+  }
+  return normalized;
+}
+
+function memberRecord(row) {
+  return withoutNulls(row, ["removedAt"]);
+}
+
+function invitationRecord(row) {
+  return withoutNulls(row, ["acceptedByUserId", "acceptedAt"]);
+}
+
+function tripEditError(role) {
+  const error = new Error(role === "viewer"
+    ? "Trip editor access is required."
+    : "An active trip membership is required.");
+  error.status = 403;
+  error.code = role === "viewer" ? "TRIP_EDITOR_REQUIRED" : "TRIP_MEMBER_REQUIRED";
+  return error;
+}
+
 export class MySqlRepository {
   constructor(configOrPool) {
     this.pool = typeof configOrPool?.query === "function"
@@ -87,6 +120,11 @@ export class MySqlRepository {
           preferences.startDate, json(preferences.conflicts ?? [])
         ]
       );
+      await connection.execute(
+        `INSERT INTO trip_members (id, trip_id, user_id, role, status)
+         VALUES (?, ?, ?, 'owner', 'active')`,
+        [randomUUID(), tripId, ownerId]
+      );
 
       for (const variant of variants) {
         await connection.execute(
@@ -141,10 +179,15 @@ export class MySqlRepository {
     );
   }
 
-  async listTrips(ownerId) {
+  async listTrips(userId) {
     const [rows] = await this.pool.execute(
-      "SELECT id FROM trips WHERE user_id = ? ORDER BY updated_at DESC",
-      [ownerId]
+      `SELECT t.id
+       FROM trips t
+       LEFT JOIN trip_members m
+         ON m.trip_id = t.id AND m.user_id = ? AND m.status = 'active'
+       WHERE t.user_id = ? OR m.user_id IS NOT NULL
+       ORDER BY t.updated_at DESC`,
+      [userId, userId]
     );
     return this.loadTrips(rows.map((row) => row.id));
   }
@@ -160,8 +203,8 @@ export class MySqlRepository {
     const [tripRows] = await this.pool.execute(
       `SELECT id, user_id AS ownerId, status, title_en, title_zh, destination,
               start_date AS startDate, end_date AS endDate, total_budget AS totalBudget,
-              selected_variant_id AS selectedVariantId, preferences_json, created_at AS createdAt,
-              updated_at AS updatedAt
+              selected_variant_id AS selectedVariantId, revision, preferences_json,
+              created_at AS createdAt, updated_at AS updatedAt
        FROM trips WHERE id IN (${placeholders})`,
       ids
     );
@@ -178,6 +221,7 @@ export class MySqlRepository {
       preferences: parseJson(row.preferences_json),
       variants: [],
       selectedVariantId: row.selectedVariantId,
+      revision: row.revision ?? 0,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt
     }]));
@@ -292,7 +336,81 @@ export class MySqlRepository {
     return ids.map((id) => tripsById.get(id)).filter(Boolean);
   }
 
-  async updateTrip(id, ownerId, patch) {
+  async insertTripActivity(executor, input) {
+    const id = input.id ?? randomUUID();
+    await executor.execute(
+      `INSERT INTO trip_activity_log
+        (id, trip_id, actor_user_id, action, entity_type, entity_id, summary_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id, input.tripId, input.actorUserId, input.action,
+        input.entityType, input.entityId, json(input.summary)
+      ]
+    );
+    return id;
+  }
+
+  async mutateWithRevision(
+    tripId,
+    expectedRevision,
+    actorUserId,
+    audit,
+    mutation
+  ) {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [accessRows] = await connection.execute(
+        `SELECT t.user_id AS ownerId, m.role, m.status
+         FROM trips t
+         LEFT JOIN trip_members m
+           ON m.trip_id = t.id AND m.user_id = ?
+         WHERE t.id = ?
+         LIMIT 1
+         FOR UPDATE`,
+        [actorUserId, tripId]
+      );
+      const access = accessRows[0];
+      if (!access) {
+        await connection.rollback();
+        return undefined;
+      }
+      if (access.ownerId !== actorUserId) {
+        const role = access.status === "active" ? access.role : undefined;
+        if (role !== "editor") throw tripEditError(role);
+      }
+      const [revisionResult] = await connection.execute(
+        `UPDATE trips
+         SET revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND revision = ?`,
+        [tripId, expectedRevision]
+      );
+      if (!revisionResult.affectedRows) {
+        await connection.rollback();
+        return undefined;
+      }
+      if (await mutation(connection) === false) {
+        await connection.rollback();
+        return undefined;
+      }
+      if (audit) {
+        await this.insertTripActivity(connection, {
+          ...audit,
+          tripId,
+          actorUserId
+        });
+      }
+      await connection.commit();
+      return expectedRevision + 1;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async updateTrip(id, actorId, patch, expectedRevision, audit) {
     const fields = [];
     const values = [];
     if (patch.status) {
@@ -304,12 +422,22 @@ export class MySqlRepository {
       values.push(patch.title.en, patch.title.zh);
     }
     if (!fields.length) return this.getTrip(id);
-    values.push(id, ownerId);
-    const [result] = await this.pool.execute(
-      `UPDATE trips SET ${fields.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?`,
-      values
+    values.push(id);
+    const revision = await this.mutateWithRevision(
+      id,
+      expectedRevision,
+      actorId,
+      audit,
+      async (connection) => {
+        await connection.execute(
+          `UPDATE trips SET ${fields.join(", ")} WHERE id = ?`,
+          values
+        );
+        return true;
+      }
     );
-    return result.affectedRows ? this.getTrip(id) : undefined;
+    if (revision === undefined) return undefined;
+    return { ...await this.getTrip(id), revision };
   }
 
   async deleteTrip(id, ownerId) {
@@ -334,14 +462,24 @@ export class MySqlRepository {
     return this.createTrip(ownerId, source.preferences, variants);
   }
 
-  async selectVariant(id, ownerId, variantId) {
-    const [result] = await this.pool.execute(
-      `UPDATE trips t SET selected_variant_id = ?, updated_at = CURRENT_TIMESTAMP
-       WHERE t.id = ? AND t.user_id = ?
-         AND EXISTS (SELECT 1 FROM itinerary_variants v WHERE v.id = ? AND v.trip_id = t.id)`,
-      [variantId, id, ownerId, variantId]
+  async selectVariant(id, actorId, variantId, expectedRevision, audit) {
+    const revision = await this.mutateWithRevision(
+      id,
+      expectedRevision,
+      actorId,
+      audit,
+      async (connection) => {
+        await connection.execute(
+          `UPDATE trips t SET selected_variant_id = ?
+           WHERE t.id = ?
+             AND EXISTS (SELECT 1 FROM itinerary_variants v WHERE v.id = ? AND v.trip_id = t.id)`,
+          [variantId, id, variantId]
+        );
+        return true;
+      }
     );
-    return result.affectedRows ? this.getTrip(id) : undefined;
+    if (revision === undefined) return undefined;
+    return { ...await this.getTrip(id), revision };
   }
 
   async findActivityContext(activityId) {
@@ -372,16 +510,26 @@ export class MySqlRepository {
     return undefined;
   }
 
-  async addActivity(tripId, dayId, ownerId, activity) {
+  async addActivity(tripId, dayId, actorId, activity, expectedRevision, audit) {
     const context = await this.findDayContext(tripId, dayId);
-    if (!context || context.trip.ownerId !== ownerId) return undefined;
-    await this.insertActivity(this.pool, dayId, activity);
-    return this.findActivityContext(activity.id);
+    if (!context) return undefined;
+    const revision = await this.mutateWithRevision(
+      tripId,
+      expectedRevision,
+      actorId,
+      audit,
+      async (connection) => {
+        await this.insertActivity(connection, dayId, activity);
+        return true;
+      }
+    );
+    if (revision === undefined) return undefined;
+    return { ...await this.findActivityContext(activity.id), revision };
   }
 
-  async updateActivity(activityId, ownerId, patch) {
+  async updateActivity(activityId, actorId, patch, expectedRevision, audit) {
     const context = await this.findActivityContext(activityId);
-    if (!context || context.trip.ownerId !== ownerId) return undefined;
+    if (!context) return undefined;
     const mapping = {
       startTime: ["start_time", (value) => value],
       endTime: ["end_time", (value) => value],
@@ -418,34 +566,496 @@ export class MySqlRepository {
       fields.push("longitude = ?", "latitude = ?");
       values.push(patch.location.longitude, patch.location.latitude);
     }
-    if (fields.length) {
-      values.push(activityId);
-      await this.pool.execute(`UPDATE activities SET ${fields.join(", ")} WHERE id = ?`, values);
-    }
-    return this.findActivityContext(activityId);
+    values.push(activityId);
+    const revision = await this.mutateWithRevision(
+      context.trip.id,
+      expectedRevision,
+      actorId,
+      audit,
+      async (connection) => {
+        if (!fields.length) return true;
+        await connection.execute(
+          `UPDATE activities SET ${fields.join(", ")} WHERE id = ?`,
+          values
+        );
+        return true;
+      }
+    );
+    if (revision === undefined) return undefined;
+    return { ...await this.findActivityContext(activityId), revision };
   }
 
-  async deleteActivity(activityId, ownerId) {
+  async deleteActivity(activityId, actorId, expectedRevision, audit) {
     const context = await this.findActivityContext(activityId);
-    if (!context || context.trip.ownerId !== ownerId) return undefined;
-    await this.pool.execute("DELETE FROM activities WHERE id = ?", [activityId]);
-    return context;
+    if (!context) return undefined;
+    const revision = await this.mutateWithRevision(
+      context.trip.id,
+      expectedRevision,
+      actorId,
+      audit,
+      async (connection) => {
+        const [result] = await connection.execute(
+          "DELETE FROM activities WHERE id = ?",
+          [activityId]
+        );
+        return result.affectedRows > 0;
+      }
+    );
+    if (revision === undefined) return undefined;
+    const current = await this.findDayContext(context.trip.id, context.day.id);
+    return { ...current, activity: context.activity, revision };
   }
 
-  async reorderDay(tripId, dayId, ownerId, activityIds) {
+  async reorderDay(tripId, dayId, actorId, activityIds, expectedRevision, audit) {
     const context = await this.findDayContext(tripId, dayId);
-    if (!context || context.trip.ownerId !== ownerId) return undefined;
+    if (!context) return undefined;
     const existing = new Set(context.day.activities.map((item) => item.id));
     if (activityIds.length !== existing.size || new Set(activityIds).size !== existing.size ||
         activityIds.some((item) => !existing.has(item))) return null;
+    const revision = await this.mutateWithRevision(
+      tripId,
+      expectedRevision,
+      actorId,
+      audit,
+      async (connection) => {
+        for (const [order, activityId] of activityIds.entries()) {
+          await connection.execute(
+            "UPDATE activities SET sort_order = ? WHERE id = ? AND day_id = ?",
+            [order, activityId, dayId]
+          );
+        }
+        return true;
+      }
+    );
+    if (revision === undefined) return undefined;
+    return { ...await this.findDayContext(tripId, dayId), revision };
+  }
+
+  async replaceDay(tripId, dayId, actorId, activities, expectedRevision, audit) {
+    const context = await this.findDayContext(tripId, dayId);
+    if (!context) return undefined;
+    const revision = await this.mutateWithRevision(
+      tripId,
+      expectedRevision,
+      actorId,
+      audit,
+      async (connection) => {
+        await connection.execute("DELETE FROM activities WHERE day_id = ?", [dayId]);
+        for (const activity of activities) {
+          await this.insertActivity(connection, dayId, activity);
+        }
+        return true;
+      }
+    );
+    if (revision === undefined) return undefined;
+    return { ...await this.findDayContext(tripId, dayId), revision };
+  }
+
+  async getMember(tripId, userId) {
+    const [rows] = await this.pool.execute(
+      `SELECT m.id, m.trip_id AS tripId, m.user_id AS userId, u.name,
+              m.role, m.status, m.joined_at AS joinedAt, m.removed_at AS removedAt
+       FROM trip_members m
+       JOIN users u ON u.id = m.user_id
+       WHERE m.trip_id = ? AND m.user_id = ?
+       LIMIT 1`,
+      [tripId, userId]
+    );
+    return memberRecord(rows[0]);
+  }
+
+  async listMembers(tripId) {
+    const [rows] = await this.pool.execute(
+      `SELECT m.id, m.trip_id AS tripId, m.user_id AS userId, u.name,
+              m.role, m.status, m.joined_at AS joinedAt, m.removed_at AS removedAt
+       FROM trip_members m
+       JOIN users u ON u.id = m.user_id
+       WHERE m.trip_id = ?
+       ORDER BY m.joined_at, m.id`,
+      [tripId]
+    );
+    return rows.map(memberRecord);
+  }
+
+  async mutateCollaboration(tripId, actorUserId, audit, mutation) {
+    if (!audit) return mutation(this.pool);
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
-      for (const [order, activityId] of activityIds.entries()) {
-        await connection.execute(
-          "UPDATE activities SET sort_order = ? WHERE id = ? AND day_id = ?",
-          [order, activityId, dayId]
+      const result = await mutation(connection);
+      if (result) {
+        await this.insertTripActivity(connection, {
+          ...audit,
+          tripId,
+          actorUserId,
+          entityId: audit.entityId ?? result.id
+        });
+      }
+      await connection.commit();
+      return result;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async createInvitation(input, actorUserId, audit) {
+    const id = input.id ?? randomUUID();
+    return this.mutateCollaboration(input.tripId, actorUserId, audit, async (executor) => {
+      await executor.execute(
+        `INSERT INTO trip_invitations
+          (id, trip_id, token_hash, role, status, invited_by_user_id, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id, input.tripId, input.tokenHash, input.role, input.status ?? "pending",
+          input.invitedByUserId, input.expiresAt
+        ]
+      );
+      const [rows] = await executor.execute(
+        `SELECT id, trip_id AS tripId, token_hash AS tokenHash, role, status,
+                invited_by_user_id AS invitedByUserId,
+                accepted_by_user_id AS acceptedByUserId,
+                expires_at AS expiresAt, created_at AS createdAt, accepted_at AS acceptedAt
+         FROM trip_invitations
+         WHERE token_hash = ?
+         LIMIT 1`,
+        [input.tokenHash]
+      );
+      return invitationRecord(rows[0]);
+    });
+  }
+
+  async getInvitationByTokenHash(tokenHash) {
+    const [rows] = await this.pool.execute(
+      `SELECT id, trip_id AS tripId, token_hash AS tokenHash, role, status,
+              invited_by_user_id AS invitedByUserId,
+              accepted_by_user_id AS acceptedByUserId,
+              expires_at AS expiresAt, created_at AS createdAt, accepted_at AS acceptedAt
+       FROM trip_invitations
+       WHERE token_hash = ?
+       LIMIT 1`,
+      [tokenHash]
+    );
+    return invitationRecord(rows[0]);
+  }
+
+  async listInvitations(tripId) {
+    const [rows] = await this.pool.execute(
+      `SELECT id, trip_id AS tripId, token_hash AS tokenHash, role, status,
+              invited_by_user_id AS invitedByUserId,
+              accepted_by_user_id AS acceptedByUserId,
+              expires_at AS expiresAt, created_at AS createdAt, accepted_at AS acceptedAt
+       FROM trip_invitations
+       WHERE trip_id = ?
+       ORDER BY created_at DESC`,
+      [tripId]
+    );
+    return rows.map(invitationRecord);
+  }
+
+  async updateInvitation(
+    invitationId,
+    tripId,
+    patch,
+    options = {},
+    actorUserId,
+    audit
+  ) {
+    const mapping = {
+      role: "role",
+      status: "status",
+      acceptedByUserId: "accepted_by_user_id",
+      expiresAt: "expires_at",
+      acceptedAt: "accepted_at"
+    };
+    const fields = [];
+    const values = [];
+    for (const [key, value] of Object.entries(patch)) {
+      if (!mapping[key]) continue;
+      fields.push(`${mapping[key]} = ?`);
+      values.push(value ?? null);
+    }
+    return this.mutateCollaboration(tripId, actorUserId, audit, async (executor) => {
+      if (fields.length) {
+        const conditions = ["id = ?", "trip_id = ?"];
+        const parameters = [...values, invitationId, tripId];
+        if (options.expectedStatuses?.length) {
+          conditions.push(`status IN (${options.expectedStatuses.map(() => "?").join(", ")})`);
+          parameters.push(...options.expectedStatuses);
+        }
+        if (options.requireUnexpired) {
+          conditions.push("expires_at > CURRENT_TIMESTAMP");
+        }
+        const [result] = await executor.execute(
+          `UPDATE trip_invitations
+           SET ${fields.join(", ")}
+           WHERE ${conditions.join(" AND ")}`,
+          parameters
         );
+        if (!result.affectedRows) return undefined;
+      }
+      const [rows] = await executor.execute(
+        `SELECT id, trip_id AS tripId, token_hash AS tokenHash, role, status,
+                invited_by_user_id AS invitedByUserId,
+                accepted_by_user_id AS acceptedByUserId,
+                expires_at AS expiresAt, created_at AS createdAt, accepted_at AS acceptedAt
+         FROM trip_invitations
+         WHERE id = ? AND trip_id = ?
+         LIMIT 1`,
+        [invitationId, tripId]
+      );
+      return invitationRecord(rows[0]);
+    });
+  }
+
+  async acceptInvitation(invitationId, userId, audit) {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [invitations] = await connection.execute(
+        `SELECT i.id, i.trip_id AS tripId, i.role, i.status,
+                i.accepted_by_user_id AS acceptedByUserId,
+                i.expires_at AS expiresAt, t.user_id AS ownerId
+         FROM trip_invitations i
+         JOIN trips t ON t.id = i.trip_id
+         WHERE i.id = ?
+         LIMIT 1
+         FOR UPDATE`,
+        [invitationId]
+      );
+      const invitation = invitations[0];
+      if (!invitation) {
+        await connection.commit();
+        return undefined;
+      }
+      if (invitation.status === "accepted") {
+        if (invitation.acceptedByUserId !== userId) {
+          await connection.commit();
+          return undefined;
+        }
+        const [members] = await connection.execute(
+          `SELECT m.id, m.trip_id AS tripId, m.user_id AS userId, u.name,
+                  m.role, m.status, m.joined_at AS joinedAt, m.removed_at AS removedAt
+           FROM trip_members m
+           JOIN users u ON u.id = m.user_id
+           WHERE m.trip_id = ? AND m.user_id = ?
+           LIMIT 1`,
+          [invitation.tripId, userId]
+        );
+        await connection.commit();
+        return members[0]?.status === "active" ? memberRecord(members[0]) : undefined;
+      }
+      if (invitation.status !== "pending") {
+        await connection.commit();
+        return undefined;
+      }
+      if (invitation.ownerId === userId) {
+        await connection.commit();
+        return undefined;
+      }
+      if (Date.parse(invitation.expiresAt) <= Date.now()) {
+        await connection.execute(
+          `UPDATE trip_invitations
+           SET status = 'expired'
+           WHERE id = ? AND status = 'pending'`,
+          [invitationId]
+        );
+        await connection.commit();
+        return undefined;
+      }
+
+      const [accepted] = await connection.execute(
+        `UPDATE trip_invitations
+         SET status = 'accepted', accepted_by_user_id = ?, accepted_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND status = 'pending' AND expires_at > CURRENT_TIMESTAMP`,
+        [userId, invitationId]
+      );
+      if (!accepted.affectedRows) {
+        await connection.execute(
+          `UPDATE trip_invitations
+           SET status = 'expired'
+           WHERE id = ? AND status = 'pending'`,
+          [invitationId]
+        );
+        await connection.commit();
+        return undefined;
+      }
+      await connection.execute(
+        `INSERT INTO trip_members (id, trip_id, user_id, role, status)
+         VALUES (?, ?, ?, ?, 'active')
+         ON DUPLICATE KEY UPDATE
+           role = VALUES(role), status = 'active', removed_at = NULL`,
+        [randomUUID(), invitation.tripId, userId, invitation.role]
+      );
+      const [members] = await connection.execute(
+        `SELECT m.id, m.trip_id AS tripId, m.user_id AS userId, u.name,
+                m.role, m.status, m.joined_at AS joinedAt, m.removed_at AS removedAt
+         FROM trip_members m
+         JOIN users u ON u.id = m.user_id
+         WHERE m.trip_id = ? AND m.user_id = ?
+         LIMIT 1`,
+        [invitation.tripId, userId]
+      );
+      if (audit) {
+        await this.insertTripActivity(connection, {
+          ...audit,
+          tripId: invitation.tripId,
+          actorUserId: userId,
+          entityId: audit.entityId ?? members[0]?.id
+        });
+      }
+      await connection.commit();
+      return memberRecord(members[0]);
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async updateMember(tripId, memberId, role, actorUserId, audit) {
+    return this.mutateCollaboration(tripId, actorUserId, audit, async (executor) => {
+      const [result] = await executor.execute(
+        `UPDATE trip_members
+         SET role = ?
+         WHERE id = ? AND trip_id = ?`,
+        [role, memberId, tripId]
+      );
+      if (!result.affectedRows) return undefined;
+      const [rows] = await executor.execute(
+        `SELECT m.id, m.trip_id AS tripId, m.user_id AS userId, u.name,
+                m.role, m.status, m.joined_at AS joinedAt, m.removed_at AS removedAt
+         FROM trip_members m
+         JOIN users u ON u.id = m.user_id
+         WHERE m.id = ? AND m.trip_id = ?
+         LIMIT 1`,
+        [memberId, tripId]
+      );
+      return memberRecord(rows[0]);
+    });
+  }
+
+  async removeMember(tripId, memberId, actorUserId, audit) {
+    return this.mutateCollaboration(tripId, actorUserId, audit, async (executor) => {
+      const [result] = await executor.execute(
+        `UPDATE trip_members
+         SET status = 'removed', removed_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND trip_id = ?`,
+        [memberId, tripId]
+      );
+      if (!result.affectedRows) return undefined;
+      const [rows] = await executor.execute(
+        `SELECT m.id, m.trip_id AS tripId, m.user_id AS userId, u.name,
+                m.role, m.status, m.joined_at AS joinedAt, m.removed_at AS removedAt
+         FROM trip_members m
+         JOIN users u ON u.id = m.user_id
+         WHERE m.id = ? AND m.trip_id = ?
+         LIMIT 1`,
+        [memberId, tripId]
+      );
+      return memberRecord(rows[0]);
+    });
+  }
+
+  async listExpenses(tripId) {
+    return this.loadExpenses(tripId);
+  }
+
+  async getExpense(tripId, expenseId) {
+    const [expense] = await this.loadExpenses(tripId, expenseId);
+    return expense;
+  }
+
+  async loadExpenses(tripId, expenseId) {
+    const values = [tripId];
+    const expenseFilter = expenseId === undefined ? "" : " AND e.id = ?";
+    if (expenseId !== undefined) values.push(expenseId);
+    const [rows] = await this.pool.execute(
+      `SELECT e.id, e.trip_id AS tripId, e.description, e.category,
+              e.amount_fen AS amountFen, e.expense_date AS expenseDate,
+              e.paid_by_user_id AS paidByUserId, payer.name AS paidByName,
+              e.created_by_user_id AS createdByUserId, creator.name AS createdByName,
+              e.note, e.created_at AS createdAt, e.updated_at AS updatedAt,
+              p.user_id AS participantUserId, participant.name AS participantName,
+              p.share_fen AS participantShareFen
+       FROM trip_expenses e
+       JOIN users payer ON payer.id = e.paid_by_user_id
+       JOIN users creator ON creator.id = e.created_by_user_id
+       LEFT JOIN expense_participants p ON p.expense_id = e.id
+       LEFT JOIN users participant ON participant.id = p.user_id
+       WHERE e.trip_id = ?${expenseFilter}
+       ORDER BY e.expense_date DESC, e.created_at DESC, p.user_id`,
+      values
+    );
+    const expenses = new Map();
+    for (const row of rows) {
+      let expense = expenses.get(row.id);
+      if (!expense) {
+        expense = {
+          id: row.id,
+          tripId: row.tripId,
+          description: row.description,
+          category: row.category,
+          amountFen: row.amountFen,
+          expenseDate: publicDate(row.expenseDate),
+          paidByUserId: row.paidByUserId,
+          paidByName: row.paidByName,
+          createdByUserId: row.createdByUserId,
+          createdByName: row.createdByName,
+          note: row.note,
+          participants: [],
+          ...(row.createdAt === null || row.createdAt === undefined
+            ? {}
+            : { createdAt: publicDateTime(row.createdAt) }),
+          ...(row.updatedAt === null || row.updatedAt === undefined
+            ? {}
+            : { updatedAt: publicDateTime(row.updatedAt) })
+        };
+        expenses.set(row.id, expense);
+      }
+      if (row.participantUserId) {
+        expense.participants.push({
+          userId: row.participantUserId,
+          name: row.participantName,
+          shareFen: row.participantShareFen
+        });
+      }
+    }
+    return [...expenses.values()];
+  }
+
+  async createExpense(input, allocations, actorUserId, audit) {
+    const connection = await this.pool.getConnection();
+    const id = input.id ?? randomUUID();
+    try {
+      await connection.beginTransaction();
+      await connection.execute(
+        `INSERT INTO trip_expenses
+          (id, trip_id, description, category, amount_fen, expense_date,
+           paid_by_user_id, created_by_user_id, note)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id, input.tripId, input.description, input.category, input.amountFen,
+          input.expenseDate, input.paidByUserId, input.createdByUserId, input.note
+        ]
+      );
+      for (const allocation of allocations) {
+        await connection.execute(
+          `INSERT INTO expense_participants (expense_id, user_id, share_fen)
+           VALUES (?, ?, ?)`,
+          [id, allocation.userId, allocation.shareFen]
+        );
+      }
+      if (audit) {
+        await this.insertTripActivity(connection, {
+          ...audit,
+          tripId: input.tripId,
+          actorUserId,
+          entityId: audit.entityId ?? id
+        });
       }
       await connection.commit();
     } catch (error) {
@@ -454,17 +1064,56 @@ export class MySqlRepository {
     } finally {
       connection.release();
     }
-    return this.findDayContext(tripId, dayId);
+    return this.getExpense(input.tripId, id);
   }
 
-  async replaceDay(tripId, dayId, ownerId, activities) {
-    const context = await this.findDayContext(tripId, dayId);
-    if (!context || context.trip.ownerId !== ownerId) return undefined;
+  async updateExpense(expenseId, input, allocations, actorUserId, audit) {
     const connection = await this.pool.getConnection();
+    let tripId;
     try {
       await connection.beginTransaction();
-      await connection.execute("DELETE FROM activities WHERE day_id = ?", [dayId]);
-      for (const activity of activities) await this.insertActivity(connection, dayId, activity);
+      const [rows] = await connection.execute(
+        `SELECT trip_id AS tripId
+         FROM trip_expenses
+         WHERE id = ?
+         LIMIT 1
+         FOR UPDATE`,
+        [expenseId]
+      );
+      tripId = rows[0]?.tripId;
+      if (!tripId) {
+        await connection.commit();
+        return undefined;
+      }
+      await connection.execute(
+        `UPDATE trip_expenses
+         SET description = ?, category = ?, amount_fen = ?, expense_date = ?,
+             paid_by_user_id = ?, note = ?
+         WHERE id = ?`,
+        [
+          input.description, input.category, input.amountFen, input.expenseDate,
+          input.paidByUserId, input.note, expenseId
+        ]
+      );
+      await connection.execute(
+        "DELETE FROM expense_participants WHERE expense_id = ?",
+        [expenseId]
+      );
+      for (const allocation of allocations) {
+        await connection.execute(
+          `INSERT INTO expense_participants (expense_id, user_id, share_fen)
+           VALUES (?, ?, ?)`,
+          [expenseId, allocation.userId, allocation.shareFen]
+        );
+      }
+      if (audit) {
+        await this.insertTripActivity(connection, {
+          ...audit,
+          tripId,
+          actorUserId,
+          entityId: audit.entityId ?? expenseId
+        });
+      }
       await connection.commit();
     } catch (error) {
       await connection.rollback();
@@ -472,7 +1121,92 @@ export class MySqlRepository {
     } finally {
       connection.release();
     }
-    return this.findDayContext(tripId, dayId);
+    return this.getExpense(tripId, expenseId);
+  }
+
+  async deleteExpense(tripId, expenseId, actorUserId, audit) {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [result] = await connection.execute(
+        "DELETE FROM trip_expenses WHERE id = ? AND trip_id = ?",
+        [expenseId, tripId]
+      );
+      if (!result.affectedRows) {
+        await connection.rollback();
+        return false;
+      }
+      if (audit) {
+        await this.insertTripActivity(connection, {
+          ...audit,
+          tripId,
+          actorUserId,
+          entityId: audit.entityId ?? expenseId
+        });
+      }
+      await connection.commit();
+      return true;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async appendTripActivity(input) {
+    const id = await this.insertTripActivity(this.pool, input);
+    const [rows] = await this.pool.execute(
+      `SELECT l.id, l.trip_id AS tripId, l.actor_user_id AS actorUserId,
+              u.name AS actorName, l.action, l.entity_type AS entityType,
+              l.entity_id AS entityId, l.summary_json, l.created_at AS createdAt
+       FROM trip_activity_log l
+       JOIN users u ON u.id = l.actor_user_id
+       WHERE l.id = ?
+       LIMIT 1`,
+      [id]
+    );
+    if (!rows[0]) return undefined;
+    const { summary_json, ...activity } = rows[0];
+    return { ...activity, summary: parseJson(summary_json) };
+  }
+
+  async listTripActivity(tripId, limit) {
+    const [rows] = await this.pool.execute(
+      `SELECT l.id, l.trip_id AS tripId, l.actor_user_id AS actorUserId,
+              u.name AS actorName, l.action, l.entity_type AS entityType,
+              l.entity_id AS entityId, l.summary_json, l.created_at AS createdAt
+       FROM trip_activity_log l
+       JOIN users u ON u.id = l.actor_user_id
+       WHERE l.trip_id = ?
+       ORDER BY l.created_at DESC, l.id DESC
+       LIMIT ?`,
+      [tripId, limit]
+    );
+    return rows.map(({ summary_json, ...row }) => ({
+      ...row,
+      summary: parseJson(summary_json)
+    }));
+  }
+
+  async incrementTripRevision(tripId, expectedRevision) {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [result] = await connection.execute(
+        `UPDATE trips
+         SET revision = revision + 1
+         WHERE id = ? AND revision = ?`,
+        [tripId, expectedRevision]
+      );
+      await connection.commit();
+      return result.affectedRows ? expectedRevision + 1 : undefined;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
 
   async createShare(tripId, ownerId, permission) {

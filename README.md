@@ -56,7 +56,18 @@ Copy `.env.example` to `.env`, keep secrets out of source control, and set:
 - `MYSQL_PASSWORD` and the remaining MySQL connection values
 - `VITE_AMAP_KEY` for the browser map renderer
 
-Apply `database/migrations/001_initial.sql`, `002_anhui_ingestion.sql`, `003_grounded_activity_sources.sql`, and `004_activity_media_details.sql` in order, optionally apply `database/seeds/001_demo.sql`, then restart the application. Persistence and AI selection are independent: `DEMO_MODE=true` can be combined with `AI_PROVIDER=openrouter` for local OpenRouter testing without MySQL.
+Apply every migration in order before loading the optional demo seed:
+
+```powershell
+Get-Content -Raw database/migrations/001_initial.sql | mysql -u root -p
+Get-Content -Raw database/migrations/002_anhui_ingestion.sql | mysql -u root -p
+Get-Content -Raw database/migrations/003_grounded_activity_sources.sql | mysql -u root -p
+Get-Content -Raw database/migrations/004_activity_media_details.sql | mysql -u root -p
+Get-Content -Raw database/migrations/005_trip_collaboration_expenses.sql | mysql -u root -p
+Get-Content -Raw database/seeds/001_demo.sql | mysql -u root -p
+```
+
+The final seed command is optional. Restart the application after applying the schema. Persistence and AI selection are independent: `DEMO_MODE=true` can be combined with `AI_PROVIDER=openrouter` for local OpenRouter testing without MySQL.
 
 The browser calls only the Express API. OpenRouter credentials stay server-side. `VITE_AMAP_KEY` is a browser key and must be restricted by domain in the Amap console.
 

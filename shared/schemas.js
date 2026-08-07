@@ -2,8 +2,11 @@ import { z } from "zod";
 import {
   accommodationTypes,
   cityIds,
+  expenseCategories,
   groupTypes,
+  invitationStatuses,
   poiCategories,
+  tripMemberRoles,
   tripStyles
 } from "./constants.js";
 
@@ -125,3 +128,103 @@ export const authLoginSchema = authRegistrationSchema.pick({
   email: true,
   password: true
 });
+
+export const tripMemberSchema = z.object({
+  id: z.string().min(1),
+  tripId: z.string().min(1),
+  userId: z.string().min(1),
+  name: z.string().min(1).max(80),
+  role: z.enum(tripMemberRoles),
+  status: z.enum(["active", "removed"]),
+  joinedAt: z.string().datetime(),
+  removedAt: z.string().datetime().optional()
+}).strict();
+
+export const tripInvitationSchema = z.object({
+  id: z.string().min(1),
+  tripId: z.string().min(1),
+  role: z.enum(["editor", "viewer"]),
+  status: z.enum(invitationStatuses),
+  expiresAt: z.string().datetime(),
+  invitedByUserId: z.string().min(1).optional(),
+  acceptedByUserId: z.string().min(1).optional(),
+  createdAt: z.string().datetime().optional(),
+  acceptedAt: z.string().datetime().optional()
+}).strict();
+
+export const tripRevisionSchema = z.object({
+  expectedRevision: z.number().int().nonnegative()
+}).strict();
+
+export const expenseInputSchema = z.object({
+  description: z.string().trim().min(1).max(120),
+  category: z.enum(expenseCategories),
+  amountFen: z.number().int().positive().max(5_000_000),
+  expenseDate: z.string().date(),
+  paidByUserId: z.string().min(1),
+  participantUserIds: z.array(z.string().min(1)).min(1).max(50)
+    .refine((ids) => new Set(ids).size === ids.length, "Participants must be unique."),
+  note: z.string().trim().max(500).default("")
+}).strict();
+
+const expenseParticipantSchema = z.object({
+  userId: z.string().min(1),
+  name: z.string().min(1).max(80),
+  shareFen: z.number().int().nonnegative()
+}).strict();
+
+export const tripExpenseSchema = z.object({
+  id: z.string().min(1),
+  tripId: z.string().min(1),
+  description: z.string().min(1).max(120),
+  category: z.enum(expenseCategories),
+  amountFen: z.number().int().positive().max(5_000_000),
+  expenseDate: z.string().date(),
+  paidByUserId: z.string().min(1),
+  paidByName: z.string().min(1).max(80),
+  createdByUserId: z.string().min(1),
+  createdByName: z.string().min(1).max(80),
+  note: z.string().max(500),
+  participants: z.array(expenseParticipantSchema).min(1).max(50),
+  createdAt: z.string().datetime().optional(),
+  updatedAt: z.string().datetime().optional()
+}).strict().superRefine((expense, context) => {
+  const userIds = expense.participants.map(({ userId }) => userId);
+  if (new Set(userIds).size !== userIds.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["participants"],
+      message: "Expense participants must be unique."
+    });
+  }
+
+  if (expense.participants.reduce((total, { shareFen }) => total + shareFen, 0) !== expense.amountFen) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["participants"],
+      message: "Participant shares must total the expense amount."
+    });
+  }
+});
+
+const expenseBalanceSchema = z.object({
+  userId: z.string().min(1),
+  name: z.string().min(1).max(80),
+  paidFen: z.number().int().nonnegative(),
+  shareFen: z.number().int().nonnegative(),
+  netFen: z.number().int()
+}).strict();
+
+const settlementSchema = z.object({
+  fromUserId: z.string().min(1),
+  fromName: z.string().min(1).max(80),
+  toUserId: z.string().min(1),
+  toName: z.string().min(1).max(80),
+  amountFen: z.number().int().positive()
+}).strict();
+
+export const expenseSummarySchema = z.object({
+  totalSpentFen: z.number().int().nonnegative(),
+  members: z.array(expenseBalanceSchema),
+  settlements: z.array(settlementSchema)
+}).strict();

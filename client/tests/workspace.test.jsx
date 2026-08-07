@@ -2,39 +2,87 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App.jsx";
-import { demoTrip } from "./fixtures.js";
+import { demoMembers, demoTrip } from "./fixtures.js";
+
+const ownerAccess = { role: "owner", canEdit: true, isOwner: true };
+
+function response(body, { ok = true, status = 200 } = {}) {
+  return { ok, status, json: async () => body };
+}
+
+function authenticatedRead(url, options = {}) {
+  if (url.endsWith("/auth/me")) {
+    return response({
+      user: { id: "user-1", name: "Chen Yu", email: "owner@nuogo.test" }
+    });
+  }
+  if (url.endsWith("/trips/trip-1") && !options.method) {
+    return response({
+      trip: JSON.parse(sessionStorage.getItem("nuogo-trip-trip-1")),
+      access: ownerAccess
+    });
+  }
+  if (url.endsWith("/trips/trip-1/members") && !options.method) {
+    return response({ members: demoMembers() });
+  }
+  return null;
+}
 
 describe("comparison and editable workspace", () => {
   beforeEach(() => {
+    localStorage.setItem("nuogo-token", "owner-token");
     sessionStorage.setItem("nuogo-trip-trip-1", JSON.stringify(demoTrip()));
+    fetch.mockImplementation(async (url, options = {}) => {
+      const read = authenticatedRead(url, options);
+      if (read) return read;
+      throw new Error(`Unexpected request: ${url}`);
+    });
   });
 
   it("compares three variants and selects one", async () => {
-    fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ trip: { ...demoTrip(), selectedVariantId: "variant-food" } })
+    fetch.mockImplementation(async (url, options = {}) => {
+      const read = authenticatedRead(url, options);
+      if (read) return read;
+      if (url.endsWith("/select-variant") && options.method === "POST") {
+        return response({
+          trip: { ...demoTrip(), selectedVariantId: "variant-food", revision: 1 },
+          revision: 1
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
     });
     render(<App initialPath="/compare/trip-1" />);
-    expect(screen.getAllByText(/4 day itinerary/i)).toHaveLength(3);
-    await userEvent.click(screen.getAllByRole("button", { name: "Choose this plan" })[1]);
-    expect(await screen.findByText("Trip workspace")).toBeInTheDocument();
+    expect(await screen.findAllByText(/4 day itinerary/i)).toHaveLength(3);
+    await userEvent.click((await screen.findAllByRole("button", { name: "Choose this plan" }))[1]);
+    expect(await screen.findByText("Trip workspace", {}, { timeout: 5_000 })).toBeInTheDocument();
     expect(screen.getByText("Food-Focused: 4 day itinerary")).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/trips/trip-1/select-variant",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          variantId: "variant-food",
+          expectedRevision: 0
+        })
+      })
+    );
+    expect(JSON.parse(sessionStorage.getItem("nuogo-trip-trip-1")).revision).toBe(1);
   });
 
   it("shows a recovery action when package selection fails", async () => {
-    fetch.mockResolvedValueOnce({
-      ok: false,
-      status: 404,
-      json: async () => ({
-        error: {
-          code: "NOT_FOUND",
-          message: "Trip was not found."
-        }
-      })
+    fetch.mockImplementation(async (url, options = {}) => {
+      const read = authenticatedRead(url, options);
+      if (read) return read;
+      if (url.endsWith("/select-variant") && options.method === "POST") {
+        return response({
+          error: { code: "NOT_FOUND", message: "Trip was not found." }
+        }, { ok: false, status: 404 });
+      }
+      throw new Error(`Unexpected request: ${url}`);
     });
 
     render(<App initialPath="/compare/trip-1" />);
-    await userEvent.click(screen.getAllByRole("button", { name: "Choose this plan" })[0]);
+    await userEvent.click((await screen.findAllByRole("button", { name: "Choose this plan" }))[0]);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Trip was not found.");
     expect(screen.getByRole("link", { name: "Create new plans" })).toHaveAttribute("href", "/planner");
@@ -51,14 +99,14 @@ describe("comparison and editable workspace", () => {
     sessionStorage.setItem("nuogo-trip-trip-1", JSON.stringify(trip));
 
     render(<App initialPath="/trip/trip-1" />);
-    await userEvent.click(screen.getByRole("button", { name: "Edit Jinli Ancient Street" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Edit Jinli Ancient Street" }));
     expect(screen.getByRole("link", { name: "View Mafengwo source" }))
       .toHaveAttribute("href", "https://m.mafengwo.cn/poi/approved-1.html");
     expect(screen.getByText("Estimated location")).toBeInTheDocument();
     expect(screen.getByText("Interactive map · some locations estimated")).toBeInTheDocument();
   });
 
-  it("shows grounded attraction images, visit facts, and an image fallback", () => {
+  it("shows grounded attraction images, visit facts, and an image fallback", async () => {
     const trip = demoTrip();
     Object.assign(trip.variants[0].days[0].activities[0], {
       sourceAttractionId: "approved-1",
@@ -88,7 +136,7 @@ describe("comparison and editable workspace", () => {
 
     render(<App initialPath="/trip/trip-1" />);
 
-    const images = screen.getAllByRole("img", { name: "Jinli Ancient Street" });
+    const images = await screen.findAllByRole("img", { name: "Jinli Ancient Street" });
     expect(images.some((image) => image.getAttribute("loading") === "lazy")).toBe(true);
     expect(screen.getByText("1-2 hours")).toBeInTheDocument();
     expect(screen.getByText("Early morning")).toBeInTheDocument();
@@ -100,7 +148,7 @@ describe("comparison and editable workspace", () => {
     expect(screen.getByText("Image unavailable")).toBeInTheDocument();
   });
 
-  it("uses compact workspace panels so map and guide details do not dominate the daily view", () => {
+  it("uses compact workspace panels so map and guide details do not dominate the daily view", async () => {
     const trip = demoTrip();
     Object.assign(trip.variants[0].days[0].activities[0], {
       imageUrl: "/api/attractions/approved-1/image",
@@ -127,12 +175,12 @@ describe("comparison and editable workspace", () => {
 
     render(<App initialPath="/trip/trip-1" />);
 
-    expect(screen.getByTestId("workspace-grid")).toHaveClass("xl:grid-cols-[minmax(360px,.95fr)_minmax(380px,.9fr)_310px]");
+    expect(await screen.findByTestId("workspace-grid")).toHaveClass("xl:grid-cols-[minmax(360px,.95fr)_minmax(380px,.9fr)_310px]");
     expect(screen.getByTestId("route-map-panel")).toHaveClass("h-[280px]");
     expect(screen.getByTestId("guide-panel")).toHaveClass("max-h-[360px]", "overflow-y-auto");
   });
 
-  it("keeps guide content visible when reduced motion is requested", () => {
+  it("keeps guide content visible when reduced motion is requested", async () => {
     window.matchMedia.mockImplementation((query) => ({
       matches: query === "(prefers-reduced-motion: reduce)",
       media: query,
@@ -142,7 +190,7 @@ describe("comparison and editable workspace", () => {
 
     render(<App initialPath="/trip/trip-1" />);
 
-    expect(screen.getByRole("heading", {
+    expect(await screen.findByRole("heading", {
       level: 2,
       name: "Jinli Ancient Street"
     })).toHaveStyle({ opacity: "1" });
@@ -174,7 +222,7 @@ describe("comparison and editable workspace", () => {
 
     render(<App initialPath="/trip/trip-1" />);
 
-    expect(screen.getByText("行程工作台")).toBeInTheDocument();
+    expect(await screen.findByText("行程工作台")).toBeInTheDocument();
     expect(screen.getByText("· 路线 03")).toBeInTheDocument();
     expect(screen.getByText(/紧凑/)).toBeInTheDocument();
     expect(screen.getByText("历史古迹")).toBeInTheDocument();
@@ -189,9 +237,9 @@ describe("comparison and editable workspace", () => {
     expect(screen.getByText("长者票")).toBeInTheDocument();
   });
 
-  it("selects timeline activities with the keyboard", () => {
+  it("selects timeline activities with the keyboard", async () => {
     render(<App initialPath="/trip/trip-1" />);
-    const card = screen.getByTestId("activity-people-park-budget");
+    const card = await screen.findByTestId("activity-people-park-budget");
 
     expect(card).toHaveAttribute("tabindex", "0");
     fireEvent.keyDown(card, { key: "Enter" });
@@ -203,29 +251,68 @@ describe("comparison and editable workspace", () => {
     }).length).toBeGreaterThan(0);
   });
 
-  it("edits one activity and refreshes the displayed cost", async () => {
-    fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        activity: {
-          ...demoTrip().variants[0].days[0].activities[0],
-          estimatedCost: 25
-        },
-        budget: {
-          categories: { scenicTickets: 25, localFood: 155, transportation: 0, accommodation: 0 },
-          total: 180,
-          remaining: 4620,
-          limit: 4800,
-          overBudget: false
-        }
-      })
+  it("uses the latest revision across sequential activity edits", async () => {
+    const source = demoTrip().variants[0].days[0].activities[0];
+    const budget = {
+      categories: { scenicTickets: 25, localFood: 155, transportation: 0, accommodation: 0 },
+      total: 180,
+      remaining: 4620,
+      limit: 4800,
+      overBudget: false
+    };
+    let editCount = 0;
+    fetch.mockImplementation(async (url, options = {}) => {
+      const read = authenticatedRead(url, options);
+      if (read) return read;
+      if (url.endsWith("/activities/jinli-budget") && options.method === "PATCH") {
+        editCount += 1;
+        return response(editCount === 1 ? {
+          activity: { ...source, estimatedCost: 25 },
+          budget,
+          revision: 1
+        } : {
+          activity: { ...source, estimatedCost: 30 },
+          budget: {
+            ...budget,
+            categories: { ...budget.categories, scenicTickets: 30 },
+            total: 185,
+            remaining: 4615
+          },
+          revision: 2
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
     });
     render(<App initialPath="/trip/trip-1" />);
-    await userEvent.click(screen.getByRole("button", { name: "Edit Jinli Ancient Street" }));
+
+    await userEvent.click(await screen.findByRole("button", { name: "Edit Jinli Ancient Street" }));
     const cost = screen.getByLabelText("Estimated cost");
     await userEvent.clear(cost);
     await userEvent.type(cost, "25");
     await userEvent.click(screen.getByRole("button", { name: "Save activity" }));
     expect((await screen.findAllByText("¥25")).length).toBeGreaterThan(0);
+
+    const mutationCalls = fetch.mock.calls.filter(([, options = {}]) => options.method === "PATCH");
+    expect(JSON.parse(mutationCalls[0][1].body)).toMatchObject({
+      id: "jinli-budget",
+      estimatedCost: 25,
+      expectedRevision: 0
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit Jinli Ancient Street" }));
+    const nextCost = screen.getByLabelText("Estimated cost");
+    await userEvent.clear(nextCost);
+    await userEvent.type(nextCost, "30");
+    await userEvent.click(screen.getByRole("button", { name: "Save activity" }));
+
+    expect((await screen.findAllByText("¥30")).length).toBeGreaterThan(0);
+    const finalMutationCalls = fetch.mock.calls
+      .filter(([, options = {}]) => options.method === "PATCH");
+    expect(JSON.parse(finalMutationCalls[1][1].body)).toMatchObject({
+      id: "jinli-budget",
+      estimatedCost: 30,
+      expectedRevision: 1
+    });
+    expect(JSON.parse(sessionStorage.getItem("nuogo-trip-trip-1")).revision).toBe(2);
   });
 });

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { calculateBudget } from "../src/services/budget.js";
+import {
+  createInvitationToken,
+  hashInvitationToken
+} from "../src/services/invitationTokens.js";
 import { parseItinerary } from "../src/services/parser.js";
 import { buildPrompt } from "../src/services/promptBuilder.js";
+import { getTripAccess, requireTripRole } from "../src/services/tripAccess.js";
 import { validateGroundedItinerary } from "../src/services/grounding.js";
 import { validatePreferences } from "../src/services/validation.js";
 import {
@@ -10,6 +15,93 @@ import {
   validVariant,
   validVisitDetails
 } from "./helpers.js";
+
+describe("invitation tokens", () => {
+  it("creates opaque invitation tokens and stable hashes", () => {
+    const first = createInvitationToken();
+    const second = createInvitationToken();
+
+    expect(first.token).not.toBe(second.token);
+    expect(first.tokenHash).toBe(hashInvitationToken(first.token));
+    expect(first.tokenHash).toMatch(/^[a-f0-9]{64}$/);
+  });
+});
+
+describe("trip access policy", () => {
+  it("maps owner and editor membership to trip access", async () => {
+    const repository = {
+      getTrip: async () => ({ id: "trip-1", ownerId: "owner-1" }),
+      getMember: async () => ({ userId: "editor-1", role: "editor", status: "active" })
+    };
+
+    expect((await getTripAccess(repository, "trip-1", "owner-1")).isOwner).toBe(true);
+    expect((await getTripAccess(repository, "trip-1", "editor-1")).canEdit).toBe(true);
+  });
+
+  it("returns no access for a missing trip or removed member", async () => {
+    const missingTripRepository = {
+      getTrip: async () => undefined,
+      getMember: async () => {
+        throw new Error("getMember should not run for a missing trip.");
+      }
+    };
+    expect(await getTripAccess(missingTripRepository, "missing", "user-1")).toBeUndefined();
+
+    const removedMemberRepository = {
+      getTrip: async () => ({ id: "trip-1", ownerId: "owner-1" }),
+      getMember: async () => ({ userId: "user-1", role: "editor", status: "removed" })
+    };
+    expect((await getTripAccess(removedMemberRepository, "trip-1", "user-1")).role).toBeUndefined();
+  });
+
+  it("does not grant access from a membership for another user", async () => {
+    const repository = {
+      getTrip: async () => ({ id: "trip-1", ownerId: "owner-1" }),
+      getMember: async () => ({ userId: "other-user", role: "editor", status: "active" })
+    };
+
+    expect(await getTripAccess(repository, "trip-1", "user-1")).toMatchObject({
+      member: undefined,
+      role: undefined,
+      canEdit: false,
+      isOwner: false
+    });
+  });
+
+  it("resolves an owner before owner membership backfill", async () => {
+    const repository = {
+      getTrip: async () => ({ id: "trip-1", ownerId: "owner-1" }),
+      getMember: async () => undefined
+    };
+
+    expect(await getTripAccess(repository, "trip-1", "owner-1")).toMatchObject({
+      role: "owner",
+      canEdit: true,
+      isOwner: true
+    });
+  });
+
+  it("rejects viewers from editor operations", () => {
+    try {
+      requireTripRole({ role: "viewer" }, ["owner", "editor"]);
+      throw new Error("Expected requireTripRole to reject a viewer.");
+    } catch (error) {
+      expect(error).toMatchObject({ status: 403, code: "TRIP_EDITOR_REQUIRED" });
+    }
+  });
+
+  it("rejects users without an active role", () => {
+    expect(() => requireTripRole({ role: undefined }, ["owner", "editor"])).toThrow(
+      expect.objectContaining({ status: 403, code: "TRIP_MEMBER_REQUIRED" })
+    );
+  });
+
+  it("rejects non-owners from owner operations", () => {
+    expect(() => requireTripRole({ role: "editor" }, ["owner"])).toThrow(
+      expect.objectContaining({ status: 403, code: "TRIP_OWNER_REQUIRED" })
+    );
+  });
+});
 
 describe("preference validation", () => {
   it("adds a low-budget premium-stay conflict", () => {

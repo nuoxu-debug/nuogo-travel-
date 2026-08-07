@@ -280,6 +280,83 @@ textarea:focus-visible {
   background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
 }
 
+.expense-balance-table {
+  min-width: 0;
+  overflow: visible;
+}
+
+.expense-settlement-panel {
+  container-name: expense-panel;
+  container-type: inline-size;
+}
+
+.expense-balance-table th,
+.expense-balance-table td {
+  white-space: nowrap;
+}
+
+.expense-dialog {
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 420px) {
+  .expense-summary-band > div {
+    min-width: 0;
+  }
+
+  .expense-dialog-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container expense-panel (max-width: 36rem) {
+  .expense-balance-grid,
+  .expense-balance-grid tbody,
+  .expense-balance-grid tr {
+    display: block;
+  }
+
+  .expense-balance-grid thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .expense-balance-grid tbody tr {
+    padding: 0.65rem 0.75rem;
+  }
+
+  .expense-balance-grid tbody th {
+    width: auto;
+    padding: 0 0 0.45rem;
+    white-space: normal;
+  }
+
+  .expense-balance-grid tbody td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.2rem 0;
+    overflow: visible;
+    text-align: right;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .expense-balance-grid tbody td::before {
+    flex: 0 0 auto;
+    content: attr(data-label);
+    color: rgba(29, 29, 31, 0.65);
+    font-weight: 700;
+  }
+
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

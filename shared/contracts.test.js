@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { chinaCities } from "./constants.js";
-import { itineraryVariantSchema, preferenceSchema } from "./schemas.js";
+import {
+  expenseInputSchema,
+  expenseSummarySchema,
+  itineraryVariantSchema,
+  preferenceSchema,
+  tripInvitationSchema,
+  tripExpenseSchema,
+  tripMemberSchema,
+  tripRevisionSchema
+} from "./schemas.js";
 
 const validActivity = {
   id: "activity-1",
@@ -116,5 +125,151 @@ describe("Nuogo shared contracts", () => {
     expect(variant.days[0].activities[0].imageUrl)
       .toBe("/api/attractions/attraction-huangshan-1/image");
     expect(variant.days[0].activities[0].locationIsEstimated).toBe(true);
+  });
+
+  it("validates an editor membership and a pending invitation", () => {
+    expect(tripMemberSchema.parse({
+      id: "member-1",
+      tripId: "trip-1",
+      userId: "user-2",
+      name: "Li Wei",
+      role: "editor",
+      status: "active",
+      joinedAt: "2026-07-27T10:00:00.000Z"
+    }).role).toBe("editor");
+
+    expect(tripInvitationSchema.parse({
+      id: "invite-1",
+      tripId: "trip-1",
+      role: "viewer",
+      status: "pending",
+      expiresAt: "2026-08-03T10:00:00.000Z"
+    }).status).toBe("pending");
+
+    expect(() => tripInvitationSchema.parse({
+      id: "invite-owner",
+      tripId: "trip-1",
+      role: "owner",
+      status: "pending",
+      expiresAt: "2026-08-03T10:00:00.000Z"
+    })).toThrow();
+  });
+
+  it("accepts an equal expense with a participant exclusion", () => {
+    const value = expenseInputSchema.parse({
+      description: "Tunxi dinner",
+      category: "food",
+      amountFen: 30000,
+      expenseDate: "2026-08-10",
+      paidByUserId: "user-1",
+      participantUserIds: ["user-1", "user-2", "user-3"],
+      note: ""
+    });
+    expect(value.participantUserIds).not.toContain("user-4");
+  });
+
+  it("rejects empty expense participants and invalid revisions", () => {
+    expect(() => expenseInputSchema.parse({
+      description: "Taxi",
+      category: "transportation",
+      amountFen: 8000,
+      expenseDate: "2026-08-10",
+      paidByUserId: "user-1",
+      participantUserIds: []
+    })).toThrow();
+    expect(() => tripRevisionSchema.parse({ expectedRevision: -1 })).toThrow();
+  });
+
+  it("validates a per-member balance summary", () => {
+    const summary = expenseSummarySchema.parse({
+      totalSpentFen: 30000,
+      members: [{
+        userId: "user-1",
+        name: "Chen",
+        paidFen: 30000,
+        shareFen: 10000,
+        netFen: 20000
+      }],
+      settlements: []
+    });
+    expect(summary.members[0].netFen).toBe(20000);
+  });
+
+  it("accepts expense payer and creator display names", () => {
+    const expense = tripExpenseSchema.parse({
+      id: "expense-1",
+      tripId: "trip-1",
+      description: "Tunxi dinner",
+      category: "food",
+      amountFen: 30000,
+      expenseDate: "2026-08-10",
+      paidByUserId: "user-1",
+      paidByName: "Chen",
+      createdByUserId: "user-2",
+      createdByName: "Li",
+      note: "",
+      participants: [
+        { userId: "user-1", name: "Chen", shareFen: 15000 },
+        { userId: "user-2", name: "Li", shareFen: 15000 }
+      ]
+    });
+    expect(expense).toMatchObject({
+      paidByName: "Chen",
+      createdByName: "Li"
+    });
+  });
+
+  it("rejects duplicate expense participants", () => {
+    expect(() => tripExpenseSchema.parse({
+      id: "expense-1",
+      tripId: "trip-1",
+      description: "Tunxi dinner",
+      category: "food",
+      amountFen: 30000,
+      expenseDate: "2026-08-10",
+      paidByUserId: "user-1",
+      paidByName: "Chen",
+      createdByUserId: "user-1",
+      createdByName: "Chen",
+      note: "",
+      participants: [
+        { userId: "user-1", name: "Chen", shareFen: 15000 },
+        { userId: "user-1", name: "Chen", shareFen: 15000 }
+      ]
+    })).toThrow();
+  });
+
+  it("rejects expense participant shares that do not total the expense", () => {
+    expect(() => tripExpenseSchema.parse({
+      id: "expense-1",
+      tripId: "trip-1",
+      description: "Tunxi dinner",
+      category: "food",
+      amountFen: 30000,
+      expenseDate: "2026-08-10",
+      paidByUserId: "user-1",
+      paidByName: "Chen",
+      createdByUserId: "user-1",
+      createdByName: "Chen",
+      note: "",
+      participants: [
+        { userId: "user-1", name: "Chen", shareFen: 10000 },
+        { userId: "user-2", name: "Li", shareFen: 10000 }
+      ]
+    })).toThrow();
+  });
+
+  it("rejects negative paid balances", () => {
+    expect(() => expenseSummarySchema.parse({
+      totalSpentFen: 30000,
+      members: [{
+        userId: "user-1",
+        name: "Chen",
+        paidFen: -1,
+        shareFen: 10000,
+        netFen: -10001
+      }],
+      settlements: []
+    })).toThrow();
   });
 });

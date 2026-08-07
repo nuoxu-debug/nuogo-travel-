@@ -1,25 +1,40 @@
 import { Check, Copy, Link2, X } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { apiRequest } from "../api/client.js";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { useDialogFocus } from "../hooks/useDialogFocus.js";
 
 export default function ShareDialog({ tripId, open, onClose }) {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
+  const dialogRef = useRef(null);
+  const closeButtonRef = useRef(null);
   const [permission, setPermission] = useState("view");
   const [url, setUrl] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useDialogFocus({
+    open,
+    containerRef: dialogRef,
+    initialFocusRef: closeButtonRef,
+    onClose
+  });
 
   if (!open) return null;
 
   async function createLink() {
     setBusy(true);
+    setError("");
     try {
       const body = await apiRequest(`/trips/${tripId}/shares`, {
         method: "POST",
         body: JSON.stringify({ permission })
       });
       setUrl(body.url);
+    } catch {
+      setError(t("share.requestFailed"));
     } finally {
       setBusy(false);
     }
@@ -30,38 +45,104 @@ export default function ShareDialog({ tripId, open, onClose }) {
     setCopied(true);
   }
 
-  return (
-    <div className="fixed inset-0 z-[90] grid place-items-center bg-ink/70 p-4" role="dialog" aria-modal="true" aria-label="Share trip">
-      <section className="w-full max-w-lg bg-white p-6">
-        <div className="flex items-center justify-between">
-          <div><p className="text-xs font-bold uppercase text-jade">Nuogo together</p><h2 className="mt-2 font-display text-2xl font-bold">{language === "zh" ? "分享行程" : "Share this trip"}</h2></div>
-          <button type="button" onClick={onClose} aria-label="Close share dialog" className="grid h-10 w-10 place-items-center"><X /></button>
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[90] grid place-items-center bg-ink/55 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        ref={dialogRef}
+        className="w-full max-w-lg rounded-lg bg-paper p-6 shadow-[0_24px_70px_rgba(29,29,31,.24)]"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("share.dialogLabel")}
+        tabIndex={-1}
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-lg bg-lake/10 text-lake">
+              <Link2 className="h-5 w-5" />
+            </span>
+            <h2 className="text-xl font-extrabold">{t("share.title")}</h2>
+          </div>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            onClick={onClose}
+            aria-label={t("share.close")}
+            className="grid h-11 w-11 place-items-center rounded-lg text-ink/65 hover:bg-ink/5 hover:text-ink"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
-        <p className="mt-4 text-sm leading-6 text-ink/60">{language === "zh" ? "选择旅伴可拥有的权限，然后生成唯一链接。" : "Choose what travel partners can do, then generate a unique link."}</p>
-        <fieldset className="mt-5 grid grid-cols-2 gap-2">
-          <legend className="sr-only">Share permission</legend>
-          <label className={`cursor-pointer border p-4 ${permission === "view" ? "border-jade bg-emerald-50" : "border-ink/10"}`}>
-            <input type="radio" className="mr-2 accent-jade" name="permission" checked={permission === "view"} onChange={() => setPermission("view")} />
-            <b>{language === "zh" ? "仅查看" : "View only"}</b>
+        <p className="mt-4 max-w-[60ch] text-sm leading-6 text-ink/70">
+          {t("share.body")}
+        </p>
+        <fieldset className="mt-5 grid grid-cols-2 rounded-lg bg-mist p-1">
+          <legend className="sr-only">{t("share.permission")}</legend>
+          <label className={`cursor-pointer rounded-md px-3 py-3 text-center text-sm font-bold transition-colors ${
+            permission === "view" ? "bg-white text-ink shadow-sm" : "text-ink/65"
+          }`}>
+            <input
+              type="radio"
+              className="sr-only"
+              name="permission"
+              checked={permission === "view"}
+              onChange={() => setPermission("view")}
+            />
+            {t("share.view")}
           </label>
-          <label className={`cursor-pointer border p-4 ${permission === "edit" ? "border-vermilion bg-red-50" : "border-ink/10"}`}>
-            <input aria-label="Can edit" type="radio" className="mr-2 accent-vermilion" name="permission" checked={permission === "edit"} onChange={() => setPermission("edit")} />
-            <b>{language === "zh" ? "可编辑与投票" : "Can edit & vote"}</b>
+          <label className={`cursor-pointer rounded-md px-3 py-3 text-center text-sm font-bold transition-colors ${
+            permission === "edit" ? "bg-white text-ink shadow-sm" : "text-ink/65"
+          }`}>
+            <input
+              aria-label={language === "zh" ? "可编辑公开链接" : "Can edit"}
+              type="radio"
+              className="sr-only"
+              name="permission"
+              checked={permission === "edit"}
+              onChange={() => setPermission("edit")}
+            />
+            {t("share.edit")}
           </label>
         </fieldset>
+        {error && (
+          <p role="alert" className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+            {error}
+          </p>
+        )}
         {!url ? (
-          <button disabled={busy} type="button" onClick={createLink} className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 bg-ink font-bold text-white">
-            <Link2 className="h-4 w-4" /> {busy ? "..." : (language === "zh" ? "创建链接" : "Create link")}
+          <button
+            disabled={busy}
+            type="button"
+            onClick={createLink}
+            className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-ink font-bold text-white transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-wait disabled:opacity-60"
+          >
+            <Link2 className="h-4 w-4" />
+            {busy ? t("common.loading") : t("share.create")}
           </button>
         ) : (
-          <div className="mt-5 flex border border-ink/15">
-            <input readOnly value={url} aria-label="Share URL" className="min-w-0 flex-1 bg-mist px-3 text-sm" />
-            <button type="button" onClick={copy} aria-label="Copy share link" className="grid h-12 w-12 place-items-center bg-ink text-white">
+          <div className="mt-5 flex overflow-hidden rounded-lg border border-ink/15 bg-white">
+            <input
+              readOnly
+              value={url}
+              aria-label={t("share.url")}
+              className="min-w-0 flex-1 bg-transparent px-3 text-sm text-ink"
+            />
+            <button
+              type="button"
+              onClick={copy}
+              aria-label={t("share.copy")}
+              className="grid h-12 w-12 shrink-0 place-items-center bg-ink text-white"
+            >
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
             </button>
           </div>
         )}
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }

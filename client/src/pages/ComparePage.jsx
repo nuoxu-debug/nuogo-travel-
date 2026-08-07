@@ -21,9 +21,17 @@ function CompareContent() {
     try {
       const body = await apiRequest(`/trips/${trip.id}/select-variant`, {
         method: "POST",
-        body: JSON.stringify({ variantId: variant.id })
+        body: JSON.stringify({
+          variantId: variant.id,
+          expectedRevision: trip.revision
+        })
       });
-      const next = { ...trip, ...body.trip, variants: body.trip.variants ?? trip.variants };
+      const next = {
+        ...trip,
+        ...body.trip,
+        variants: body.trip.variants ?? trip.variants,
+        revision: body.revision
+      };
       setTrip(next);
       navigate(`/trip/${trip.id}`);
     } catch (requestError) {
@@ -72,7 +80,7 @@ function CompareContent() {
             <span className="hidden text-xs font-bold text-ink/35 sm:block">03 OPTIONS · 01 SELECTION</span>
           </div>
           {selectionError && (
-            <div role="alert" className="mb-6 flex flex-col justify-between gap-4 border-l-4 border-vermilion bg-red-50 p-4 text-sm text-red-900 sm:flex-row sm:items-center">
+            <div role="alert" className="mb-6 flex flex-col justify-between gap-4 border border-red-200 bg-red-50 p-4 text-sm text-red-900 sm:flex-row sm:items-center">
               <div>
                 <strong>{language === "zh" ? "无法打开所选行程" : "The selected itinerary could not be opened"}</strong>
                 <p className="mt-1">{selectionError}</p>

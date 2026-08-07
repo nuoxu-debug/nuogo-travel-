@@ -208,7 +208,7 @@ Remaining frontend limitations:
 
 - Some workflow logic still lives in `PlannerPage.jsx`, `ComparePage.jsx`, and `TripWorkspacePage.jsx`.
 - There is no integrated browser E2E test command.
-- Vite emits a chunk-size warning because the SPA imports map rendering, drag-and-drop, Anime.js, lucide icons, and application pages into one 505.32 kB JavaScript bundle.
+- Vite emits a chunk-size warning because the SPA imports map rendering, drag-and-drop, Anime.js, lucide icons, and application pages into one 577.72 kB JavaScript bundle.
 
 ## 6. Backend Architecture
 
@@ -251,13 +251,13 @@ Attraction catalogue tables:
 - `attraction_images`
 - `attraction_sources`
 
-`MySqlRepository.listTrips(ownerId)` first fetches trip IDs owned by that user ordered by `updated_at DESC`, then uses `loadTrips(ids)`. The batched loader preserves the requested trip ID order by mapping results back to the input IDs.
+`MySqlRepository.listTrips(userId)` first fetches trip IDs that the user owns or can access through an active `trip_members` row, ordered by `updated_at DESC`, then uses `loadTrips(ids)`. The unique `(trip_id, user_id)` membership constraint keeps each trip ID to one result even when the owner also has an owner membership. `MemoryRepository.listTrips(userId)` applies the same owned-or-active-member rule over its trip map, which is already unique by trip ID. The batched MySQL loader preserves the resulting trip ID order by mapping results back to the input IDs.
 
 Expected query count:
 
 - `getTrip(id)`: up to 4 query groups: trip, variants, days, activities.
-- `listTrips(ownerId)`: 1 owner-filter query plus up to 4 graph query groups.
-- Query count is fixed relative to the number of variants and days for a loaded trip graph, but `listTrips()` still adds the initial owner-filter query. It is not a fully constant one-query operation.
+- `listTrips(userId)`: 1 owner-or-active-member access query plus up to 4 graph query groups.
+- Query count is fixed relative to the number of variants and days for a loaded trip graph, but `listTrips()` still adds the initial access-filter query. It is not a fully constant one-query operation.
 
 Compatibility preserved:
 
@@ -268,7 +268,7 @@ Compatibility preserved:
 - JSON fields are parsed through the existing `parseJson()` helper.
 - `selectedVariantId`, owner ID, dates, budget, and title fields remain in the returned shape.
 - `getTrip()` returns one trip or `undefined`.
-- `listTrips()` returns only trips from the requested owner because IDs are selected by `user_id` before graph loading.
+- `listTrips()` returns each trip the requested user owns or actively belongs to, without duplicates, because access-filtered IDs are selected before graph loading.
 
 ## 8. AI Integration
 
@@ -337,7 +337,7 @@ No weather, flight, booking, payment, or live hotel API is implemented.
 | Maintainability | 3 | Docs and small boundaries improved; large demo provider and page workflow logic remain. |
 | Scalability | 3 | MySQL mode and batched graph loading help, but generation is still request/response and no production queue/cache model exists. |
 | Security | 4 | Secret placeholder cleanup, timeout, typed errors, validation, and docs improved; localStorage JWT remains a prototype risk. |
-| Performance | 4 | MySQL trip graph loading no longer loops per variant/day; Vite 505.32 kB JavaScript bundle warning remains. |
+| Performance | 4 | MySQL trip graph loading no longer loops per variant/day; Vite 577.72 kB JavaScript bundle warning remains. |
 | Reliability | 4 | OpenRouter calls now have timeout/error classification and generator fallback behavior remains. |
 | Testability | 4 | Added focused tests for OpenRouter errors, auth cleanup, typed error middleware, prompt hardening, authz, and MySQL batching. No real MySQL/E2E tests yet. |
 | Reusability | 3 | Shared schemas and adapters help; frontend workflow extraction remains. |
@@ -360,7 +360,7 @@ No weather, flight, booking, payment, or live hotel API is implemented.
 | Remaining issue | Medium | `package.json` | No lint/typecheck scripts | Add ESLint and optional JSDoc/TypeScript checking |
 | Remaining issue | Medium | `server/tests` | MySQL tests use mocked pool, not real MySQL | Add integration test against a disposable MySQL database |
 | Remaining issue | Medium | `client` | No integrated browser E2E smoke test | Add Playwright smoke flow for login/generate/select/workspace |
-| Remaining issue | Low | `client/dist` build output | Vite chunk-size warning: JavaScript bundle is 505.32 kB | Investigate route-level lazy loading and dependency chunking |
+| Remaining issue | Low | `client/dist` build output | Vite chunk-size warning: JavaScript bundle is 577.72 kB | Investigate route-level lazy loading and dependency chunking |
 | Remaining issue | Low | `client/src/components/AmapRouteMap.jsx` | Amap script load failure is not surfaced to the user | Show non-blocking map-provider fallback reason |
 
 ## 13. Testing Status
@@ -382,7 +382,7 @@ Final post-change verification:
 - Server: 76 tests.
 - Client: 29 tests.
 - `npm run build`: passed after the architecture pass.
-- Vite chunk-size warning remains: generated JavaScript bundle is 505.32 kB after minification.
+- Vite chunk-size warning remains: generated JavaScript bundle is 577.72 kB after minification.
 - `npm run lint`: no root script exists.
 - `npm run typecheck`: no root script exists.
 
@@ -399,7 +399,7 @@ New or strengthened test coverage:
 
 ## 14. Bundle Warning Review
 
-Latest build output contains one JavaScript bundle of 505.32 kB and one CSS bundle of 51.12 kB. No sourcemap/metafile report is configured.
+Latest post-review build output contains one JavaScript bundle of 577.72 kB (177.51 kB gzip) and one CSS bundle of 58.53 kB (15.57 kB gzip). No sourcemap/metafile report is configured.
 
 Likely contributors from direct imports:
 
@@ -472,7 +472,7 @@ Remaining plan:
 | P1 | Add real MySQL integration testing | Mocked pool tests do not prove migration/runtime compatibility. |
 | P2 | Add ESLint | No current lint script catches style/import issues. |
 | P2 | Add integrated browser E2E smoke test | Root tests do not exercise the full browser flow. |
-| P2 | Investigate Vite bundle size | Build warning remains with a 505.32 kB JavaScript bundle. |
+| P2 | Investigate Vite bundle size | Build warning remains with a 577.72 kB JavaScript bundle. |
 | P2 | Extract repeated frontend workflow logic | Pages still coordinate API/session/navigation logic directly. |
 | P3 | Split `demoProvider.js` after snapshot tests | It is large, but generated output should be pinned before splitting. |
 | P3 | Consider stronger production authentication | localStorage JWT is acceptable for FYP but not ideal for production. |
@@ -517,7 +517,16 @@ Frontend:
 - `client/src/components/RouteMap.jsx`
 - `client/src/components/LeafletRouteMap.jsx`
 - `client/src/components/AmapRouteMap.jsx`
+- `client/src/components/CollaborationDrawer.jsx`
+- `client/src/components/MemberAvatars.jsx`
+- `client/src/components/ExpenseWorkspace.jsx`
+- `client/src/components/ExpenseDialog.jsx`
+- `client/src/components/SettlementList.jsx`
+- `client/src/pages/InvitationPage.jsx`
 - `client/tests/api-client.test.jsx`
+- `client/tests/collaboration-archive.test.jsx`
+- `client/tests/group-expenses.test.jsx`
+- `client/tests/invitation.test.jsx`
 - `client/tests/root-error-boundary.test.jsx`
 
 Backend:
@@ -534,12 +543,18 @@ Backend:
 - `server/src/services/parser.js`
 - `server/src/services/grounding.js`
 - `server/src/services/budget.js`
+- `server/src/services/tripAccess.js`
+- `server/src/services/invitationTokens.js`
+- `server/src/services/expenseSplit.js`
+- `server/src/routes/members.js`
+- `server/src/routes/expenses.js`
 - `server/src/providers/openRouter.js`
 - `server/src/providers/demoProvider.js`
 - `server/src/repositories/memory.js`
 - `server/src/repositories/mysql.js`
 - `server/src/ingestion/*.js`
 - `server/tests/api.test.js`
+- `server/tests/collaboration-api.test.js`
 - `server/tests/openrouter-provider.test.js`
 - `server/tests/repository-contract.test.js`
 
@@ -551,3 +566,87 @@ Database and shared contracts:
 - `database/migrations/002_anhui_ingestion.sql`
 - `database/migrations/003_grounded_activity_sources.sql`
 - `database/migrations/004_activity_media_details.sql`
+- `database/migrations/005_trip_collaboration_expenses.sql`
+- `database/seeds/001_demo.sql`
+
+## 18. Post-Baseline Collaboration And Expense Extension
+
+Status: implemented after the pragmatic architecture baseline was frozen. This is a feature extension inside the existing modular monolith, not an architecture rewrite.
+
+The technology and deployment boundaries remain unchanged:
+
+- React and Vite remain the single frontend application.
+- Express remains the single HTTP API.
+- Memory and MySQL repository modes remain supported.
+- Shared Zod schemas remain the request and response contract boundary.
+- Authentication remains bearer JWT for the FYP prototype.
+- Public bearer-link sharing remains available and separate from authenticated trip membership.
+
+```mermaid
+flowchart LR
+  Member[Authenticated trip member]
+  Workspace[Trip workspace]
+  Drawer[Collaboration drawer]
+  Expenses[Group expense workspace]
+  MemberRoutes[Invitation and member routes]
+  ExpenseRoutes[Expense routes]
+  Access[Trip access service]
+  Split[Expense split service]
+  Repository[Existing repository modes]
+  Data[(Memory or MySQL)]
+  PublicLink[Public share bearer link]
+  SharedRoute[Shared trip and voting routes]
+
+  Member --> Workspace
+  Workspace --> Drawer
+  Workspace --> Expenses
+  Drawer --> MemberRoutes
+  Expenses --> ExpenseRoutes
+  MemberRoutes --> Access
+  ExpenseRoutes --> Access
+  ExpenseRoutes --> Split
+  Access --> Repository
+  Split --> Repository
+  Repository --> Data
+  PublicLink --> SharedRoute
+  SharedRoute --> Repository
+```
+
+### Extension Modules
+
+Backend routes:
+
+- `server/src/routes/members.js` owns invitation creation, inspection, acceptance, decline, revocation, member role changes, removal, and activity-log reads.
+- `server/src/routes/expenses.js` owns expense CRUD and settlement-summary reads.
+- Existing trip and activity routes enforce optimistic concurrency with `expectedRevision` and return `TRIP_VERSION_CONFLICT` for stale writes.
+
+Services and contracts:
+
+- `server/src/services/tripAccess.js` resolves `owner`, `editor`, and `viewer` access.
+- `server/src/services/invitationTokens.js` creates high-entropy invitation tokens and stores only SHA-256 hashes.
+- `server/src/services/expenseSplit.js` performs deterministic integer-fen splitting and settlement reconciliation.
+- `shared/schemas.js` contains member, invitation, revision, expense, and expense-summary schemas.
+
+Frontend surfaces:
+
+- `client/src/pages/InvitationPage.jsx` handles invitation preview and acceptance states.
+- `client/src/components/CollaborationDrawer.jsx` manages members and pending invitations.
+- `client/src/components/MemberAvatars.jsx` shows active collaborators in the workspace header.
+- `client/src/components/ExpenseWorkspace.jsx` keeps planned itinerary budget and actual group expenses as separate views.
+- `client/src/components/ExpenseDialog.jsx` defaults to equal splitting and allows travellers to be excluded.
+- `client/src/components/SettlementList.jsx` shows paid, share, net, and settlement instructions.
+
+Persistence added by `database/migrations/005_trip_collaboration_expenses.sql`:
+
+- `trips.revision`
+- `trip_members`
+- `trip_invitations`
+- `trip_expenses`
+- `expense_participants`
+- `trip_activity_log`
+
+The invitation token hash is stored in `trip_invitations`; plaintext tokens are returned only at creation. Expense amounts and participant shares are stored as integer fen. Collaboration mutations are scoped to active membership, and itinerary writes use per-trip revision checks.
+
+### Current Verification
+
+The complete shared, server, and client test suites cover collaboration contracts, role authorization, invitation state transitions, revision conflicts, repository transactions, expense reconciliation, and responsive frontend behavior. The fresh post-review run passed 12 shared, 174 server, and 108 client tests (294 total). The production build emits one JavaScript bundle of 577.72 kB (177.51 kB gzip) and one CSS bundle of 58.53 kB (15.57 kB gzip); the existing Vite chunk-size warning remains a performance follow-up and was not optimized during this documentation pass.

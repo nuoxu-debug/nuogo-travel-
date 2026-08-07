@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import App from "../src/App.jsx";
@@ -25,6 +25,7 @@ describe("structured China preference planner", () => {
   });
 
   it("cycles the six-stage pipeline while generating", async () => {
+    const intervalSpy = vi.spyOn(window, "setInterval");
     fetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -34,10 +35,13 @@ describe("structured China preference planner", () => {
     });
     render(<App initialPath="/planner" />);
     await userEvent.click(screen.getByRole("button", { name: "Generate 3 plans" }));
-    expect(await screen.findByText("Collecting China travel preferences")).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.getByText("Rendering timeline & map routes")).toBeInTheDocument();
-    }, { timeout: 1200 });
+    expect(await screen.findByRole("dialog", { name: "Generating itinerary" }))
+      .toBeInTheDocument();
+    const advancePipeline = intervalSpy.mock.calls.find(([, delay]) => delay === 45)?.[0];
+    await act(async () => {
+      for (let stage = 0; stage < 5; stage += 1) advancePipeline();
+    });
+    expect(screen.getByText("Rendering timeline & map routes")).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining("/trips/generate"),
       expect.objectContaining({ method: "POST" })

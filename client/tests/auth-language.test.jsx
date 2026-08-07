@@ -1,7 +1,36 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import App from "../src/App.jsx";
+import { AuthProvider, useAuth } from "../src/context/AuthContext.jsx";
+
+function response(body, { ok = true, status = 200 } = {}) {
+  return {
+    ok,
+    status,
+    json: async () => body
+  };
+}
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
+function AuthRaceProbe() {
+  const { login, user } = useAuth();
+  return (
+    <>
+      <button type="button" onClick={() => login("new@example.com", "password123")}>
+        Force newer login
+      </button>
+      <output aria-label="Current user">{user?.name ?? "Signed out"}</output>
+    </>
+  );
+}
 
 describe("Nuogo language and authentication UI", () => {
   it("uses the supplied Nuogo logo artwork in the header and landing hero", () => {
@@ -49,6 +78,96 @@ describe("Nuogo language and authentication UI", () => {
       expect.stringContaining("/auth/guest"),
       expect.objectContaining({ method: "POST" })
     );
+  });
+
+  it("does not let a stale bootstrap response overwrite a newer login", async () => {
+    localStorage.setItem("nuogo-token", "old-token");
+    const bootstrap = deferred();
+    fetch.mockImplementation(async (url) => {
+      if (url.endsWith("/auth/me")) return bootstrap.promise;
+      if (url.endsWith("/auth/login")) {
+        return response({
+          user: { id: "new-user", name: "New User", email: "new@example.com" },
+          token: "new-token"
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(
+      <AuthProvider>
+        <AuthRaceProbe />
+      </AuthProvider>
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Force newer login" }));
+    expect(await screen.findByRole("status", { name: "Current user" }))
+      .toHaveTextContent("New User");
+    expect(localStorage.getItem("nuogo-token")).toBe("new-token");
+
+    await act(async () => {
+      bootstrap.resolve(response({
+        user: { id: "old-user", name: "Old User", email: "old@example.com" }
+      }));
+      await bootstrap.promise;
+    });
+    expect(screen.getByRole("status", { name: "Current user" }))
+      .toHaveTextContent("New User");
+    expect(localStorage.getItem("nuogo-token")).toBe("new-token");
+  });
+
+  it("disables login submissions while an existing session is being verified", async () => {
+    localStorage.setItem("nuogo-token", "existing-token");
+    const bootstrap = deferred();
+    fetch.mockReturnValue(bootstrap.promise);
+
+    render(<App initialPath="/login" />);
+
+    expect(screen.getByRole("button", { name: "Continue as guest" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeDisabled();
+
+    bootstrap.resolve(response({
+      user: { id: "user-1", name: "Existing User", email: "existing@example.com" }
+    }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Continue as guest" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
+    });
+  });
+
+  it("shows a localized Chinese invalid-credentials error", async () => {
+    localStorage.removeItem("nuogo-language");
+    localStorage.removeItem("nuogo-language-default");
+    fetch.mockResolvedValueOnce(response({
+      error: { code: "INVALID_CREDENTIALS", message: "Email or password is incorrect." }
+    }, { ok: false, status: 401 }));
+
+    render(<App initialPath="/login" />);
+    await userEvent.type(screen.getByLabelText("电子邮箱"), "li@example.com");
+    await userEvent.type(screen.getByLabelText("密码"), "incorrect1");
+    await userEvent.click(screen.getByRole("button", { name: "登录" }));
+
+    expect(await screen.findByRole("alert"))
+      .toHaveTextContent("邮箱或密码不正确，请重试。");
+    expect(screen.queryByText("Email or password is incorrect.")).not.toBeInTheDocument();
+  });
+
+  it("shows a localized Chinese existing-account error", async () => {
+    localStorage.removeItem("nuogo-language");
+    localStorage.removeItem("nuogo-language-default");
+    fetch.mockResolvedValueOnce(response({
+      error: { code: "EMAIL_EXISTS", message: "An account already exists for this email." }
+    }, { ok: false, status: 409 }));
+
+    render(<App initialPath="/register" />);
+    await userEvent.type(screen.getByLabelText("姓名"), "李明");
+    await userEvent.type(screen.getByLabelText("电子邮箱"), "li@example.com");
+    await userEvent.type(screen.getByLabelText("密码"), "password123");
+    await userEvent.click(screen.getByRole("button", { name: "创建账户" }));
+
+    expect(await screen.findByRole("alert"))
+      .toHaveTextContent("该邮箱已注册，请直接登录或使用其他邮箱。");
+    expect(screen.queryByText("An account already exists for this email."))
+      .not.toBeInTheDocument();
   });
 
   it("uses readable language controls on light and dark headers", () => {

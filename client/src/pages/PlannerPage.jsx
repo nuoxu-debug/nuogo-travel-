@@ -78,7 +78,7 @@ export default function PlannerPage() {
             </div>
             <PreferenceForm onSubmit={generate} busy={generating} />
             {error && (
-              <div role="alert" className="mt-5 border-l-4 border-vermilion bg-red-50 p-4 text-sm text-red-800">
+              <div role="alert" className="mt-5 border border-red-200 bg-red-50 p-4 text-sm text-red-800">
                 <strong>{language === "zh" ? "暂时无法生成行程。" : "The plans could not be generated."}</strong>
                 <p className="mt-1">{error}</p>
               </div>

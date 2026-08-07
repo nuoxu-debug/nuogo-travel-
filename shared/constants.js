@@ -32,6 +32,17 @@ export const groupTypes = ["couple", "family_with_kids", "elderly_group", "solo"
 export const accommodationTypes = ["boutique_homestay", "budget_hotel", "family_resort"];
 export const tripStatuses = ["draft", "upcoming", "completed"];
 
+export const tripMemberRoles = ["owner", "editor", "viewer"];
+export const invitationStatuses = ["pending", "accepted", "declined", "revoked", "expired"];
+export const expenseCategories = [
+  "accommodation",
+  "transportation",
+  "food",
+  "attractions",
+  "entertainment",
+  "other"
+];
+
 export function getCity(id) {
   return chinaCities.find((city) => city.id === id);
 }

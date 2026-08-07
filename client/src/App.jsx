@@ -5,6 +5,7 @@ import { RootErrorBoundary } from "./components/RootErrorBoundary.jsx";
 import ArchivePage from "./pages/ArchivePage.jsx";
 import ComparePage from "./pages/ComparePage.jsx";
 import LandingPage from "./pages/LandingPage.jsx";
+import InvitationPage from "./pages/InvitationPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import PlannerPage from "./pages/PlannerPage.jsx";
 import RegisterPage from "./pages/RegisterPage.jsx";
@@ -21,6 +22,7 @@ function ApplicationRoutes() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/invite/:token" element={<InvitationPage />} />
       <Route path="/planner" element={<PlannerPage />} />
       <Route path="/compare/:tripId" element={<ComparePage />} />
       <Route path="/trip/:tripId" element={<TripWorkspacePage />} />

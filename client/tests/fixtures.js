@@ -66,6 +66,7 @@ export function demoTrip() {
     endDate: "2026-08-13",
     totalBudget: 4800,
     selectedVariantId: "variant-budget",
+    revision: 0,
     preferences: {
       destination: "chengdu",
       departureCity: "shanghai",
@@ -78,5 +79,109 @@ export function demoTrip() {
       startDate: "2026-08-10"
     },
     variants: [variant("budget", 0), variant("food", 1), variant("leisure", 2)]
+  };
+}
+
+export function demoMembers() {
+  return [
+    {
+      id: "member-owner",
+      tripId: "trip-1",
+      userId: "user-1",
+      name: "Chen Yu",
+      role: "owner",
+      status: "active",
+      joinedAt: "2026-07-20T08:00:00.000Z"
+    },
+    {
+      id: "member-editor",
+      tripId: "trip-1",
+      userId: "user-2",
+      name: "Li Wei",
+      role: "editor",
+      status: "active",
+      joinedAt: "2026-07-21T08:00:00.000Z"
+    },
+    {
+      id: "member-viewer",
+      tripId: "trip-1",
+      userId: "user-3",
+      name: "Wang Min",
+      role: "viewer",
+      status: "active",
+      joinedAt: "2026-07-22T08:00:00.000Z"
+    }
+  ];
+}
+
+export function demoExpenses() {
+  return [
+    {
+      id: "expense-lunch",
+      tripId: "trip-1",
+      description: "Hongcun lunch",
+      category: "food",
+      amountFen: 30000,
+      expenseDate: "2026-08-10",
+      paidByUserId: "user-1",
+      paidByName: "Chen Yu",
+      createdByUserId: "user-1",
+      createdByName: "Chen Yu",
+      note: "Shared lunch near the south gate",
+      participants: [
+        { userId: "user-1", name: "Chen Yu", shareFen: 10000 },
+        { userId: "user-2", name: "Li Wei", shareFen: 10000 },
+        { userId: "user-3", name: "Wang Min", shareFen: 10000 }
+      ],
+      createdAt: "2026-08-10T06:00:00.000Z",
+      updatedAt: "2026-08-10T06:00:00.000Z"
+    },
+    {
+      id: "expense-taxi",
+      tripId: "trip-1",
+      description: "Station transfer",
+      category: "transportation",
+      amountFen: 9000,
+      expenseDate: "2026-08-10",
+      paidByUserId: "user-2",
+      paidByName: "Li Wei",
+      createdByUserId: "user-2",
+      createdByName: "Li Wei",
+      note: "",
+      participants: [
+        { userId: "user-1", name: "Chen Yu", shareFen: 3000 },
+        { userId: "user-2", name: "Li Wei", shareFen: 3000 },
+        { userId: "user-3", name: "Wang Min", shareFen: 3000 }
+      ],
+      createdAt: "2026-08-10T07:00:00.000Z",
+      updatedAt: "2026-08-10T07:00:00.000Z"
+    }
+  ];
+}
+
+export function demoExpenseSummary() {
+  return {
+    totalSpentFen: 39000,
+    members: [
+      { userId: "user-1", name: "Chen Yu", paidFen: 30000, shareFen: 13000, netFen: 17000 },
+      { userId: "user-2", name: "Li Wei", paidFen: 9000, shareFen: 13000, netFen: -4000 },
+      { userId: "user-3", name: "Wang Min", paidFen: 0, shareFen: 13000, netFen: -13000 }
+    ],
+    settlements: [
+      {
+        fromUserId: "user-3",
+        fromName: "Wang Min",
+        toUserId: "user-1",
+        toName: "Chen Yu",
+        amountFen: 13000
+      },
+      {
+        fromUserId: "user-2",
+        fromName: "Li Wei",
+        toUserId: "user-1",
+        toName: "Chen Yu",
+        amountFen: 4000
+      }
+    ]
   };
 }

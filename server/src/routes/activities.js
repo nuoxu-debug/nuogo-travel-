@@ -1,15 +1,46 @@
 import { randomUUID } from "node:crypto";
 import { Router } from "express";
-import { activitySchema } from "@nuogo/shared/schemas";
+import { activitySchema, tripRevisionSchema } from "@nuogo/shared/schemas";
 import { calculateBudget } from "../services/budget.js";
 import { validateGroundedItinerary } from "../services/grounding.js";
 import { parseItinerary } from "../services/parser.js";
+import { getTripAccess, requireTripRole } from "../services/tripAccess.js";
 
 function activityNotFound() {
   const error = new Error("Activity or day was not found.");
   error.code = "NOT_FOUND";
   error.status = 404;
   return error;
+}
+
+function versionConflict() {
+  const error = new Error(
+    "This trip changed while you were editing. The latest version has been loaded."
+  );
+  error.code = "TRIP_VERSION_CONFLICT";
+  error.status = 409;
+  return error;
+}
+
+function validationError(message) {
+  const error = new Error(message);
+  error.code = "VALIDATION_ERROR";
+  error.status = 400;
+  return error;
+}
+
+function expectedRevision(body) {
+  return tripRevisionSchema.parse({
+    expectedRevision: body.expectedRevision
+  }).expectedRevision;
+}
+
+async function authorizeContext(repository, context, userId) {
+  if (!context) throw activityNotFound();
+  return requireTripRole(
+    await getTripAccess(repository, context.trip.id, userId),
+    ["editor"]
+  );
 }
 
 function budgetFor(context) {
@@ -67,10 +98,28 @@ export function createActivitiesRouter({
   router.post("/trips/:tripId/days/:dayId/activities", authenticate, async (req, res, next) => {
     try {
       const context = await repository.findDayContext(req.params.tripId, req.params.dayId);
-      if (!context || context.trip.ownerId !== req.user.id) throw activityNotFound();
+      await authorizeContext(repository, context, req.user.id);
+      const revision = expectedRevision(req.body);
       const activity = buildActivity(req.body, context.day.activities.length);
-      const saved = await repository.addActivity(req.params.tripId, req.params.dayId, req.user.id, activity);
-      res.status(201).json({ activity: saved.activity, budget: budgetFor(saved) });
+      const saved = await repository.addActivity(
+        req.params.tripId,
+        req.params.dayId,
+        req.user.id,
+        activity,
+        revision,
+        {
+          action: "activity.created",
+          entityType: "activity",
+          entityId: activity.id,
+          summary: { dayId: req.params.dayId }
+        }
+      );
+      if (!saved) throw versionConflict();
+      res.status(201).json({
+        activity: saved.activity,
+        budget: budgetFor(saved),
+        revision: saved.revision
+      });
     } catch (error) {
       next(error);
     }
@@ -85,9 +134,15 @@ export function createActivitiesRouter({
       const patch = Object.fromEntries(
         allowed.filter((key) => req.body[key] !== undefined).map((key) => [key, req.body[key]])
       );
-      if (patch.estimatedCost !== undefined) patch.estimatedCost = Number(patch.estimatedCost);
+      if (typeof patch.estimatedCost === "string" && patch.estimatedCost.trim()) {
+        patch.estimatedCost = Number(patch.estimatedCost);
+      }
       const current = await repository.findActivityContext(req.params.activityId);
-      if (!current || current.trip.ownerId !== req.user.id) throw activityNotFound();
+      await authorizeContext(repository, current, req.user.id);
+      if (!Object.keys(patch).length) {
+        throw validationError("Provide a supported activity field to update.");
+      }
+      const revision = expectedRevision(req.body);
       const changesSourcedFacts = [
         "name",
         "description",
@@ -108,9 +163,26 @@ export function createActivitiesRouter({
         patch.visitDetails = undefined;
         if (patch.location !== undefined) patch.locationIsEstimated = undefined;
       }
-      const context = await repository.updateActivity(req.params.activityId, req.user.id, patch);
-      if (!context) throw activityNotFound();
-      res.json({ activity: context.activity, budget: budgetFor(context) });
+      const validated = activitySchema.parse({ ...current.activity, ...patch });
+      for (const key of Object.keys(patch)) patch[key] = validated[key];
+      const context = await repository.updateActivity(
+        req.params.activityId,
+        req.user.id,
+        patch,
+        revision,
+        {
+          action: "activity.updated",
+          entityType: "activity",
+          entityId: req.params.activityId,
+          summary: { fields: Object.keys(patch) }
+        }
+      );
+      if (!context) throw versionConflict();
+      res.json({
+        activity: context.activity,
+        budget: budgetFor(context),
+        revision: context.revision
+      });
     } catch (error) {
       next(error);
     }
@@ -118,9 +190,26 @@ export function createActivitiesRouter({
 
   router.delete("/activities/:activityId", authenticate, async (req, res, next) => {
     try {
-      const context = await repository.deleteActivity(req.params.activityId, req.user.id);
-      if (!context) throw activityNotFound();
-      res.json({ deletedId: req.params.activityId, budget: budgetFor(context) });
+      const current = await repository.findActivityContext(req.params.activityId);
+      await authorizeContext(repository, current, req.user.id);
+      const revision = expectedRevision(req.body);
+      const context = await repository.deleteActivity(
+        req.params.activityId,
+        req.user.id,
+        revision,
+        {
+          action: "activity.deleted",
+          entityType: "activity",
+          entityId: req.params.activityId,
+          summary: { dayId: current.day.id }
+        }
+      );
+      if (!context) throw versionConflict();
+      res.json({
+        deletedId: req.params.activityId,
+        budget: budgetFor(context),
+        revision: context.revision
+      });
     } catch (error) {
       next(error);
     }
@@ -128,11 +217,21 @@ export function createActivitiesRouter({
 
   router.patch("/trips/:tripId/days/:dayId/reorder", authenticate, async (req, res, next) => {
     try {
+      const current = await repository.findDayContext(req.params.tripId, req.params.dayId);
+      await authorizeContext(repository, current, req.user.id);
+      const revision = expectedRevision(req.body);
       const context = await repository.reorderDay(
         req.params.tripId,
         req.params.dayId,
         req.user.id,
-        req.body.activityIds ?? []
+        req.body.activityIds ?? [],
+        revision,
+        {
+          action: "day.reordered",
+          entityType: "day",
+          entityId: req.params.dayId,
+          summary: { activityIds: req.body.activityIds ?? [] }
+        }
       );
       if (context === null) {
         const error = new Error("Reorder list must contain every activity exactly once.");
@@ -140,8 +239,12 @@ export function createActivitiesRouter({
         error.status = 400;
         throw error;
       }
-      if (!context) throw activityNotFound();
-      res.json({ day: context.day, budget: budgetFor(context) });
+      if (!context) throw versionConflict();
+      res.json({
+        day: context.day,
+        budget: budgetFor(context),
+        revision: context.revision
+      });
     } catch (error) {
       next(error);
     }
@@ -150,7 +253,8 @@ export function createActivitiesRouter({
   router.post("/activities/:activityId/cheaper-alternative", authenticate, async (req, res, next) => {
     try {
       const current = await repository.findActivityContext(req.params.activityId);
-      if (!current || current.trip.ownerId !== req.user.id) throw activityNotFound();
+      await authorizeContext(repository, current, req.user.id);
+      const revision = expectedRevision(req.body);
       const context = await repository.updateActivity(req.params.activityId, req.user.id, {
         estimatedCost: Math.max(0, Math.floor(current.activity.estimatedCost * 0.55)),
         description: {
@@ -163,8 +267,18 @@ export function createActivitiesRouter({
         imageUrl: undefined,
         imageAttribution: undefined,
         visitDetails: undefined
+      }, revision, {
+        action: "activity.cheaper_alternative",
+        entityType: "activity",
+        entityId: req.params.activityId,
+        summary: {}
       });
-      res.json({ activity: context.activity, budget: budgetFor(context) });
+      if (!context) throw versionConflict();
+      res.json({
+        activity: context.activity,
+        budget: budgetFor(context),
+        revision: context.revision
+      });
     } catch (error) {
       next(error);
     }
@@ -173,7 +287,8 @@ export function createActivitiesRouter({
   router.post("/activities/:activityId/regenerate", authenticate, async (req, res, next) => {
     try {
       const current = await repository.findActivityContext(req.params.activityId);
-      if (!current || current.trip.ownerId !== req.user.id) throw activityNotFound();
+      await authorizeContext(repository, current, req.user.id);
+      const revision = expectedRevision(req.body);
       const variant = await generateGroundedVariant(
         current,
         planProvider,
@@ -188,10 +303,24 @@ export function createActivitiesRouter({
           zh: `${generated.name.zh}新方案`
         };
       }
-      const context = await repository.updateActivity(req.params.activityId, req.user.id, {
-        ...patch
+      const context = await repository.updateActivity(
+        req.params.activityId,
+        req.user.id,
+        { ...patch },
+        revision,
+        {
+          action: "activity.regenerated",
+          entityType: "activity",
+          entityId: req.params.activityId,
+          summary: {}
+        }
+      );
+      if (!context) throw versionConflict();
+      res.json({
+        activity: context.activity,
+        budget: budgetFor(context),
+        revision: context.revision
       });
-      res.json({ activity: context.activity, budget: budgetFor(context) });
     } catch (error) {
       next(error);
     }
@@ -200,7 +329,8 @@ export function createActivitiesRouter({
   router.post("/trips/:tripId/days/:dayId/regenerate", authenticate, async (req, res, next) => {
     try {
       const current = await repository.findDayContext(req.params.tripId, req.params.dayId);
-      if (!current || current.trip.ownerId !== req.user.id) throw activityNotFound();
+      await authorizeContext(repository, current, req.user.id);
+      const revision = expectedRevision(req.body);
       const variant = await generateGroundedVariant(
         current,
         planProvider,
@@ -212,8 +342,25 @@ export function createActivitiesRouter({
         id: randomUUID(),
         order
       }));
-      const context = await repository.replaceDay(req.params.tripId, req.params.dayId, req.user.id, activities);
-      res.json({ day: context.day, budget: budgetFor(context) });
+      const context = await repository.replaceDay(
+        req.params.tripId,
+        req.params.dayId,
+        req.user.id,
+        activities,
+        revision,
+        {
+          action: "day.regenerated",
+          entityType: "day",
+          entityId: req.params.dayId,
+          summary: {}
+        }
+      );
+      if (!context) throw versionConflict();
+      res.json({
+        day: context.day,
+        budget: budgetFor(context),
+        revision: context.revision
+      });
     } catch (error) {
       next(error);
     }
