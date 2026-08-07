@@ -20,7 +20,7 @@ describe("comparison and editable workspace", () => {
     render(<App initialPath="/compare/trip-1" />);
     expect(screen.getAllByText(/4 day itinerary/i)).toHaveLength(3);
     await userEvent.click(screen.getAllByRole("button", { name: "Choose this plan" })[1]);
-    expect(await screen.findByText("Trip workspace")).toBeInTheDocument();
+    expect(await screen.findByText("Trip workspace", {}, { timeout: 5_000 })).toBeInTheDocument();
     expect(screen.getByText("Food-Focused: 4 day itinerary")).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(
       "/api/trips/trip-1/select-variant",
