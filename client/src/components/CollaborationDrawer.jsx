@@ -20,6 +20,19 @@ function activeInvitations(invitations) {
   return invitations.filter(({ status }) => status === "pending");
 }
 
+function invitationExpired(invitation) {
+  const expiresAt = Date.parse(invitation.expiresAt);
+  return Number.isFinite(expiresAt) && expiresAt <= Date.now();
+}
+
+function invitationDate(expiresAt, language) {
+  const date = new Date(expiresAt);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en", {
+    dateStyle: "medium"
+  }).format(date);
+}
+
 export default function CollaborationDrawer({
   tripId,
   open,
@@ -30,20 +43,38 @@ export default function CollaborationDrawer({
   membersLoading,
   membersError
 }) {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const animate = useAnime();
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
   const rowsRef = useRef(null);
-  const [invitations, setInvitations] = useState([]);
+  const invitationRequestRef = useRef({ controller: null, sequence: 0 });
+  const activeTripRef = useRef(tripId);
+  activeTripRef.current = tripId;
+  const [invitationState, setInvitationState] = useState({ tripId, items: [] });
   const [inviteRole, setInviteRole] = useState("editor");
-  const [inviteUrl, setInviteUrl] = useState("");
+  const [inviteLink, setInviteLink] = useState({ tripId, url: "" });
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState("");
   const [loadingInvitations, setLoadingInvitations] = useState(false);
   const [error, setError] = useState("");
   const [confirming, setConfirming] = useState(null);
   const isOwner = Boolean(access?.isOwner);
+  const invitations = invitationState.tripId === tripId ? invitationState.items : [];
+  const inviteUrl = inviteLink.tripId === tripId ? inviteLink.url : "";
+
+  function beginInvitationRequest(requestedTripId) {
+    invitationRequestRef.current.controller?.abort();
+    const controller = new AbortController();
+    const sequence = invitationRequestRef.current.sequence + 1;
+    invitationRequestRef.current = { controller, sequence };
+    return { controller, requestedTripId, sequence };
+  }
+
+  function requestIsCurrent(request) {
+    return activeTripRef.current === request.requestedTripId
+      && invitationRequestRef.current.sequence === request.sequence;
+  }
 
   useDialogFocus({
     open,
@@ -53,13 +84,36 @@ export default function CollaborationDrawer({
   });
 
   useEffect(() => {
-    if (!open || !isOwner) return;
-    setLoadingInvitations(true);
+    invitationRequestRef.current.controller?.abort();
+    invitationRequestRef.current = {
+      controller: null,
+      sequence: invitationRequestRef.current.sequence + 1
+    };
+    setInvitationState({ tripId, items: [] });
+    setInviteLink({ tripId, url: "" });
+    setCopied(false);
+    setBusy("");
     setError("");
-    apiRequest(`/trips/${tripId}/invitations`)
-      .then((body) => setInvitations(body.invitations ?? []))
-      .catch(() => setError(t("collaboration.requestFailed")))
-      .finally(() => setLoadingInvitations(false));
+    setConfirming(null);
+    setLoadingInvitations(false);
+    if (!open || !isOwner) return undefined;
+
+    const request = beginInvitationRequest(tripId);
+    setLoadingInvitations(true);
+    apiRequest(`/trips/${tripId}/invitations`, { signal: request.controller.signal })
+      .then((body) => {
+        if (!requestIsCurrent(request)) return;
+        setInvitationState({ tripId, items: body.invitations ?? [] });
+      })
+      .catch((requestError) => {
+        if (!requestIsCurrent(request) || requestError?.name === "AbortError") return;
+        setError(t("collaboration.requestFailed"));
+      })
+      .finally(() => {
+        if (requestIsCurrent(request)) setLoadingInvitations(false);
+      });
+
+    return () => request.controller.abort();
   }, [isOwner, open, t, tripId]);
 
   useEffect(() => {
@@ -77,21 +131,32 @@ export default function CollaborationDrawer({
   if (!open) return null;
 
   async function createInvitation() {
+    const requestedTripId = tripId;
+    const request = beginInvitationRequest(requestedTripId);
     setBusy("invite");
     setError("");
-    setInviteUrl("");
+    setInviteLink({ tripId: requestedTripId, url: "" });
     setCopied(false);
     try {
-      const body = await apiRequest(`/trips/${tripId}/invitations`, {
+      const body = await apiRequest(`/trips/${requestedTripId}/invitations`, {
         method: "POST",
-        body: JSON.stringify({ role: inviteRole })
+        body: JSON.stringify({ role: inviteRole }),
+        signal: request.controller.signal
       });
-      setInviteUrl(body.url);
-      setInvitations((current) => [body.invitation, ...current]);
-    } catch {
+      if (!requestIsCurrent(request)) return;
+      setInviteLink({ tripId: requestedTripId, url: body.url });
+      setInvitationState((current) => ({
+        tripId: requestedTripId,
+        items: [
+          body.invitation,
+          ...(current.tripId === requestedTripId ? current.items : [])
+        ]
+      }));
+    } catch (requestError) {
+      if (!requestIsCurrent(request) || requestError?.name === "AbortError") return;
       setError(t("collaboration.requestFailed"));
     } finally {
-      setBusy("");
+      if (requestIsCurrent(request)) setBusy("");
     }
   }
 
@@ -133,18 +198,28 @@ export default function CollaborationDrawer({
   }
 
   async function revokeInvitation(invitation) {
+    const requestedTripId = tripId;
+    const request = beginInvitationRequest(requestedTripId);
     setBusy(`invitation-${invitation.id}`);
     setError("");
     try {
-      await apiRequest(`/trips/${tripId}/invitations/${invitation.id}`, {
-        method: "DELETE"
+      await apiRequest(`/trips/${requestedTripId}/invitations/${invitation.id}`, {
+        method: "DELETE",
+        signal: request.controller.signal
       });
+      if (!requestIsCurrent(request)) return;
       setConfirming(null);
-      setInvitations((current) => current.filter(({ id }) => id !== invitation.id));
-    } catch {
+      setInvitationState((current) => current.tripId === requestedTripId
+        ? {
+            ...current,
+            items: current.items.filter(({ id }) => id !== invitation.id)
+          }
+        : current);
+    } catch (requestError) {
+      if (!requestIsCurrent(request) || requestError?.name === "AbortError") return;
       setError(t("collaboration.requestFailed"));
     } finally {
-      setBusy("");
+      if (requestIsCurrent(request)) setBusy("");
     }
   }
 
@@ -382,16 +457,29 @@ export default function CollaborationDrawer({
               ) : (
                 <div className="mt-2 divide-y divide-ink/10">
                   {pending.map((invitation) => {
+                    const expired = invitationExpired(invitation);
                     const invitationBusy = busy === `invitation-${invitation.id}`;
                     const isConfirming = confirming === `invitation-${invitation.id}`;
                     const role = t(`collaboration.roles.${invitation.role}`);
+                    const expiryDate = invitationDate(invitation.expiresAt, language);
                     return (
                       <div key={invitation.id} className="flex min-h-14 items-center justify-between gap-3 py-2">
                         <div>
                           <p className="text-sm font-bold">{role}</p>
-                          <p className="text-xs text-ink/70">{t("collaboration.waitingToJoin")}</p>
+                          <p className={`text-xs ${expired ? "font-bold text-amber-800" : "text-ink/70"}`}>
+                            {expired
+                              ? t("collaboration.expired")
+                              : t("collaboration.waitingToJoin")}
+                          </p>
+                          {expiryDate && (
+                            <p className="mt-0.5 text-xs text-ink/70">
+                              {t(expired
+                                ? "collaboration.expiredOn"
+                                : "collaboration.expiresOn").replace("{date}", expiryDate)}
+                            </p>
+                          )}
                         </div>
-                        {isConfirming ? (
+                        {expired ? null : isConfirming ? (
                           <div className="flex items-center gap-1">
                             <button type="button" onClick={() => setConfirming(null)} className="min-h-11 px-2 text-sm font-bold text-ink/65">
                               {t("collaboration.cancel")}

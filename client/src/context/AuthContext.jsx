@@ -8,7 +8,12 @@ import {
   useState
 } from "react";
 import { apiRequest } from "../api/client.js";
-import { clearAuthToken, getAuthToken, setAuthToken } from "../api/authToken.js";
+import {
+  AUTH_TOKEN_CHANGE_EVENT,
+  clearAuthToken,
+  getAuthToken,
+  setAuthToken
+} from "../api/authToken.js";
 
 const AuthContext = createContext(null);
 
@@ -64,6 +69,18 @@ export function AuthProvider({ children }) {
     return () => {
       active = false;
     };
+  }, []);
+
+  useEffect(() => {
+    function handleTokenChange() {
+      if (getAuthToken()) return;
+      sessionRevision.current += 1;
+      setUser(null);
+      setReady(true);
+    }
+
+    window.addEventListener(AUTH_TOKEN_CHANGE_EVENT, handleTokenChange);
+    return () => window.removeEventListener(AUTH_TOKEN_CHANGE_EVENT, handleTokenChange);
   }, []);
 
   const establishSession = useCallback(async (request) => {

@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App.jsx";
+import { AuthProvider } from "../src/context/AuthContext.jsx";
 import { TripProvider, useTrip } from "../src/context/TripContext.jsx";
 import { demoMembers, demoTrip } from "./fixtures.js";
 
@@ -16,7 +17,7 @@ const pendingInvitation = {
   tripId: "trip-1",
   role: "viewer",
   status: "pending",
-  expiresAt: "2026-08-03T10:00:00.000Z"
+  expiresAt: "2099-08-03T10:00:00.000Z"
 };
 
 function response(body, { ok = true, status = 200 } = {}) {
@@ -90,22 +91,25 @@ describe("map, collaboration, and archive", () => {
   });
 
   it("selects the matching timeline activity from a map marker", async () => {
-    render(<App initialPath="/trip/trip-1" />);
-    await userEvent.click(screen.getByRole("button", { name: "Map marker: People's Park" }));
+    renderCollaborativeWorkspace();
+    await userEvent.click(await screen.findByRole("button", { name: "Map marker: People's Park" }));
     expect(screen.getByTestId("activity-people-park-budget")).toHaveAttribute("data-selected", "true");
   });
 
   it("creates an editable share link", async () => {
-    fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        token: "sharetoken",
-        permission: "edit",
-        url: "http://localhost:5173/shared/sharetoken"
-      })
+    renderCollaborativeWorkspace({
+      mutation: async (url, options) => {
+        if (url.endsWith("/trips/trip-1/shares") && options.method === "POST") {
+          return response({
+            token: "sharetoken",
+            permission: "edit",
+            url: "http://localhost:5173/shared/sharetoken"
+          });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }
     });
-    render(<App initialPath="/trip/trip-1" />);
-    await userEvent.click(screen.getByRole("button", { name: "Public share" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Public share" }));
     await userEvent.click(screen.getByLabelText("Can edit"));
     await userEvent.click(screen.getByRole("button", { name: "Create public link" }));
     expect(await screen.findByDisplayValue("http://localhost:5173/shared/sharetoken")).toBeInTheDocument();
@@ -282,6 +286,11 @@ describe("map, collaboration, and archive", () => {
     );
 
     fetch.mockImplementation((url) => {
+      if (url.endsWith("/auth/me")) {
+        return Promise.resolve(response({
+          user: { id: "user-1", name: "Chen Yu", email: "owner@nuogo.test" }
+        }));
+      }
       if (url.endsWith("/trips/trip-1")) return firstRequest.promise;
       if (url.endsWith("/trips/trip-2")) {
         return Promise.resolve(response({
@@ -299,9 +308,15 @@ describe("map, collaboration, and archive", () => {
     });
 
     const { rerender } = render(
-      <TripProvider tripId="trip-1"><TripStateProbe /></TripProvider>
+      <AuthProvider>
+        <TripProvider tripId="trip-1"><TripStateProbe /></TripProvider>
+      </AuthProvider>
     );
-    rerender(<TripProvider tripId="trip-2"><TripStateProbe /></TripProvider>);
+    rerender(
+      <AuthProvider>
+        <TripProvider tripId="trip-2"><TripStateProbe /></TripProvider>
+      </AuthProvider>
+    );
 
     expect(screen.getByTestId("trip-state")).toHaveTextContent("loading");
     expect(await screen.findByText("trip-2:1:viewer:0")).toBeInTheDocument();

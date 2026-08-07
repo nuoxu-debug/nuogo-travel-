@@ -59,9 +59,30 @@ describe("workspace collaborative mutation revisions", () => {
     trip = demoTrip();
     activity = trip.variants[0].days[0].activities[0];
     day = trip.variants[0].days[0];
+    localStorage.setItem("nuogo-token", "owner-token");
     sessionStorage.setItem("nuogo-trip-trip-1", JSON.stringify(trip));
 
-    fetch.mockImplementation(async (url, options) => {
+    fetch.mockImplementation(async (url, options = {}) => {
+      if (url.endsWith("/auth/me")) {
+        return {
+          ok: true,
+          json: async () => ({
+            user: { id: "user-1", name: "Chen Yu", email: "owner@nuogo.test" }
+          })
+        };
+      }
+      if (url.endsWith("/trips/trip-1") && !options.method) {
+        return {
+          ok: true,
+          json: async () => ({
+            trip: JSON.parse(sessionStorage.getItem("nuogo-trip-trip-1")),
+            access: { role: "owner", canEdit: true, isOwner: true }
+          })
+        };
+      }
+      if (url.endsWith("/trips/trip-1/members") && !options.method) {
+        return { ok: true, json: async () => ({ members: [] }) };
+      }
       const request = JSON.parse(options.body);
       const revision = request.expectedRevision + 1;
       const budget = {
@@ -122,7 +143,7 @@ describe("workspace collaborative mutation revisions", () => {
     ];
 
     for (const [index, action] of actions.entries()) {
-      await userEvent.click(screen.getByRole("button", { name: action }));
+      await userEvent.click(await screen.findByRole("button", { name: action }));
       if (action === "Test add") continue;
       const expectedRevision = action === "Test save modal" ? 6 : index + 1;
       await waitFor(() => {
@@ -131,12 +152,13 @@ describe("workspace collaborative mutation revisions", () => {
       });
     }
 
-    expect(fetch).toHaveBeenCalledTimes(6);
+    const mutationCalls = fetch.mock.calls.filter(([, options = {}]) => options.method);
+    expect(mutationCalls).toHaveLength(6);
     for (const [index, expectedUrl] of expectedUrls.entries()) {
-      expect(fetch.mock.calls[index][0]).toBe(expectedUrl);
-      expect(JSON.parse(fetch.mock.calls[index][1].body).expectedRevision).toBe(index);
+      expect(mutationCalls[index][0]).toBe(expectedUrl);
+      expect(JSON.parse(mutationCalls[index][1].body).expectedRevision).toBe(index);
     }
-    expect(JSON.parse(fetch.mock.calls[2][1].body).activityIds)
+    expect(JSON.parse(mutationCalls[2][1].body).activityIds)
       .toEqual([...day.activities].reverse().map(({ id }) => id));
   });
 });

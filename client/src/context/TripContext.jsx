@@ -9,6 +9,7 @@ import {
 } from "react";
 import { getAuthToken } from "../api/authToken.js";
 import { apiRequest } from "../api/client.js";
+import { useAuth } from "./AuthContext.jsx";
 
 const TripContext = createContext(null);
 const ownerFixtureAccess = { role: "owner", canEdit: true, isOwner: true };
@@ -25,19 +26,18 @@ function readCachedTrip(tripId) {
   return saved ? JSON.parse(saved) : null;
 }
 
-function initialSnapshot(tripId, sharedToken) {
+function initialSnapshot(tripId, sharedToken, { authenticated = false, authPending = false } = {}) {
   const sourceKey = sourceKeyFor(tripId, sharedToken);
-  const trip = readCachedTrip(tripId);
-  const authenticated = Boolean(tripId && getAuthToken());
+  const trip = authenticated ? readCachedTrip(tripId) : null;
   return {
     sourceKey,
     trip,
-    access: import.meta.env.MODE === "test" && tripId && trip
+    access: import.meta.env.MODE === "test" && authenticated && tripId && trip
       ? ownerFixtureAccess
       : null,
     members: [],
     permission: "view",
-    loading: Boolean(sharedToken || !trip || authenticated),
+    loading: Boolean(sharedToken || authPending || (tripId && authenticated)),
     error: "",
     membersLoading: false,
     membersError: ""
@@ -49,11 +49,24 @@ function revisionOf(trip) {
 }
 
 export function TripProvider({ tripId, sharedToken, children }) {
+  const { ready: authReady, user } = useAuth();
+  const privateAuthenticated = Boolean(authReady && user && getAuthToken());
+  const authSessionKey = sharedToken
+    ? "public"
+    : (privateAuthenticated ? `user:${user.id}` : (authReady ? "anonymous" : "pending"));
   const sourceKey = sourceKeyFor(tripId, sharedToken);
-  const [snapshot, setSnapshot] = useState(() => initialSnapshot(tripId, sharedToken));
+  const requestKey = `${sourceKey}:${authSessionKey}`;
+  const [snapshot, setSnapshot] = useState(() => initialSnapshot(tripId, sharedToken, {
+    authenticated: privateAuthenticated,
+    authPending: Boolean(tripId && !authReady)
+  }));
   const snapshotRef = useRef(snapshot);
   const activeSourceRef = useRef(sourceKey);
+  const activeRequestRef = useRef(requestKey);
+  const authenticatedRef = useRef(privateAuthenticated);
   activeSourceRef.current = sourceKey;
+  activeRequestRef.current = requestKey;
+  authenticatedRef.current = privateAuthenticated;
 
   const commit = useCallback((update) => {
     const current = snapshotRef.current;
@@ -61,7 +74,11 @@ export function TripProvider({ tripId, sharedToken, children }) {
     if (Object.is(next, current)) return false;
     snapshotRef.current = next;
     setSnapshot(next);
-    if (next.trip?.id && next.sourceKey === `trip:${next.trip.id}`) {
+    if (
+      authenticatedRef.current
+      && next.trip?.id
+      && next.sourceKey === `trip:${next.trip.id}`
+    ) {
       sessionStorage.setItem(`nuogo-trip-${next.trip.id}`, JSON.stringify(next.trip));
     }
     return true;
@@ -76,10 +93,14 @@ export function TripProvider({ tripId, sharedToken, children }) {
   const refreshTrip = useCallback(async ({ force = false, silent = false } = {}) => {
     if (!tripId && !sharedToken) return null;
     const requestedSource = sourceKey;
+    const requestedSession = requestKey;
     const path = sharedToken ? `/shared/${sharedToken}` : `/trips/${tripId}`;
     try {
       const body = await apiRequest(path);
-      if (activeSourceRef.current !== requestedSource) return null;
+      if (
+        activeSourceRef.current !== requestedSource
+        || activeRequestRef.current !== requestedSession
+      ) return null;
       commit((current) => {
         if (current.sourceKey !== requestedSource) return current;
         const currentRevision = revisionOf(current.trip);
@@ -97,36 +118,47 @@ export function TripProvider({ tripId, sharedToken, children }) {
       });
       return body.trip;
     } catch (requestError) {
-      if (activeSourceRef.current === requestedSource && !silent) {
+      if (
+        activeSourceRef.current === requestedSource
+        && activeRequestRef.current === requestedSession
+        && !silent
+      ) {
         commit((current) => current.sourceKey === requestedSource
           ? { ...current, error: requestError.message }
           : current);
       }
       throw requestError;
     }
-  }, [commit, sharedToken, sourceKey, tripId]);
+  }, [commit, requestKey, sharedToken, sourceKey, tripId]);
 
   const refreshMembers = useCallback(async () => {
-    if (!tripId || !getAuthToken()) {
+    if (!tripId || !privateAuthenticated) {
       commit((current) => current.sourceKey === sourceKey
         ? { ...current, members: [], membersLoading: false, membersError: "" }
         : current);
       return [];
     }
     const requestedSource = sourceKey;
+    const requestedSession = requestKey;
     commit((current) => current.sourceKey === requestedSource
       ? { ...current, membersLoading: true, membersError: "" }
       : current);
     try {
       const body = await apiRequest(`/trips/${tripId}/members`);
-      if (activeSourceRef.current !== requestedSource) return [];
+      if (
+        activeSourceRef.current !== requestedSource
+        || activeRequestRef.current !== requestedSession
+      ) return [];
       const members = body.members ?? [];
       commit((current) => current.sourceKey === requestedSource
         ? { ...current, members, membersLoading: false, membersError: "" }
         : current);
       return members;
     } catch (requestError) {
-      if (activeSourceRef.current === requestedSource) {
+      if (
+        activeSourceRef.current === requestedSource
+        && activeRequestRef.current === requestedSession
+      ) {
         commit((current) => current.sourceKey === requestedSource
           ? {
               ...current,
@@ -137,7 +169,7 @@ export function TripProvider({ tripId, sharedToken, children }) {
       }
       throw requestError;
     }
-  }, [commit, sourceKey, tripId]);
+  }, [commit, privateAuthenticated, requestKey, sourceKey, tripId]);
 
   const applyRevision = useCallback((revision) => {
     if (!Number.isInteger(revision)) return false;
@@ -175,8 +207,11 @@ export function TripProvider({ tripId, sharedToken, children }) {
 
   useEffect(() => {
     const requestedSource = sourceKey;
-    const authenticated = Boolean(tripId && getAuthToken());
-    const reset = initialSnapshot(tripId, sharedToken);
+    const requestedSession = requestKey;
+    const reset = initialSnapshot(tripId, sharedToken, {
+      authenticated: privateAuthenticated,
+      authPending: Boolean(tripId && !authReady)
+    });
     commit(() => reset);
     let active = true;
 
@@ -187,10 +222,8 @@ export function TripProvider({ tripId, sharedToken, children }) {
           : current);
         return;
       }
-      if (tripId && !authenticated && reset.trip) {
-        commit((current) => current.sourceKey === requestedSource
-          ? { ...current, loading: false }
-          : current);
+      if (tripId && !privateAuthenticated) {
+        if (authReady) sessionStorage.removeItem(`nuogo-trip-${tripId}`);
         return;
       }
 
@@ -199,14 +232,23 @@ export function TripProvider({ tripId, sharedToken, children }) {
       } catch {
         // The request helper records a route-scoped error.
       } finally {
-        if (active && activeSourceRef.current === requestedSource) {
+        if (
+          active
+          && activeSourceRef.current === requestedSource
+          && activeRequestRef.current === requestedSession
+        ) {
           commit((current) => current.sourceKey === requestedSource
             ? { ...current, loading: false }
             : current);
         }
       }
 
-      if (active && authenticated && activeSourceRef.current === requestedSource) {
+      if (
+        active
+        && privateAuthenticated
+        && activeSourceRef.current === requestedSource
+        && activeRequestRef.current === requestedSession
+      ) {
         refreshMembers().catch(() => {});
       }
     }
@@ -215,25 +257,38 @@ export function TripProvider({ tripId, sharedToken, children }) {
     return () => {
       active = false;
     };
-  }, [commit, refreshMembers, refreshTrip, sharedToken, sourceKey, tripId]);
+  }, [
+    authReady,
+    commit,
+    privateAuthenticated,
+    refreshMembers,
+    refreshTrip,
+    requestKey,
+    sharedToken,
+    sourceKey,
+    tripId
+  ]);
 
   useEffect(() => {
-    if (!tripId || !getAuthToken()) return undefined;
+    if (!tripId || !privateAuthenticated) return undefined;
     const interval = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       refreshTrip({ silent: true }).catch(() => {});
     }, 20_000);
     return () => window.clearInterval(interval);
-  }, [refreshTrip, tripId]);
+  }, [privateAuthenticated, refreshTrip, tripId]);
 
-  const sourceMatches = snapshot.sourceKey === sourceKey;
+  const privateSourceIsVisible = !tripId || privateAuthenticated;
+  const sourceMatches = snapshot.sourceKey === sourceKey && privateSourceIsVisible;
   const value = useMemo(() => ({
     trip: sourceMatches ? snapshot.trip : null,
     setTrip,
     access: sourceMatches ? snapshot.access : null,
     members: sourceMatches ? snapshot.members : [],
     permission: sourceMatches ? snapshot.permission : "view",
-    loading: sourceMatches ? snapshot.loading : true,
+    loading: sourceMatches
+      ? snapshot.loading
+      : Boolean(tripId && !authReady),
     error: sourceMatches ? snapshot.error : "",
     membersLoading: sourceMatches ? snapshot.membersLoading : false,
     membersError: sourceMatches ? snapshot.membersError : "",
