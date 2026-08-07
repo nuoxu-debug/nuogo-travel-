@@ -202,5 +202,5 @@ Verification additions:
 
 Current build note:
 
-- The Task 12 production build emits 575.22 kB of JavaScript (176.75 kB gzip) and 58.55 kB of CSS (15.57 kB gzip).
+- The final post-review production build emits 577.72 kB of JavaScript (177.51 kB gzip) and 58.53 kB of CSS (15.57 kB gzip).
 - Vite's existing chunk-size warning remains. Bundle optimization is intentionally outside this documentation and verification task.
