@@ -10,6 +10,5 @@ coverage/
 database/local/
 server/.cache/
 server/storage/attractions/
-artifacts/edge*/
-artifacts/chrome*/
+/artifacts/
 .worktrees/

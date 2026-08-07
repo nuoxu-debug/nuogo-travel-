@@ -251,13 +251,13 @@ Attraction catalogue tables:
 - `attraction_images`
 - `attraction_sources`
 
-`MySqlRepository.listTrips(ownerId)` first fetches trip IDs owned by that user ordered by `updated_at DESC`, then uses `loadTrips(ids)`. The batched loader preserves the requested trip ID order by mapping results back to the input IDs.
+`MySqlRepository.listTrips(userId)` first fetches trip IDs that the user owns or can access through an active `trip_members` row, ordered by `updated_at DESC`, then uses `loadTrips(ids)`. The unique `(trip_id, user_id)` membership constraint keeps each trip ID to one result even when the owner also has an owner membership. `MemoryRepository.listTrips(userId)` applies the same owned-or-active-member rule over its trip map, which is already unique by trip ID. The batched MySQL loader preserves the resulting trip ID order by mapping results back to the input IDs.
 
 Expected query count:
 
 - `getTrip(id)`: up to 4 query groups: trip, variants, days, activities.
-- `listTrips(ownerId)`: 1 owner-filter query plus up to 4 graph query groups.
-- Query count is fixed relative to the number of variants and days for a loaded trip graph, but `listTrips()` still adds the initial owner-filter query. It is not a fully constant one-query operation.
+- `listTrips(userId)`: 1 owner-or-active-member access query plus up to 4 graph query groups.
+- Query count is fixed relative to the number of variants and days for a loaded trip graph, but `listTrips()` still adds the initial access-filter query. It is not a fully constant one-query operation.
 
 Compatibility preserved:
 
@@ -268,7 +268,7 @@ Compatibility preserved:
 - JSON fields are parsed through the existing `parseJson()` helper.
 - `selectedVariantId`, owner ID, dates, budget, and title fields remain in the returned shape.
 - `getTrip()` returns one trip or `undefined`.
-- `listTrips()` returns only trips from the requested owner because IDs are selected by `user_id` before graph loading.
+- `listTrips()` returns each trip the requested user owns or actively belongs to, without duplicates, because access-filtered IDs are selected before graph loading.
 
 ## 8. AI Integration
 

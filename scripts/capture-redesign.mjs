@@ -305,6 +305,25 @@ async function boxInsideViewport(page, locator) {
   };
 }
 
+async function labelEvidence(page, locator) {
+  await locator.waitFor({ state: "visible" });
+  const viewportState = await boxInsideViewport(page, locator);
+  const dimensions = await locator.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    clientWidth: element.clientWidth,
+    scrollHeight: element.scrollHeight,
+    scrollWidth: element.scrollWidth
+  }));
+  return {
+    visible: await locator.isVisible(),
+    box: viewportState.box,
+    insideViewport: viewportState.inside,
+    unclipped: dimensions.scrollWidth <= dimensions.clientWidth + 1
+      && dimensions.scrollHeight <= dimensions.clientHeight + 1,
+    dimensions
+  };
+}
+
 await mkdir("artifacts", { recursive: true });
 
 const browser = await chromium.launch({ executablePath: chrome, headless: true });
@@ -377,6 +396,7 @@ try {
   const expenseColumn = settlementPanel.locator("xpath=ancestor::section[1]");
   const settlementBox = await expenseColumn.boundingBox();
   const mapPanel = desktopExpenses.getByTestId("route-map-panel");
+  await desktopExpenses.locator(".leaflet-tile-loaded").first().waitFor({ timeout: 10000 });
   report.desktopExpenses = {
     overflow: await horizontalOverflow(desktopExpenses),
     settlementWidth: settlementBox?.width ?? null,
@@ -388,6 +408,28 @@ try {
     plannedBudgetControlVisible: await desktopExpenses
       .getByRole("button", { name: "计划预算" })
       .isVisible()
+  };
+  report.languageLabels = {
+    chinese: {
+      labels: {
+        members: await labelEvidence(
+          desktopExpenses,
+          desktopExpenses.getByRole("button", { name: "成员", exact: true })
+        ),
+        plannedBudget: await labelEvidence(
+          desktopExpenses,
+          desktopExpenses.getByRole("button", { name: "计划预算", exact: true })
+        ),
+        groupExpenses: await labelEvidence(
+          desktopExpenses,
+          desktopExpenses.getByRole("button", { name: "多人费用", exact: true })
+        )
+      },
+      englishLabelsAbsent: await desktopExpenses.locator("body").evaluate(
+        (body, englishLabels) => englishLabels.every((label) => !body.innerText.includes(label)),
+        ["Members", "Planned budget", "Group expenses"]
+      )
+    }
   };
   await desktopExpenses.screenshot({
     path: artifactPaths.expensesDesktop,
@@ -407,6 +449,8 @@ try {
   await expenseDialog.waitFor();
   await mobileExpenseDialog.getByLabel("费用说明").fill("宏村午餐");
   await mobileExpenseDialog.getByLabel("金额").fill("300.00");
+  const dateInput = mobileExpenseDialog.getByLabel("日期");
+  await dateInput.fill("2026-08-10");
   await mobileExpenseDialog.getByRole("checkbox", { name: "Wang Min" }).uncheck();
   const amountInput = mobileExpenseDialog.getByLabel("金额");
   await amountInput.scrollIntoViewIfNeeded();
@@ -426,7 +470,8 @@ try {
     excludedTraveller: !(await mobileExpenseDialog
       .getByRole("checkbox", { name: "Wang Min" })
       .isChecked()),
-    splitPreview: await expenseDialog.getByText("每人 ¥150.00").isVisible()
+    splitPreview: await expenseDialog.getByText("每人 ¥150.00").isVisible(),
+    expenseDate: await dateInput.inputValue()
   };
   await mobileExpenseDialog.screenshot({
     path: artifactPaths.expenseDialogMobile
@@ -440,17 +485,19 @@ try {
     consoleErrors,
     pageErrors
   });
-  report.languageLabels = {
-    chinese: {
-      members: true,
-      plannedBudget: true,
-      groupExpenses: true
-    },
-    english: {
-      members: await english.getByRole("button", { name: "Members", exact: true }).isVisible(),
-      plannedBudget: await english.getByRole("button", { name: "Planned budget" }).isVisible(),
-      groupExpenses: await english.getByRole("button", { name: "Group expenses" }).isVisible()
-    }
+  report.languageLabels.english = {
+    members: await labelEvidence(
+      english,
+      english.getByRole("button", { name: "Members", exact: true })
+    ),
+    plannedBudget: await labelEvidence(
+      english,
+      english.getByRole("button", { name: "Planned budget", exact: true })
+    ),
+    groupExpenses: await labelEvidence(
+      english,
+      english.getByRole("button", { name: "Group expenses", exact: true })
+    )
   };
   await english.context().close();
 
@@ -464,8 +511,23 @@ try {
   await reduced.getByRole("button", { name: "成员", exact: true }).click();
   const reducedDrawer = reduced.getByRole("dialog", { name: "行程成员" });
   await reducedDrawer.waitFor();
+  const drawerAnimations = await reducedDrawer.evaluate(
+    (element) => element.getAnimations({ subtree: true }).length
+  );
+  await reduced.getByRole("button", { name: "关闭行程成员" }).click();
+  await reduced.getByRole("button", { name: "多人费用" }).click();
+  const reducedSettlement = reduced.getByTestId("expense-settlement-panel");
+  await reducedSettlement.waitFor();
+  const refreshedSummary = reduced.waitForResponse(
+    (response) => response.request().method() === "GET"
+      && new URL(response.url()).pathname === "/api/trips/trip-1/expense-summary"
+  );
+  await reduced.getByRole("button", { name: "刷新多人费用" }).click();
+  await refreshedSummary;
+  await reduced.waitForTimeout(50);
   report.reducedMotion = {
-    drawerAnimations: await reducedDrawer.evaluate(
+    drawerAnimations,
+    expenseRecalculationAnimations: await reducedSettlement.evaluate(
       (element) => element.getAnimations({ subtree: true }).length
     ),
     mediaQueryMatches: await reduced.evaluate(
@@ -503,6 +565,7 @@ try {
   if (
     !report.desktopExpenses.ledgerVisible
     || !report.desktopExpenses.mapVisible
+    || report.desktopExpenses.mapTiles < 1
     || !report.desktopExpenses.timelineVisible
     || !report.desktopExpenses.guideVisible
     || !report.desktopExpenses.plannedBudgetControlVisible
@@ -520,11 +583,28 @@ try {
   ) {
     failures.push("The mobile expense split controls or CNY 150 preview are not fully visible");
   }
-  if (Object.values(report.languageLabels.english).some((visible) => !visible)) {
-    failures.push("One or more English collaboration labels are missing");
+  if (
+    Object.values(report.languageLabels.chinese.labels).some(({ visible }) => !visible)
+    || !report.languageLabels.chinese.englishLabelsAbsent
+  ) {
+    failures.push("Chinese collaboration labels are missing or English labels remain visible");
   }
-  if (!report.reducedMotion.mediaQueryMatches || report.reducedMotion.drawerAnimations !== 0) {
-    failures.push("Reduced-motion mode still exposes collaboration entrance animation");
+  if (
+    Object.values(report.languageLabels.english).some(
+      ({ visible, insideViewport, unclipped }) => !visible || !insideViewport || !unclipped
+    )
+  ) {
+    failures.push("One or more English collaboration labels are missing or clipped");
+  }
+  if (
+    !report.reducedMotion.mediaQueryMatches
+    || report.reducedMotion.drawerAnimations !== 0
+    || report.reducedMotion.expenseRecalculationAnimations !== 0
+  ) {
+    failures.push("Reduced-motion mode still exposes collaboration or expense recalculation animation");
+  }
+  if (report.mobileExpenseDialog.expenseDate !== "2026-08-10") {
+    failures.push("The mobile expense capture date is not deterministic");
   }
   if (consoleErrors.length || pageErrors.length) {
     failures.push("Browser console or page errors were recorded");

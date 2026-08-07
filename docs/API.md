@@ -40,14 +40,14 @@ Registration accepts `name`, `email`, and `password`. Login accepts `email` and 
 | POST | `/trips/generate` | Yes | Validate preferences, generate three plans, and save the trip |
 | GET | `/trips` | Yes | List trips owned by or shared with the current member |
 | GET | `/trips/:tripId` | Active member | Read a trip and the caller's access summary |
-| PATCH | `/trips/:tripId` | Owner or editor | Update bilingual title or lifecycle status |
+| PATCH | `/trips/:tripId` | Owner or editor | Update bilingual title or lifecycle status; requires `expectedRevision` |
 | DELETE | `/trips/:tripId` | Owner | Delete a trip |
 | POST | `/trips/:tripId/duplicate` | Owner | Duplicate a trip with new stable IDs |
-| POST | `/trips/:tripId/select-variant` | Owner or editor | Select one generated variant |
+| POST | `/trips/:tripId/select-variant` | Owner or editor | Select one generated variant; requires `expectedRevision` |
 
 Generation accepts `destination`, `departureCity`, `days`, `totalBudget`, `interests`, `groupType`, `accommodation`, `language`, and `startDate`.
 
-Trip and timeline mutations require an integer `expectedRevision`. A successful mutation increments and returns the trip `revision`. A stale write returns HTTP 409:
+Collaborative trip updates, variant selection, and timeline activity/day mutations require an integer `expectedRevision`. Successful revision-checked mutations increment and return the trip `revision`. Trip deletion and duplication do not accept `expectedRevision`. A stale revision-checked write returns HTTP 409:
 
 ```json
 {
@@ -70,7 +70,7 @@ Trip and timeline mutations require an integer `expectedRevision`. A successful 
 | POST | `/activities/:activityId/regenerate` | Owner or editor | Regenerate one activity |
 | POST | `/trips/:tripId/days/:dayId/regenerate` | Owner or editor | Regenerate one day |
 
-Mutation requests include `expectedRevision`; responses include the new `revision` and current budget where applicable.
+The timeline mutation requests above include `expectedRevision`; responses include the new `revision` and current budget where applicable.
 
 ## Authenticated Trip Collaboration
 
@@ -141,7 +141,7 @@ Expense responses include `amountFen` and participant records with `shareFen`. T
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
-| POST | `/trips/:tripId/shares` | Yes | Create a `view` or `edit` share |
+| POST | `/trips/:tripId/shares` | Owner | Create a `view` or `edit` share for an owner-owned trip |
 | GET | `/shared/:token` | No | Read the shared trip and permission |
 | POST | `/shared/:token/votes` | Yes | Vote once per user/activity on an edit share |
 | GET | `/favorites` | Yes | List saved activities |
