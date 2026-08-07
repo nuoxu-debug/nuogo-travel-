@@ -214,7 +214,7 @@ export default function PreferenceForm({ onSubmit, busy = false }) {
           <output className="font-display text-lg font-bold text-lake">¥{formatCurrency(dailyBudget)} / {copy.daily}</output>
           <span className="text-xs text-ink/45">¥50,000</span>
         </div>
-        {conflict && <p className="mt-3 border-l-4 border-gold bg-amber-50 p-3 text-sm font-medium text-amber-900">{copy.conflict}</p>}
+        {conflict && <p className="mt-3 border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-900">{copy.conflict}</p>}
       </div>
 
       <fieldset>

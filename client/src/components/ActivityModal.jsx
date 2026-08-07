@@ -76,7 +76,7 @@ export default function ActivityModal({ activity, open, onClose, onSave }) {
             <textarea value={values.description[language]} onChange={(event) => update("description", { ...values.description, [language]: event.target.value })} rows="3" className="mt-2 w-full border border-ink/15 p-3" />
           </label>
           {values.sourceUrl && values.sourceProvider && (
-            <div className="border-l-4 border-jade bg-emerald-50 p-3">
+            <div className="border border-emerald-200 bg-emerald-50 p-3">
               <p className="text-xs font-bold uppercase text-ink/45">
                 {language === "zh" ? "景点资料来源" : "Attraction source"}
               </p>
