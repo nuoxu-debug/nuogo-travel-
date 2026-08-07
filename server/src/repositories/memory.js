@@ -4,6 +4,15 @@ function clone(value) {
   return value === undefined ? undefined : structuredClone(value);
 }
 
+function tripEditError(role) {
+  const error = new Error(role === "viewer"
+    ? "Trip editor access is required."
+    : "An active trip membership is required.");
+  error.status = 403;
+  error.code = role === "viewer" ? "TRIP_EDITOR_REQUIRED" : "TRIP_MEMBER_REQUIRED";
+  return error;
+}
+
 export class MemoryRepository {
   constructor() {
     this.users = new Map();
@@ -98,6 +107,11 @@ export class MemoryRepository {
     try {
       const trip = this.trips.get(tripId);
       if (!trip || trip.revision !== expectedRevision) return undefined;
+      if (trip.ownerId !== actorUserId) {
+        const member = this.members.get(`${tripId}:${actorUserId}`);
+        const role = member?.status === "active" ? member.role : undefined;
+        if (role !== "editor") throw tripEditError(role);
+      }
       const tripSnapshot = clone(trip);
       const activitySnapshot = clone([...this.tripActivity.entries()]
         .filter(([, activity]) => activity.tripId === tripId));
@@ -428,22 +442,67 @@ export class MemoryRepository {
     })));
   }
 
-  async createInvitation(input) {
-    const now = new Date().toISOString();
-    const invitation = {
-      id: input.id ?? randomUUID(),
-      tripId: input.tripId,
-      tokenHash: input.tokenHash,
-      role: input.role,
-      status: input.status ?? "pending",
-      invitedByUserId: input.invitedByUserId,
-      expiresAt: input.expiresAt,
-      createdAt: input.createdAt ?? now,
-      ...(input.acceptedByUserId ? { acceptedByUserId: input.acceptedByUserId } : {}),
-      ...(input.acceptedAt ? { acceptedAt: input.acceptedAt } : {})
+  async mutateCollaboration(tripId, actorUserId, audit, mutation) {
+    const previous = this.tripMutationLocks.get(tripId) ?? Promise.resolve();
+    let release;
+    const current = new Promise((resolve) => { release = resolve; });
+    const tail = previous.then(() => current);
+    this.tripMutationLocks.set(tripId, tail);
+    await previous;
+
+    const membersSnapshot = clone([...this.members.entries()]
+      .filter(([, member]) => member.tripId === tripId));
+    const invitationsSnapshot = clone([...this.invitations.entries()]
+      .filter(([, invitation]) => invitation.tripId === tripId));
+    const activitySnapshot = clone([...this.tripActivity.entries()]
+      .filter(([, activity]) => activity.tripId === tripId));
+    const restore = (store, snapshot, belongsToTrip) => {
+      for (const [id, record] of store) {
+        if (belongsToTrip(record)) store.delete(id);
+      }
+      for (const [id, record] of snapshot) store.set(id, record);
     };
-    this.invitations.set(invitation.id, invitation);
-    return clone(invitation);
+
+    try {
+      const result = await mutation();
+      if (result && audit) {
+        await this.appendTripActivity({
+          ...audit,
+          tripId,
+          actorUserId,
+          entityId: audit.entityId ?? result.id
+        });
+      }
+      return result;
+    } catch (error) {
+      restore(this.members, membersSnapshot, (member) => member.tripId === tripId);
+      restore(this.invitations, invitationsSnapshot, (invitation) => invitation.tripId === tripId);
+      restore(this.tripActivity, activitySnapshot, (activity) => activity.tripId === tripId);
+      throw error;
+    } finally {
+      release();
+      if (this.tripMutationLocks.get(tripId) === tail) this.tripMutationLocks.delete(tripId);
+    }
+  }
+
+  async createInvitation(input, actorUserId, audit) {
+    return this.mutateCollaboration(input.tripId, actorUserId, audit, () => {
+      const now = new Date().toISOString();
+      const invitation = {
+        id: input.id ?? randomUUID(),
+        tripId: input.tripId,
+        tokenHash: input.tokenHash,
+        role: input.role,
+        status: input.status ?? "pending",
+        invitedByUserId: input.invitedByUserId,
+        expiresAt: input.expiresAt,
+        createdAt: input.createdAt ?? now,
+        ...(input.acceptedByUserId ? { acceptedByUserId: input.acceptedByUserId } : {}),
+        ...(input.acceptedAt ? { acceptedAt: input.acceptedAt } : {})
+      };
+      this.invitations.set(invitation.id, invitation);
+      return clone(invitation);
+    });
   }
 
   async getInvitationByTokenHash(tokenHash) {
@@ -457,69 +516,85 @@ export class MemoryRepository {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
   }
 
-  async updateInvitation(invitationId, tripId, patch, options = {}) {
-    const invitation = this.invitations.get(invitationId);
-    if (!invitation || invitation.tripId !== tripId) return undefined;
-    if (options.expectedStatuses
-      && !options.expectedStatuses.includes(invitation.status)) return undefined;
-    if (options.requireUnexpired
-      && Date.parse(invitation.expiresAt) <= Date.now()) return undefined;
-    for (const field of ["role", "status", "acceptedByUserId", "expiresAt", "acceptedAt"]) {
-      if (Object.hasOwn(patch, field)) invitation[field] = clone(patch[field]);
-    }
-    return clone(invitation);
+  async updateInvitation(
+    invitationId,
+    tripId,
+    patch,
+    options = {},
+    actorUserId,
+    audit
+  ) {
+    return this.mutateCollaboration(tripId, actorUserId, audit, () => {
+      const invitation = this.invitations.get(invitationId);
+      if (!invitation || invitation.tripId !== tripId) return undefined;
+      if (options.expectedStatuses
+        && !options.expectedStatuses.includes(invitation.status)) return undefined;
+      if (options.requireUnexpired
+        && Date.parse(invitation.expiresAt) <= Date.now()) return undefined;
+      for (const field of ["role", "status", "acceptedByUserId", "expiresAt", "acceptedAt"]) {
+        if (Object.hasOwn(patch, field)) invitation[field] = clone(patch[field]);
+      }
+      return clone(invitation);
+    });
   }
 
-  async acceptInvitation(invitationId, userId) {
+  async acceptInvitation(invitationId, userId, audit) {
     const invitation = this.invitations.get(invitationId);
     if (!invitation) return undefined;
-    if (this.trips.get(invitation.tripId)?.ownerId === userId) return undefined;
-    if (invitation.status === "accepted") {
-      if (invitation.acceptedByUserId !== userId) return undefined;
-      const existing = await this.getMember(invitation.tripId, userId);
-      return existing?.status === "active" ? existing : undefined;
-    }
-    if (invitation.status !== "pending") return undefined;
-    if (Date.parse(invitation.expiresAt) <= Date.now()) {
-      invitation.status = "expired";
-      return undefined;
-    }
+    return this.mutateCollaboration(invitation.tripId, userId, audit, async () => {
+      const current = this.invitations.get(invitationId);
+      if (this.trips.get(current.tripId)?.ownerId === userId) return undefined;
+      if (current.status === "accepted") {
+        if (current.acceptedByUserId !== userId) return undefined;
+        const existing = await this.getMember(current.tripId, userId);
+        return existing?.status === "active" ? existing : undefined;
+      }
+      if (current.status !== "pending") return undefined;
+      if (Date.parse(current.expiresAt) <= Date.now()) {
+        current.status = "expired";
+        return undefined;
+      }
 
-    const key = `${invitation.tripId}:${userId}`;
-    const now = new Date().toISOString();
-    const existing = this.members.get(key);
-    const member = {
-      id: existing?.id ?? randomUUID(),
-      tripId: invitation.tripId,
-      userId,
-      role: invitation.role,
-      status: "active",
-      joinedAt: existing?.joinedAt ?? now
-    };
-    this.members.set(key, member);
-    Object.assign(invitation, {
-      status: "accepted",
-      acceptedByUserId: userId,
-      acceptedAt: now
+      const key = `${current.tripId}:${userId}`;
+      const now = new Date().toISOString();
+      const existing = this.members.get(key);
+      const member = {
+        id: existing?.id ?? randomUUID(),
+        tripId: current.tripId,
+        userId,
+        role: current.role,
+        status: "active",
+        joinedAt: existing?.joinedAt ?? now
+      };
+      this.members.set(key, member);
+      Object.assign(current, {
+        status: "accepted",
+        acceptedByUserId: userId,
+        acceptedAt: now
+      });
+      return this.getMember(current.tripId, userId);
     });
-    return this.getMember(invitation.tripId, userId);
   }
 
-  async updateMember(tripId, memberId, role) {
-    const entry = [...this.members.entries()]
-      .find(([, member]) => member.tripId === tripId && member.id === memberId);
-    if (!entry) return undefined;
-    entry[1].role = role;
-    return this.getMember(tripId, entry[1].userId);
+  async updateMember(tripId, memberId, role, actorUserId, audit) {
+    return this.mutateCollaboration(tripId, actorUserId, audit, () => {
+      const entry = [...this.members.entries()]
+        .find(([, member]) => member.tripId === tripId && member.id === memberId);
+      if (!entry) return undefined;
+      entry[1].role = role;
+      return this.getMember(tripId, entry[1].userId);
+    });
   }
 
-  async removeMember(tripId, memberId) {
-    const entry = [...this.members.entries()]
-      .find(([, member]) => member.tripId === tripId && member.id === memberId);
-    if (!entry) return undefined;
-    entry[1].status = "removed";
-    entry[1].removedAt = new Date().toISOString();
-    return this.getMember(tripId, entry[1].userId);
+  async removeMember(tripId, memberId, actorUserId, audit) {
+    return this.mutateCollaboration(tripId, actorUserId, audit, () => {
+      const entry = [...this.members.entries()]
+        .find(([, member]) => member.tripId === tripId && member.id === memberId);
+      if (!entry) return undefined;
+      entry[1].status = "removed";
+      entry[1].removedAt = new Date().toISOString();
+      return this.getMember(tripId, entry[1].userId);
+    });
   }
 
   async listExpenses(tripId) {

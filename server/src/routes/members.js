@@ -65,10 +65,6 @@ async function findMember(repository, tripId, memberId) {
   return (await repository.listMembers(tripId)).find(({ id }) => id === memberId);
 }
 
-async function recordActivity(repository, input) {
-  await repository.appendTripActivity(input);
-}
-
 export function createMembersRouter({ repository, authenticate, clientOrigin }) {
   const router = Router();
 
@@ -84,13 +80,9 @@ export function createMembersRouter({ repository, authenticate, clientOrigin }) 
         status: "pending",
         invitedByUserId: req.user.id,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-      });
-      await recordActivity(repository, {
-        tripId: access.trip.id,
-        actorUserId: req.user.id,
+      }, req.user.id, {
         action: "invitation.created",
         entityType: "invitation",
-        entityId: invitation.id,
         summary: { role }
       });
       res.status(201).json({
@@ -123,7 +115,14 @@ export function createMembersRouter({ repository, authenticate, clientOrigin }) 
           req.params.invitationId,
           req.params.tripId,
           { status: "revoked" },
-          { expectedStatuses: ["pending"], requireUnexpired: true }
+          { expectedStatuses: ["pending"], requireUnexpired: true },
+          req.user.id,
+          {
+            action: "invitation.revoked",
+            entityType: "invitation",
+            entityId: req.params.invitationId,
+            summary: {}
+          }
         );
         if (!invitation) {
           const current = (await repository.listInvitations(req.params.tripId))
@@ -132,14 +131,6 @@ export function createMembersRouter({ repository, authenticate, clientOrigin }) 
           throw invitationStateError(current)
             ?? apiError(409, "INVITATION_CONSUMED", "Invitation state has changed.");
         }
-        await recordActivity(repository, {
-          tripId: req.params.tripId,
-          actorUserId: req.user.id,
-          action: "invitation.revoked",
-          entityType: "invitation",
-          entityId: invitation.id,
-          summary: { role: invitation.role }
-        });
         res.json({ invitation: publicInvitation(invitation) });
       } catch (error) {
         next(error);
@@ -175,16 +166,15 @@ export function createMembersRouter({ repository, authenticate, clientOrigin }) 
         const member = await repository.updateMember(
           req.params.tripId,
           req.params.memberId,
-          role
+          role,
+          req.user.id,
+          {
+            action: "member.role_changed",
+            entityType: "member",
+            entityId: target.id,
+            summary: { userId: target.userId, role }
+          }
         );
-        await recordActivity(repository, {
-          tripId: req.params.tripId,
-          actorUserId: req.user.id,
-          action: "member.role_changed",
-          entityType: "member",
-          entityId: member.id,
-          summary: { userId: member.userId, role }
-        });
         res.json({ member });
       } catch (error) {
         next(error);
@@ -205,15 +195,17 @@ export function createMembersRouter({ repository, authenticate, clientOrigin }) 
         if (target.role === "owner") {
           throw apiError(409, "TRIP_OWNER_IMMUTABLE", "The trip owner cannot be removed.");
         }
-        const member = await repository.removeMember(req.params.tripId, req.params.memberId);
-        await recordActivity(repository, {
-          tripId: req.params.tripId,
-          actorUserId: req.user.id,
-          action: "member.removed",
-          entityType: "member",
-          entityId: member.id,
-          summary: { userId: member.userId, role: member.role }
-        });
+        const member = await repository.removeMember(
+          req.params.tripId,
+          req.params.memberId,
+          req.user.id,
+          {
+            action: "member.removed",
+            entityType: "member",
+            entityId: target.id,
+            summary: { userId: target.userId, role: target.role }
+          }
+        );
         res.json({ member });
       } catch (error) {
         next(error);
@@ -273,21 +265,19 @@ export function createMembersRouter({ repository, authenticate, clientOrigin }) 
           "The trip owner already has owner access."
         );
       }
-      const membership = await repository.acceptInvitation(invitation.id, req.user.id);
+      const membership = await repository.acceptInvitation(
+        invitation.id,
+        req.user.id,
+        isRepeat ? undefined : {
+          action: "member.joined",
+          entityType: "member",
+          summary: { role: invitation.role }
+        }
+      );
       if (!membership) {
         const current = await loadInvitation(repository, req.params.token);
         throw invitationStateError(current)
           ?? apiError(409, "INVITATION_CONSUMED", "This invitation was already consumed.");
-      }
-      if (!isRepeat) {
-        await recordActivity(repository, {
-          tripId: invitation.tripId,
-          actorUserId: req.user.id,
-          action: "member.joined",
-          entityType: "member",
-          entityId: membership.id,
-          summary: { role: membership.role }
-        });
       }
       res.json({ membership, tripId: invitation.tripId });
     } catch (error) {
@@ -307,20 +297,17 @@ export function createMembersRouter({ repository, authenticate, clientOrigin }) 
       }, {
         expectedStatuses: ["pending"],
         requireUnexpired: true
+      }, req.user.id, {
+        action: "invitation.declined",
+        entityType: "invitation",
+        entityId: invitation.id,
+        summary: { role: invitation.role }
       });
       if (!declined) {
         const current = await loadInvitation(repository, req.params.token);
         throw invitationStateError(current)
           ?? apiError(409, "INVITATION_CONSUMED", "Invitation state has changed.");
       }
-      await recordActivity(repository, {
-        tripId: invitation.tripId,
-        actorUserId: req.user.id,
-        action: "invitation.declined",
-        entityType: "invitation",
-        entityId: invitation.id,
-        summary: { role: invitation.role }
-      });
       return res.json({ invitation: publicInvitation(declined) });
     } catch (error) {
       return next(error);

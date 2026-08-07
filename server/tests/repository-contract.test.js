@@ -1016,6 +1016,9 @@ describe("repository adapters", () => {
       rollback: vi.fn(),
       release: vi.fn(),
       execute: vi.fn(async (sql) => {
+        if (sql.includes("FROM trips t")) {
+          return [[{ ownerId: "owner-1", role: "editor", status: "active" }]];
+        }
         if (sql.startsWith("UPDATE trips")) return [{ affectedRows: 1 }];
         if (sql.startsWith("UPDATE activities")) return [{ affectedRows: 1 }];
         if (sql.startsWith("INSERT INTO trip_activity_log")) return [{ affectedRows: 1 }];
@@ -1047,16 +1050,21 @@ describe("repository adapters", () => {
     expect(connection.beginTransaction).toHaveBeenCalledOnce();
     expect(connection.execute).toHaveBeenNthCalledWith(
       1,
+      expect.stringContaining("FOR UPDATE"),
+      ["editor-1", "trip-1"]
+    );
+    expect(connection.execute).toHaveBeenNthCalledWith(
+      2,
       expect.stringContaining("revision = revision + 1"),
       ["trip-1", 3]
     );
     expect(connection.execute).toHaveBeenNthCalledWith(
-      2,
+      3,
       expect.stringContaining("UPDATE activities"),
       [420, "activity-1"]
     );
     expect(connection.execute).toHaveBeenNthCalledWith(
-      3,
+      4,
       expect.stringContaining("INSERT INTO trip_activity_log"),
       [
         expect.any(String),
@@ -1080,6 +1088,9 @@ describe("repository adapters", () => {
       rollback: vi.fn(),
       release: vi.fn(),
       execute: vi.fn(async (sql) => {
+        if (sql.includes("FROM trips t")) {
+          return [[{ ownerId: "owner-1", role: "editor", status: "active" }]];
+        }
         if (sql.startsWith("UPDATE trips")) return [{ affectedRows: 1 }];
         if (sql.startsWith("UPDATE activities")) throw failure;
         throw new Error(`Unexpected SQL: ${sql}`);
@@ -1121,6 +1132,9 @@ describe("repository adapters", () => {
       rollback: vi.fn(),
       release: vi.fn(),
       execute: vi.fn(async (sql) => {
+        if (sql.includes("FROM trips t")) {
+          return [[{ ownerId: "owner-1", role: "editor", status: "active" }]];
+        }
         if (sql.startsWith("UPDATE trips")) return [{ affectedRows: 1 }];
         if (sql.startsWith("UPDATE activities")) return [{ affectedRows: 1 }];
         if (sql.startsWith("INSERT INTO trip_activity_log")) throw failure;
@@ -1173,6 +1187,14 @@ describe("repository adapters", () => {
       })]
     };
     repository.trips.set(trip.id, structuredClone(trip));
+    repository.members.set("trip-1:editor-1", {
+      id: "member-editor-1",
+      tripId: "trip-1",
+      userId: "editor-1",
+      role: "editor",
+      status: "active",
+      joinedAt: "2026-08-01T00:00:00.000Z"
+    });
     const failure = new Error("activity log insert failed");
     vi.spyOn(repository, "appendTripActivity").mockRejectedValue(failure);
 
@@ -1204,6 +1226,16 @@ describe("repository adapters", () => {
       revision: 0,
       variants: []
     });
+    for (const editorId of ["editor-1", "editor-2"]) {
+      repository.members.set(`trip-1:${editorId}`, {
+        id: `member-${editorId}`,
+        tripId: "trip-1",
+        userId: editorId,
+        role: "editor",
+        status: "active",
+        joinedAt: "2026-08-01T00:00:00.000Z"
+      });
+    }
 
     const results = await Promise.all([
       repository.updateTrip("trip-1", "editor-1", { title: "First" }, 0),
@@ -1231,6 +1263,16 @@ describe("repository adapters", () => {
       revision: 0,
       variants: []
     });
+    for (const [tripId, editorId] of [["trip-1", "editor-1"], ["trip-2", "editor-2"]]) {
+      repository.members.set(`${tripId}:${editorId}`, {
+        id: `member-${editorId}`,
+        tripId,
+        userId: editorId,
+        role: "editor",
+        status: "active",
+        joinedAt: "2026-08-01T00:00:00.000Z"
+      });
+    }
     let releaseFailure;
     let signalFailureStarted;
     const failureStarted = new Promise((resolve) => {
@@ -1298,6 +1340,9 @@ describe("repository adapters", () => {
       rollback: vi.fn(),
       release: vi.fn(),
       execute: vi.fn(async (sql) => {
+        if (sql.includes("FROM trips t")) {
+          return [[{ ownerId: "owner-1", role: "editor", status: "active" }]];
+        }
         if (sql.startsWith("UPDATE trips")) return [{ affectedRows: 1 }];
         if (sql.startsWith("UPDATE activities")) return [{ affectedRows: 0 }];
         throw new Error(`Unexpected SQL: ${sql}`);
@@ -1331,6 +1376,9 @@ describe("repository adapters", () => {
       rollback: vi.fn(),
       release: vi.fn(),
       execute: vi.fn(async (sql) => {
+        if (sql.includes("FROM trips t")) {
+          return [[{ ownerId: "owner-1", role: "editor", status: "active" }]];
+        }
         if (sql.startsWith("UPDATE trips")) return [{ affectedRows: 0 }];
         throw new Error(`Unexpected SQL: ${sql}`);
       })
@@ -1352,9 +1400,184 @@ describe("repository adapters", () => {
       { estimatedCost: 420 },
       3
     )).resolves.toBeUndefined();
-    expect(connection.execute).toHaveBeenCalledTimes(1);
+    expect(connection.execute).toHaveBeenCalledTimes(2);
     expect(connection.rollback).toHaveBeenCalledOnce();
     expect(connection.commit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["removed", null, "removed", "TRIP_MEMBER_REQUIRED"],
+    ["demoted", "viewer", "active", "TRIP_EDITOR_REQUIRED"]
+  ])("revalidates a %s MySQL editor inside the revision transaction", async (
+    _label,
+    role,
+    status,
+    code
+  ) => {
+    const context = {
+      trip: { id: "trip-1", ownerId: "owner-1", revision: 3 },
+      variant: { id: "variant-1" },
+      day: { id: "day-1" },
+      activity: { id: "activity-1", estimatedCost: 200 }
+    };
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      execute: vi.fn(async (sql) => {
+        if (sql.includes("FROM trips t")) {
+          return [[{ ownerId: "owner-1", role, status }]];
+        }
+        if (sql.startsWith("UPDATE trips")) return [{ affectedRows: 1 }];
+        if (sql.startsWith("UPDATE activities")) return [{ affectedRows: 1 }];
+        throw new Error(`Unexpected SQL: ${sql}`);
+      })
+    };
+    const repository = new MySqlRepository({
+      getConnection: vi.fn(async () => connection),
+      query: vi.fn()
+    });
+    vi.spyOn(repository, "findActivityContext").mockResolvedValue(context);
+
+    await expect(repository.updateActivity(
+      "activity-1",
+      "editor-1",
+      { estimatedCost: 420 },
+      3
+    )).rejects.toMatchObject({ status: 403, code });
+    expect(connection.execute.mock.calls.some(([sql]) =>
+      sql.startsWith("UPDATE trips") || sql.startsWith("UPDATE activities")
+    )).toBe(false);
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(connection.rollback).toHaveBeenCalledOnce();
+  });
+
+  it.each(["create", "revoke", "accept", "decline", "role", "remove"])(
+    "rolls back a MySQL collaboration %s when its audit insert fails",
+    async (operation) => {
+      const failure = new Error("activity log insert failed");
+      const invitation = {
+        id: "invite-1",
+        tripId: "trip-1",
+        tokenHash: "a".repeat(64),
+        role: "editor",
+        status: "pending",
+        invitedByUserId: "owner-1",
+        acceptedByUserId: null,
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        createdAt: "2026-08-01T00:00:00.000Z",
+        acceptedAt: null,
+        ownerId: "owner-1"
+      };
+      const member = {
+        id: "member-1",
+        tripId: "trip-1",
+        userId: "member-1",
+        name: "Member",
+        role: operation === "role" ? "viewer" : "editor",
+        status: operation === "remove" ? "removed" : "active",
+        joinedAt: "2026-08-01T00:00:00.000Z",
+        removedAt: operation === "remove" ? "2026-08-02T00:00:00.000Z" : null
+      };
+      const connection = {
+        beginTransaction: vi.fn(),
+        commit: vi.fn(),
+        rollback: vi.fn(),
+        release: vi.fn(),
+        execute: vi.fn(async (sql) => {
+          if (sql.startsWith("INSERT INTO trip_activity_log")) throw failure;
+          if (sql.startsWith("INSERT INTO trip_invitations")) return [{ affectedRows: 1 }];
+          if (sql.includes("FROM trip_invitations i")) return [[invitation]];
+          if (sql.includes("FROM trip_invitations")) return [[invitation]];
+          if (sql.startsWith("UPDATE trip_invitations")) return [{ affectedRows: 1 }];
+          if (sql.startsWith("INSERT INTO trip_members")) return [{ affectedRows: 1 }];
+          if (sql.startsWith("UPDATE trip_members")) return [{ affectedRows: 1 }];
+          if (sql.includes("FROM trip_members m")) return [[member]];
+          throw new Error(`Unexpected SQL: ${sql}`);
+        })
+      };
+      const pool = {
+        getConnection: vi.fn(async () => connection),
+        execute: vi.fn(async () => { throw new Error("mutation escaped transaction"); }),
+        query: vi.fn()
+      };
+      const repository = new MySqlRepository(pool);
+      const audit = {
+        action: `collaboration.${operation}`,
+        entityType: operation === "role" || operation === "remove" ? "member" : "invitation",
+        summary: {}
+      };
+
+      const mutation = operation === "create"
+        ? repository.createInvitation({
+            ...invitation,
+            acceptedByUserId: undefined,
+            acceptedAt: undefined
+          }, "owner-1", audit)
+        : operation === "revoke" || operation === "decline"
+          ? repository.updateInvitation(
+              "invite-1",
+              "trip-1",
+              { status: operation === "revoke" ? "revoked" : "declined" },
+              { expectedStatuses: ["pending"], requireUnexpired: true },
+              operation === "revoke" ? "owner-1" : "member-1",
+              audit
+            )
+          : operation === "accept"
+            ? repository.acceptInvitation("invite-1", "member-1", audit)
+            : operation === "role"
+              ? repository.updateMember("trip-1", "member-1", "viewer", "owner-1", audit)
+              : repository.removeMember("trip-1", "member-1", "owner-1", audit);
+
+      await expect(mutation).rejects.toBe(failure);
+      expect(pool.execute).not.toHaveBeenCalled();
+      expect(connection.commit).not.toHaveBeenCalled();
+      expect(connection.rollback).toHaveBeenCalledOnce();
+      expect(connection.release).toHaveBeenCalledOnce();
+    }
+  );
+
+  it("commits a MySQL invitation and its audit in one transaction", async () => {
+    const invitation = {
+      id: "invite-1",
+      tripId: "trip-1",
+      tokenHash: "a".repeat(64),
+      role: "editor",
+      status: "pending",
+      invitedByUserId: "owner-1",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      createdAt: "2026-08-01T00:00:00.000Z"
+    };
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      execute: vi.fn(async (sql) => {
+        if (sql.startsWith("INSERT INTO trip_invitations")) return [{ affectedRows: 1 }];
+        if (sql.includes("FROM trip_invitations")) return [[invitation]];
+        if (sql.startsWith("INSERT INTO trip_activity_log")) return [{ affectedRows: 1 }];
+        throw new Error(`Unexpected SQL: ${sql}`);
+      })
+    };
+    const repository = new MySqlRepository({
+      getConnection: vi.fn(async () => connection),
+      execute: vi.fn(async () => { throw new Error("mutation escaped transaction"); }),
+      query: vi.fn()
+    });
+
+    await expect(repository.createInvitation(
+      invitation,
+      "owner-1",
+      { action: "invitation.created", entityType: "invitation", summary: { role: "editor" } }
+    )).resolves.toMatchObject({ id: "invite-1" });
+    expect(connection.execute).toHaveBeenCalledWith(
+      expect.stringContaining("INSERT INTO trip_activity_log"),
+      expect.arrayContaining(["trip-1", "owner-1", "invitation.created", "invite-1"])
+    );
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(connection.rollback).not.toHaveBeenCalled();
   });
 
   it("persists grounded activity provenance through the MySQL adapter", async () => {

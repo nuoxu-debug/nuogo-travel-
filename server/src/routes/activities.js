@@ -134,7 +134,9 @@ export function createActivitiesRouter({
       const patch = Object.fromEntries(
         allowed.filter((key) => req.body[key] !== undefined).map((key) => [key, req.body[key]])
       );
-      if (patch.estimatedCost !== undefined) patch.estimatedCost = Number(patch.estimatedCost);
+      if (typeof patch.estimatedCost === "string" && patch.estimatedCost.trim()) {
+        patch.estimatedCost = Number(patch.estimatedCost);
+      }
       const current = await repository.findActivityContext(req.params.activityId);
       await authorizeContext(repository, current, req.user.id);
       if (!Object.keys(patch).length) {
@@ -161,6 +163,8 @@ export function createActivitiesRouter({
         patch.visitDetails = undefined;
         if (patch.location !== undefined) patch.locationIsEstimated = undefined;
       }
+      const validated = activitySchema.parse({ ...current.activity, ...patch });
+      for (const key of Object.keys(patch)) patch[key] = validated[key];
       const context = await repository.updateActivity(
         req.params.activityId,
         req.user.id,

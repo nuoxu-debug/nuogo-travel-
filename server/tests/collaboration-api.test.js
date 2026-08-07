@@ -13,6 +13,7 @@ describe("trip invitation and member API", () => {
   let member;
   let unrelated;
   let tripId;
+  let planProvider;
   const approvedAttractions = Array.from({ length: 6 }, (_, index) => ({
     id: `approved-${index}`,
     externalId: `poi-${index}`,
@@ -57,9 +58,10 @@ describe("trip invitation and member API", () => {
 
   beforeEach(async () => {
     repository = new MemoryRepository();
+    planProvider = new DemoPlanProvider();
     app = createApp({
       repository,
-      planProvider: new DemoPlanProvider(),
+      planProvider,
       attractionCatalogue: { listApproved: () => approvedAttractions },
       config: {
         jwtSecret: "test-secret-with-enough-length",
@@ -491,6 +493,124 @@ describe("trip invitation and member API", () => {
       "trip.variant_selected"
     ]));
   });
+
+  it.each([
+    ["removed", "TRIP_MEMBER_REQUIRED"],
+    ["demoted", "TRIP_EDITOR_REQUIRED"]
+  ])("rejects an in-flight regeneration after its editor is %s", async (change, code) => {
+    const { accepted } = await acceptInvitation(member, "editor");
+    const trip = await repository.getTrip(tripId);
+    const day = trip.variants[0].days[0];
+    const originalGenerate = planProvider.generate.bind(planProvider);
+    let signalStarted;
+    let releaseGeneration;
+    const started = new Promise((resolve) => { signalStarted = resolve; });
+    const released = new Promise((resolve) => { releaseGeneration = resolve; });
+    planProvider.generate = vi.fn(async (...args) => {
+      signalStarted();
+      await released;
+      return originalGenerate(...args);
+    });
+
+    const regeneration = request(app)
+      .post(`/api/trips/${tripId}/days/${day.id}/regenerate`)
+      .set(member.auth)
+      .send({ expectedRevision: 0 })
+      .then((response) => response);
+    await started;
+
+    const membershipPath = `/api/trips/${tripId}/members/${accepted.body.membership.id}`;
+    if (change === "removed") {
+      await request(app).delete(membershipPath).set(owner.auth).expect(200);
+    } else {
+      await request(app).patch(membershipPath).set(owner.auth).send({ role: "viewer" }).expect(200);
+    }
+    releaseGeneration();
+
+    const response = await regeneration;
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe(code);
+    expect(await repository.getTrip(tripId)).toMatchObject({ revision: 0 });
+    expect((await repository.listTripActivity(tripId, 50))
+      .some(({ action }) => action === "day.regenerated")).toBe(false);
+  });
+
+  it.each([
+    ["non-finite cost", { estimatedCost: "not-a-number" }],
+    ["out-of-range coordinates", { location: { longitude: 999, latitude: 30 } }],
+    ["malformed bilingual text", { name: { en: "", zh: "有效名称" } }],
+    ["invalid time", { startTime: "25:00" }],
+    ["incomplete guide object", { guide: { culture: { en: "Culture", zh: "文化" } } }]
+  ])("rejects a %s activity patch without mutating or auditing", async (_label, patch) => {
+    await acceptInvitation(member, "editor");
+    const trip = await repository.getTrip(tripId);
+    const activity = trip.variants[0].days[0].activities[0];
+    const beforeActivity = structuredClone(activity);
+    const beforeLog = await repository.listTripActivity(tripId, 50);
+    const update = vi.spyOn(repository, "updateActivity");
+
+    await request(app)
+      .patch(`/api/activities/${activity.id}`)
+      .set(member.auth)
+      .send({ expectedRevision: 0, ...patch })
+      .expect(400)
+      .expect(({ body }) => expect(body.error.code).toBe("VALIDATION_ERROR"));
+
+    expect(update).not.toHaveBeenCalled();
+    expect(await repository.getTrip(tripId)).toMatchObject({ revision: 0 });
+    expect((await repository.findActivityContext(activity.id)).activity).toEqual(beforeActivity);
+    expect(await repository.listTripActivity(tripId, 50)).toEqual(beforeLog);
+  });
+
+  it.each(["create", "revoke", "accept", "decline", "role", "remove"])(
+    "rolls back collaboration %s when its audit write fails",
+    async (operation) => {
+      let invitation;
+      let membership;
+      if (operation !== "create") {
+        const created = await createInvitation("editor");
+        invitation = await repository.getInvitationByTokenHash(
+          hashInvitationToken(created.body.token)
+        );
+        invitation.token = created.body.token;
+        if (operation === "role" || operation === "remove") {
+          const accepted = await request(app)
+            .post(`/api/invitations/${created.body.token}/accept`)
+            .set(member.auth)
+            .expect(200);
+          membership = accepted.body.membership;
+        }
+      }
+      const invitationsBefore = await repository.listInvitations(tripId);
+      const membersBefore = await repository.listMembers(tripId);
+      const logBefore = await repository.listTripActivity(tripId, 50);
+      const failure = new Error("activity log insert failed");
+      vi.spyOn(repository, "appendTripActivity").mockRejectedValue(failure);
+
+      const operationRequest = operation === "create"
+        ? request(app).post(`/api/trips/${tripId}/invitations`)
+            .set(owner.auth).send({ role: "viewer" })
+        : operation === "revoke"
+          ? request(app).delete(`/api/trips/${tripId}/invitations/${invitation.id}`)
+              .set(owner.auth)
+          : operation === "accept"
+            ? request(app).post(`/api/invitations/${invitation.token}/accept`)
+                .set(member.auth)
+            : operation === "decline"
+              ? request(app).post(`/api/invitations/${invitation.token}/decline`)
+                  .set(member.auth)
+              : operation === "role"
+                ? request(app).patch(`/api/trips/${tripId}/members/${membership.id}`)
+                    .set(owner.auth).send({ role: "viewer" })
+                : request(app).delete(`/api/trips/${tripId}/members/${membership.id}`)
+                    .set(owner.auth);
+
+      await operationRequest.expect(500);
+      expect(await repository.listInvitations(tripId)).toEqual(invitationsBefore);
+      expect(await repository.listMembers(tripId)).toEqual(membersBefore);
+      expect(await repository.listTripActivity(tripId, 50)).toEqual(logBefore);
+    }
+  );
 
   it("rejects empty activity and trip patches without consuming a revision or logging", async () => {
     const initial = await repository.getTrip(tripId);
