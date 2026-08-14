@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { tripRevisionSchema } from "@nuogo/shared/schemas";
+import { travelPreferenceSchema, tripRevisionSchema } from "@nuogo/shared/schemas";
 import { generateThreePlans } from "../services/generator.js";
 import { getTripAccess, requireTripRole } from "../services/tripAccess.js";
 import { validatePreferences } from "../services/validation.js";
@@ -50,6 +50,7 @@ async function accessFor(repository, tripId, userId, roles) {
 export function createTripsRouter({
   repository,
   planProvider,
+  objectivePlanner,
   attractionCatalogue,
   authenticate
 }) {
@@ -58,6 +59,14 @@ export function createTripsRouter({
 
   router.post("/generate", async (req, res, next) => {
     try {
+      if (req.body?.totalBudgetCny !== undefined) {
+        if (!objectivePlanner) throw Object.assign(new Error("Validated planning is unavailable."), {
+          code: "PLANNER_UNAVAILABLE",
+          status: 503
+        });
+        const result = await objectivePlanner(travelPreferenceSchema.parse(req.body));
+        return res.status(result.state === "FINAL_VALIDATED" ? 201 : 422).json(result);
+      }
       const preferences = validatePreferences(req.body);
       const attractions = attractionCatalogue?.listApproved(preferences.destination) ?? [];
       if (preferences.destination === "huangshan" && attractions.length === 0) {

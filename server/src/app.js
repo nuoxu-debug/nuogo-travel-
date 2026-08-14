@@ -19,6 +19,7 @@ import { AuthService } from "./services/authService.js";
 export function createApp({
   repository,
   planProvider,
+  objectivePlanner,
   attractionCatalogue,
   attractionMediaService,
   config,
@@ -67,6 +68,7 @@ export function createApp({
   app.use("/api/trips", createTripsRouter({
     repository,
     planProvider,
+    objectivePlanner,
     attractionCatalogue,
     authenticate
   }));

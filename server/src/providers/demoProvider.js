@@ -528,6 +528,48 @@ function distributeHuangshanByCluster(pool, preferences, style, maxAttractionsPe
  * contract so the entire triple-plan workflow remains presentable offline.
  */
 export class DemoPlanProvider {
+  async generateStructured({ user }) {
+    const payload = JSON.parse(user);
+    const data = payload.UNTRUSTED_USER_DATA ?? payload.UNTRUSTED_REPAIR_DATA;
+    const source = data.preferences ? data.preferences : data.draft.trip;
+    const profile = data.profile ?? data.draft.variant;
+    const candidateIds = data.allowedCandidateIds;
+    const profileOffset = ["BUDGET_SAVING", "BALANCED", "COMFORT_FOCUSED"].indexOf(profile);
+    const dayCount = Math.round(
+      (new Date(`${source.endDate}T00:00:00Z`) - new Date(`${source.startDate}T00:00:00Z`)) / 86_400_000
+    ) + 1;
+    if (candidateIds.length < dayCount) throw new Error("The demo candidate pool is too small for this trip duration.");
+    return JSON.stringify({
+      variant: profile,
+      trip: {
+        origin: source.origin,
+        destination: source.destination,
+        startDate: source.startDate,
+        endDate: source.endDate,
+        travellerCount: source.travellerCount,
+        totalBudgetCny: source.totalBudgetCny
+      },
+      days: Array.from({ length: dayCount }, (_, index) => ({
+        dayNumber: index + 1,
+        date: addDays(source.startDate, index),
+        startPoint: index === 0
+          ? { locationId: "origin", locationType: "ORIGIN" }
+          : { locationId: "hotel", locationType: "HOTEL" },
+        activities: [{
+          sequence: 1,
+          poiId: candidateIds[(profileOffset + index) % candidateIds.length],
+          activityType: index % 2 ? "FOOD" : "HISTORY",
+          plannedStartTime: "10:00",
+          plannedDurationMinutes: profile === "COMFORT_FOCUSED" ? 75 : 90,
+          reason: "Grounded demo stop selected for this spending profile."
+        }],
+        endPoint: index === dayCount - 1
+          ? { locationId: "destination", locationType: "DESTINATION" }
+          : { locationId: "hotel", locationType: "HOTEL" }
+      }))
+    });
+  }
+
   async generate(preferences, style, context = {}) {
     const meta = styleMeta[style];
     const city = getCity(preferences.destination);

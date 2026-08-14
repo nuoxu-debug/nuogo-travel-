@@ -1,0 +1,240 @@
+import { describe, expect, it, vi } from "vitest";
+import request from "supertest";
+import { createApp } from "../src/app.js";
+import { MemoryRepository } from "../src/repositories/memory.js";
+import { spendingProfileIds } from "../src/services/budget/spendingProfiles.js";
+import { generateValidatedTrip } from "../src/services/itinerary/generateValidatedTrip.js";
+
+const centres = {
+  beijing: { longitude: 116.4074, latitude: 39.9042 },
+  shanghai: { longitude: 121.4737, latitude: 31.2304 },
+  xian: { longitude: 108.9398, latitude: 34.3416 }
+};
+
+function preferences(destination = "beijing", overrides = {}) {
+  return {
+    origin: "Main railway station",
+    destination,
+    startDate: "2026-10-10",
+    endDate: "2026-10-11",
+    travellerCount: 2,
+    totalBudgetCny: 5000,
+    interests: ["HISTORY", "FOOD"],
+    preferredSights: [],
+    accommodationPreference: "MID_RANGE",
+    foodPreference: "LOCAL",
+    localTransportPreference: "PUBLIC_TRANSIT",
+    activityPreferences: ["HISTORY", "FOOD"],
+    arrivalDateTime: "2026-10-10T08:00:00+08:00",
+    departureDateTime: "2026-10-11T20:00:00+08:00",
+    outboundTransportMode: "TRAIN",
+    returnTransportMode: "TRAIN",
+    outboundTransportCostCny: 300,
+    returnTransportCostCny: 300,
+    otherPreferences: "",
+    language: "en",
+    consentToLlmProcessing: true,
+    ...overrides
+  };
+}
+
+function rawPois(city) {
+  const { longitude, latitude } = centres[city];
+  return Array.from({ length: 4 }, (_, index) => ({
+    id: `${city}-poi-${index + 1}`,
+    name: `${city} place ${index + 1}`,
+    category: index === 3 ? "RESTAURANT" : "ATTRACTION",
+    typecode: index === 3 ? "050000" : "110000",
+    address: city,
+    cityname: city,
+    location: `${longitude + index * 0.006},${latitude + index * 0.004}`,
+    retrievedAt: "2026-08-14T00:00:00.000Z"
+  }));
+}
+
+function draftProvider() {
+  return {
+    generateStructured: vi.fn(async ({ user }) => {
+      const data = JSON.parse(user).UNTRUSTED_USER_DATA ?? JSON.parse(user).UNTRUSTED_REPAIR_DATA;
+      const request = data.preferences ? data : data.draft;
+      const profile = data.profile ?? request.variant;
+      const ids = data.allowedCandidateIds;
+      const offset = spendingProfileIds.indexOf(profile);
+      return JSON.stringify({
+        variant: profile,
+        trip: {
+          origin: request.preferences?.origin ?? request.trip.origin,
+          destination: request.preferences?.destination ?? request.trip.destination,
+          startDate: request.preferences?.startDate ?? request.trip.startDate,
+          endDate: request.preferences?.endDate ?? request.trip.endDate,
+          travellerCount: request.preferences?.travellerCount ?? request.trip.travellerCount,
+          totalBudgetCny: request.preferences?.totalBudgetCny ?? request.trip.totalBudgetCny
+        },
+        days: [
+          {
+            dayNumber: 1,
+            date: "2026-10-10",
+            startPoint: { locationId: "origin", locationType: "ORIGIN" },
+            activities: [{
+              sequence: 1,
+              poiId: ids[offset],
+              activityType: "HISTORY",
+              plannedStartTime: "10:00",
+              plannedDurationMinutes: 90,
+              reason: "Profile-specific grounded stop."
+            }],
+            endPoint: { locationId: "hotel", locationType: "HOTEL" }
+          },
+          {
+            dayNumber: 2,
+            date: "2026-10-11",
+            startPoint: { locationId: "hotel", locationType: "HOTEL" },
+            activities: [{
+              sequence: 1,
+              poiId: ids[(offset + 1) % ids.length],
+              activityType: "FOOD",
+              plannedStartTime: "10:00",
+              plannedDurationMinutes: 60,
+              reason: "Nearby local meal."
+            }],
+            endPoint: { locationId: "destination", locationType: "DESTINATION" }
+          }
+        ]
+      });
+    })
+  };
+}
+
+const references = {
+  accommodationRoomNightFen: 20_000,
+  foodPersonMealFen: 2_000,
+  attractionPersonEntryFen: 3_000,
+  entertainmentPersonEntryFen: 3_000,
+  otherTripFen: 2_000,
+  fuelLitreFen: 800,
+  parkingDayFen: 2_000,
+  provenance: {}
+};
+
+function dependencies(overrides = {}) {
+  const travelProvider = {
+    searchPois: vi.fn(async ({ city }) => rawPois(city)),
+    enrichTourism: vi.fn(async () => []),
+    getRoute: vi.fn(async ({ mode }) => ({
+      provider: "DEMO",
+      mode,
+      distanceMeters: 1200,
+      durationSeconds: 300,
+      tollsCny: 0,
+      taxiCostCny: 12,
+      retrievedAt: "2026-08-14T00:00:00.000Z"
+    }))
+  };
+  return {
+    travelProvider,
+    llmProvider: draftProvider(),
+    getCostReferences: vi.fn(async () => references),
+    resolveAnchors: vi.fn(async ({ destination }) => ({
+      origin: centres[destination],
+      hotel: centres[destination],
+      destination: centres[destination]
+    })),
+    saveRun: vi.fn(async (run) => run),
+    now: () => "2026-08-14T00:00:00.000Z",
+    ...overrides
+  };
+}
+
+describe("objective-aligned trip generation", () => {
+  for (const city of ["beijing", "shanghai", "xian"]) {
+    it(`generates three independently validated hard-budget variants for ${city}`, async () => {
+      const result = await generateValidatedTrip(preferences(city), dependencies());
+
+      expect(result.state).toBe("FINAL_VALIDATED");
+      expect(result.variants.map(({ itinerary }) => itinerary.variant)).toEqual(spendingProfileIds);
+      expect(new Set(result.variants.map(({ itinerary }) => itinerary.days[0].activities[0].poiId)).size).toBe(3);
+      for (const variant of result.variants) {
+        expect(variant.state).toBe("FINAL_VALIDATED");
+        expect(variant.validation.valid).toBe(true);
+        expect(variant.summary.budgetFen).toBe(500_000);
+        expect(variant.summary.totalFen).toBeLessThanOrEqual(500_000);
+      }
+    });
+  }
+
+  it("derives outbound driving cost without relaxing the shared budget", async () => {
+    const deps = dependencies({
+      resolveDrivingLeg: vi.fn(async () => ({ distanceKm: 120, tollCny: 30, parkingCny: 0 }))
+    });
+    const result = await generateValidatedTrip(preferences("beijing", {
+      outboundTransportMode: "DRIVING",
+      outboundTransportCostCny: undefined,
+      fuelConsumptionLitresPer100Km: 8
+    }), deps);
+
+    expect(deps.resolveDrivingLeg).toHaveBeenCalledWith(expect.objectContaining({ direction: "outbound" }));
+    expect(result.variants[0].summary.categoriesFen.outboundTransport).toBe(10_680);
+  });
+
+  it("returns and records a safe failure when the budget is impossible", async () => {
+    const deps = dependencies();
+    const result = await generateValidatedTrip(preferences("beijing", { totalBudgetCny: 100 }), deps);
+
+    expect(result.state).toBe("FAILED");
+    expect(result.variants.every(({ state }) => state === "FAILED")).toBe(true);
+    expect(result.variants.flatMap(({ validation }) => validation.issues)
+      .some(({ code }) => code === "BUDGET_EXCEEDED")).toBe(true);
+    expect(deps.saveRun).toHaveBeenCalledWith(expect.objectContaining({ state: "FAILED" }));
+  });
+
+  it("fails closed and records the provider code when travel data is unavailable", async () => {
+    const deps = dependencies({
+      travelProvider: {
+        searchPois: vi.fn().mockRejectedValue(Object.assign(new Error("offline"), { code: "PROVIDER_UNAVAILABLE" }))
+      }
+    });
+    const result = await generateValidatedTrip(preferences(), deps);
+
+    expect(result).toMatchObject({ state: "FAILED", variants: [] });
+    expect(result.validation.issues).toEqual([
+      expect.objectContaining({ code: "PROVIDER_UNAVAILABLE", severity: "ERROR" })
+    ]);
+    expect(deps.saveRun).toHaveBeenCalledWith(expect.objectContaining({ state: "FAILED" }));
+  });
+
+  it("routes the new preference schema through the validated planner", async () => {
+    const objectivePlanner = vi.fn(async (input) => ({
+      state: "FINAL_VALIDATED",
+      trip: { id: "objective-trip", destination: input.destination },
+      variants: [],
+      validation: { valid: true, issues: [] }
+    }));
+    const app = createApp({
+      repository: new MemoryRepository(),
+      planProvider: {},
+      objectivePlanner,
+      attractionCatalogue: { listApproved: () => [] },
+      config: {
+        jwtSecret: "test-secret-with-enough-length",
+        demoMode: true,
+        aiProvider: "demo",
+        clientOrigin: "http://localhost:5173"
+      }
+    });
+    const auth = await request(app).post("/api/auth/register").send({
+      name: "Objective Student",
+      email: "objective@nuogo.test",
+      password: "Nuogo123!"
+    });
+    const response = await request(app).post("/api/trips/generate")
+      .set("Authorization", `Bearer ${auth.body.token}`)
+      .send(preferences())
+      .expect(201);
+
+    expect(response.body.trip.id).toBe("objective-trip");
+    expect(objectivePlanner).toHaveBeenCalledWith(expect.objectContaining({
+      destination: "beijing",
+      totalBudgetCny: 5000
+    }));
+  });
+});

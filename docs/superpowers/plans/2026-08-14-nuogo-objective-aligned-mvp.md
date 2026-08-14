@@ -222,11 +222,11 @@
 - `generateValidatedTrip(preferences, dependencies) -> { trip, variants, validation }`
 - Each variant independently runs candidate selection, draft, enrichment, deterministic cost, validation, repair, and final persistence.
 
-- [ ] **Step 1: Write failing Beijing, Shanghai, Xi'an, driving, impossible-budget, and provider-failure integration tests.**
-- [ ] **Step 2: Verify red.**
-- [ ] **Step 3: Wire the production pipeline in the required order** and persist only final validated variants or a safe failed-generation record.
-- [ ] **Step 4: Verify green and assert every accepted total is within the same user budget.**
-- [ ] **Step 5: Commit** with `feat(planning): orchestrate grounded hard-budget variants`.
+- [x] **Step 1: Write failing Beijing, Shanghai, Xi'an, driving, impossible-budget, and provider-failure integration tests.**
+- [x] **Step 2: Verify red.**
+- [x] **Step 3: Wire the production pipeline in the required order** and persist only final validated variants or a safe failed-generation record.
+- [x] **Step 4: Verify green and assert every accepted total is within the same user budget.**
+- [x] **Step 5: Commit** with `feat(planning): orchestrate grounded hard-budget variants`.
 
 ### Task 11: Administration API
 

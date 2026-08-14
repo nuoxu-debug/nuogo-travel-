@@ -3,6 +3,8 @@ import { getCity } from "@nuogo/shared/constants";
 import { parseItinerary } from "./parser.js";
 import { validateGroundedItinerary } from "./grounding.js";
 
+export { generateValidatedTrip } from "./itinerary/generateValidatedTrip.js";
+
 const styles = ["budget", "food", "leisure"];
 
 function addDays(dateString, offset) {
@@ -79,6 +81,7 @@ async function generateStyle(preferences, style, provider, retries, attractions)
  * FYP novelty: all three planning styles begin concurrently and fail
  * independently, reducing wait time without discarding successful variants.
  */
+// Legacy compatibility for the pre-objective UI. New planning requests use generateValidatedTrip.
 export async function generateThreePlans(preferences, provider, options = {}) {
   const retries = Math.max(1, Math.min(3, options.retries ?? 3));
   const tripId = preferences.tripId ?? randomUUID();
