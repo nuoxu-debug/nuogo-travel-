@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Deliver the current three FYP objectives as a secure, grounded, hard-budget travel planner for Beijing, Shanghai, and Xi'an, while rebuilding Nuogo's interface as a modern animated travel product with GSAP and a purposeful Three.js route globe.
+**Goal:** Deliver the current three FYP objectives as a secure, grounded, hard-budget travel planner for Beijing, Shanghai, and Xi'an, while rebuilding Nuogo's interface as a modern animated travel product with GSAP and a scroll-driven journey atlas.
 
 **Architecture:** Preserve the `client`/`server`/`shared` workspaces, Zod contract boundary, Express application, repository modes, and reusable itinerary UI. Add narrow domain services for canonical POIs, external providers, routing, deterministic costing, validation, repair, and provenance; the orchestration service is the only layer allowed to combine them. The browser renders validated DTOs and never calls AMap, OpenTripMap, or OpenRouter directly.
 
-**Tech Stack:** React 18, Vite, Tailwind CSS, GSAP, Three.js, Leaflet/OpenStreetMap, Node.js, Express, Zod, MySQL/mysql2, SQL.js test/demo adapter, OpenRouter, AMap, OpenTripMap, Vitest, Supertest, Playwright.
+**Tech Stack:** React 18, Vite, Tailwind CSS, GSAP, Leaflet/OpenStreetMap, Node.js, Express, Zod, MySQL/mysql2, SQL.js test/demo adapter, OpenRouter, AMap, OpenTripMap, Vitest, Supertest, Playwright.
 
 ## Global Constraints
 
@@ -18,7 +18,7 @@
 - API keys remain server-side, environment-configured, absent from logs, frontend bundles, and tracked credentials.
 - Only `FINAL_VALIDATED` itineraries are presented as completed.
 - No advanced route optimisation, booking, payment, live fares, weather, traffic, or human tour-guide feature is introduced.
-- GSAP motion communicates sequence/state and respects `prefers-reduced-motion`; Three.js is full-bleed, responsive, performant, and has a semantic static fallback.
+- GSAP motion communicates sequence/state and respects `prefers-reduced-motion`; the landing journey atlas uses generic departure/stop labels and presentation-only generated artwork.
 
 ---
 
@@ -34,11 +34,11 @@
 - Produces: `spendingProfiles`, `supportedDestinations`, `travelPreferenceSchema`, `canonicalPoiSchema`, `tripLegSchema`, `itineraryDraftSchema`, `finalItinerarySchema`.
 - Consumes: Existing bilingual text and activity conventions where still useful.
 
-- [ ] **Step 1: Write failing contract tests** for all mandatory preference fields, exact three-city validation, three profile values, canonical provenance, trip-leg source fields, and strict rejection of LLM-authored costs/coordinates.
-- [ ] **Step 2: Run `npm --workspace shared test`** and confirm failures are caused by missing exports/contracts.
-- [ ] **Step 3: Implement the Zod contracts** with strict objects and a JSON Schema export for the raw itinerary draft. The draft activity contains `poiId`, sequence, duration, reason, and requested activity type only.
-- [ ] **Step 4: Run `npm --workspace shared test`** and confirm all shared tests pass.
-- [ ] **Step 5: Commit** with `feat(shared): define objective-aligned travel contracts`.
+- [x] **Step 1: Write failing contract tests** for all mandatory preference fields, exact three-city validation, three profile values, canonical provenance, trip-leg source fields, and strict rejection of LLM-authored costs/coordinates.
+- [x] **Step 2: Run `npm --workspace shared test`** and confirm failures are caused by missing exports/contracts.
+- [x] **Step 3: Implement the Zod contracts** with strict objects and a JSON Schema export for the raw itinerary draft. The draft activity contains `poiId`, sequence, duration, reason, and requested activity type only.
+- [x] **Step 4: Run `npm --workspace shared test`** and confirm all shared tests pass.
+- [x] **Step 5: Commit** with `feat(shared): define objective-aligned travel contracts`.
 
 ### Task 2: Security and Privacy Foundation
 
@@ -242,7 +242,7 @@
 - [ ] **Step 4: Verify green.**
 - [ ] **Step 5: Commit** with `feat(admin): manage travel reference data`.
 
-### Task 12: New Visual System, GSAP Motion, and Three.js Route Globe
+### Task 12: New Visual System, GSAP Motion, and Scroll-Driven Journey Atlas
 
 **Files:**
 - Modify: `DESIGN.md`
@@ -250,22 +250,22 @@
 - Modify: `client/src/styles/index.css`
 - Modify: `client/tailwind.config.js`
 - Create: `client/src/motion/useGsapContext.js`
-- Create: `client/src/components/TravelGlobe.jsx`
+- Create: `client/src/components/ScrollJourneyMap.jsx`
 - Create: `client/src/components/RouteConstellation.jsx`
 - Modify: `client/src/layout/AppShell.jsx`
 - Modify: `client/src/pages/LandingPage.jsx`
-- Create: `client/tests/travel-globe.test.jsx`
+- Create: `client/tests/landing-flight-atlas.test.jsx`
 - Modify: `client/tests/motion-components.test.jsx`
 
 **Interfaces:**
-- `TravelGlobe({ routes, activeCity, reducedMotion })` renders an accessible fallback plus a full-bleed Three.js scene when WebGL is available.
+- `ScrollJourneyMap()` renders a responsive journey route with generic waypoints and a semantic reduced-motion state.
 - GSAP contexts clean up on unmount and all timeline content is visible immediately under reduced motion.
 
-- [ ] **Step 1: Write failing component tests** for semantic fallback, canvas lifecycle, route labels, reduced motion, cleanup, and keyboard-safe content.
-- [ ] **Step 2: Verify red.**
-- [ ] **Step 3: Install `gsap` and `three`, record the Flight Atlas design system, and implement the globe** with a low-poly illuminated Earth, restrained route arcs, city beacons, pointer parallax, resize/dispose cleanup, and static fallback.
-- [ ] **Step 4: Rebuild landing and shell** around the full-bleed globe, route typography, journey status strip, and GSAP scroll choreography without nested decorative cards.
-- [ ] **Step 5: Verify component/full client tests and commit** with `feat(ui): introduce animated Flight Atlas visual system`.
+- [x] **Step 1: Write failing component and browser tests** for generic route labels, reduced motion, cleanup, nonblank artwork, route progress, responsive overflow, and keyboard-safe content.
+- [x] **Step 2: Verify red.**
+- [x] **Step 3: Install `gsap`, record the Living Journey Atlas design system, and implement the pinned map** with route drawing, active waypoints, a moving plane, image parallax, and a static reduced-motion state.
+- [x] **Step 4: Rebuild the landing page** around real China imagery, route typography, a daylight journey map, and GSAP scroll choreography without nested decorative cards or named showcase cities.
+- [x] **Step 5: Verify component/full client and Playwright tests and commit** with `feat(ui): add animated China journey atlas`.
 
 ### Task 13: Planner, Comparison, and Generation States
 
@@ -349,7 +349,7 @@
 - [ ] **Step 2: Run E2E and verify red against missing final UI behaviors.**
 - [ ] **Step 3: Implement fixtures/configuration and add lint/CI scripts.**
 - [ ] **Step 4: Run `npm test`, `npm run build`, `npm run lint`, `npm run test:e2e`, `npm audit`, and `npm audit --omit=dev`.**
-- [ ] **Step 5: Start the app and inspect desktop/mobile screenshots plus Three.js canvas pixels, resize, interaction, reduced motion, overlap, localization, and console/network errors.**
+- [ ] **Step 5: Start the app and inspect desktop/mobile screenshots plus journey-map pixels, resize, interaction, reduced motion, overlap, localization, and console/network errors.**
 - [ ] **Step 6: Run the Impeccable detector once across changed UI targets and resolve valid findings.**
 - [ ] **Step 7: Record live-provider verification separately; never claim it passed without keys and executed evidence.**
 - [ ] **Step 8: Commit** with `chore: verify objective-aligned Nuogo MVP`.
