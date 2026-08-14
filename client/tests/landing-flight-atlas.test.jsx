@@ -33,6 +33,11 @@ describe("Flight Atlas landing experience", () => {
       .toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Your journey, drawn as you move/i }))
       .toBeInTheDocument();
+    expect(screen.getByTestId("living-atlas")).toHaveAttribute("data-scene-state", "reduced");
+    expect(screen.getByTestId("journey-scene-fallback")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Journey progress" }))
+      .toHaveAttribute("value", "100");
+    expect(screen.getByTestId("living-atlas").querySelectorAll("canvas")).toHaveLength(0);
   });
 
   it("explains the three spending approaches without claiming live prices", () => {

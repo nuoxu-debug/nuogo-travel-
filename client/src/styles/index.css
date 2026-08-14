@@ -340,45 +340,22 @@ body {
 .journey-map-sticky {
   height: 100svh;
   min-height: 700px;
-  background: var(--nuogo-night);
+  background: #dff4f0;
 }
 
 .journey-map-sticky {
   position: relative;
   overflow: hidden;
-  color: white;
-}
-
-.journey-map-art,
-.journey-map-shade,
-.journey-map-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.journey-map-art {
-  object-fit: cover;
-  object-position: center;
-  filter: saturate(1.04) contrast(0.98) brightness(1.04);
-  transform-origin: center;
-  will-change: transform;
-}
-
-.journey-map-shade {
-  z-index: 1;
-  background:
-    linear-gradient(90deg, rgba(4, 12, 10, 0.42) 0%, rgba(4, 12, 10, 0.06) 42%, transparent 100%),
-    linear-gradient(0deg, rgba(4, 12, 10, 0.38) 0%, transparent 42%);
+  color: var(--nuogo-night);
 }
 
 .journey-map-heading {
   position: absolute;
-  z-index: 3;
+  z-index: 5;
   top: max(9vh, 74px);
   left: max(4vw, 28px);
   width: min(430px, 38vw);
+  pointer-events: none;
 }
 
 .journey-map-heading p {
@@ -403,145 +380,169 @@ body {
   font-size: clamp(3.2rem, 5.8vw, 6rem);
   line-height: 0.98;
   letter-spacing: 0;
+  text-shadow: 0 2px 22px rgba(247, 248, 244, 0.92);
 }
 
 .journey-map-heading > span {
   display: block;
   max-width: 380px;
   margin-top: 22px;
-  color: rgba(255, 255, 255, 0.64);
+  color: rgba(19, 34, 28, 0.68);
   font-size: 16px;
   line-height: 1.6;
 }
 
 .journey-map-canvas {
+  position: absolute;
+  inset: 0;
   z-index: 2;
 }
 
-.journey-map-canvas svg {
+.living-atlas,
+.living-atlas-fallback,
+.living-atlas-canvas-host {
+  position: absolute;
+  inset: 0;
+}
+
+.living-atlas {
+  overflow: hidden;
+  background: #dff4f0;
+}
+
+.living-atlas-fallback {
+  opacity: 1;
+}
+
+.living-atlas-fallback img,
+.living-atlas-fallback svg {
+  transition: opacity 500ms ease;
+}
+
+.living-atlas-ready .living-atlas-fallback img,
+.living-atlas-ready .living-atlas-fallback svg {
+  opacity: 0;
+}
+
+.living-atlas-fallback img,
+.living-atlas-fallback svg,
+.living-atlas-webgl {
   display: block;
   width: 100%;
   height: 100%;
-  overflow: visible;
 }
 
-.journey-map-route-shadow,
-.journey-map-route {
+.living-atlas-fallback img {
+  position: absolute;
+  inset: 0;
+  object-fit: cover;
+  object-position: center;
+  filter: saturate(0.92) brightness(1.06);
+}
+
+.living-atlas-fallback svg {
+  position: absolute;
+  inset: 0;
+}
+
+.living-atlas-fallback-shadow,
+.living-atlas-fallback-route {
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
-.journey-map-route-shadow {
-  stroke: rgba(255, 107, 74, 0.34);
-  stroke-width: 16;
+.living-atlas-fallback-shadow {
+  stroke: rgba(255, 107, 74, 0.18);
+  stroke-width: 18;
   filter: blur(5px);
 }
 
-.journey-map-route {
+.living-atlas-fallback-route {
   stroke: var(--nuogo-red);
   stroke-width: 5;
+  stroke-dasharray: 12 9;
 }
 
-.journey-map-stop circle:first-child {
-  fill: rgba(5, 15, 13, 0.86);
-  stroke: white;
-  stroke-width: 2;
-  transform-box: fill-box;
-  transform-origin: center;
-  transition: fill 260ms ease, transform 260ms ease;
+.living-atlas-stop-list {
+  position: absolute;
+  top: max(8vh, 72px);
+  right: max(3vw, 24px);
+  z-index: 2;
+  display: grid;
+  width: 124px;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: none;
 }
 
-.journey-map-stop circle:nth-child(2) {
-  fill: var(--nuogo-gold);
-}
-
-.journey-map-stop text {
-  fill: white;
-  font-size: 13px;
+.living-atlas-stop-list li {
+  display: grid;
+  align-items: center;
+  gap: 9px;
+  grid-template-columns: 10px 1fr;
+  color: var(--nuogo-night);
+  font-size: 11px;
   font-weight: 800;
-  paint-order: stroke;
-  stroke: rgba(5, 15, 13, 0.88);
-  stroke-width: 5px;
-  text-anchor: middle;
-  opacity: 0.48;
-  transition: opacity 260ms ease;
+  text-shadow: 0 1px 6px white;
 }
 
-.journey-map-stop.is-active circle:first-child {
-  fill: var(--nuogo-red);
-  transform: scale(1.22);
+.living-atlas-stop-list i {
+  width: 9px;
+  height: 9px;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: var(--nuogo-jade);
+  box-shadow: 0 5px 18px rgba(19, 34, 28, 0.2);
 }
 
-.journey-map-stop.is-active text {
+.living-atlas-canvas-host {
+  z-index: 1;
+}
+
+.living-atlas-webgl {
+  opacity: 0;
+  transition: opacity 500ms ease;
+}
+
+.living-atlas-ready .living-atlas-webgl {
   opacity: 1;
 }
 
-.journey-map-marker-core {
-  fill: var(--nuogo-red);
-  stroke: white;
-  stroke-width: 2;
-  filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.36));
-}
-
-.journey-map-marker-pulse {
-  fill: none;
-  stroke: var(--nuogo-red);
-  stroke-width: 2;
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: journey-marker-pulse 1.8s ease-out infinite;
-}
-
-.journey-map-marker foreignObject {
-  color: var(--nuogo-night);
-  overflow: visible;
-}
-
-.journey-map-marker svg {
-  width: 24px;
-  height: 24px;
-  stroke-width: 2.4;
-}
-
-.journey-map-progress {
+.living-atlas-progress {
   position: absolute;
-  z-index: 3;
+  z-index: 5;
   right: max(4vw, 28px);
   bottom: max(5vh, 30px);
   left: max(4vw, 28px);
   display: grid;
   align-items: center;
   gap: 16px;
-  grid-template-columns: auto 1fr auto;
-  font-size: 12px;
-  font-weight: 800;
-  text-transform: uppercase;
+  grid-template-columns: 1fr auto;
 }
 
-.journey-map-progress i {
-  position: relative;
+.living-atlas-progress progress {
+  width: 100%;
+  height: 4px;
   overflow: hidden;
-  height: 1px;
-  background: rgba(255, 255, 255, 0.24);
+  border: 0;
+  border-radius: 0;
+  background: rgba(19, 34, 28, 0.18);
+  appearance: none;
 }
 
-.journey-map-progress i b {
-  position: absolute;
-  inset: -1px 0;
-  background: var(--nuogo-red);
-  transform: scaleX(0);
-  transform-origin: left;
-  will-change: transform;
-}
+.living-atlas-progress progress::-webkit-progress-bar { background: rgba(19, 34, 28, 0.18); }
+.living-atlas-progress progress::-webkit-progress-value { background: var(--nuogo-red); }
+.living-atlas-progress progress::-moz-progress-bar { background: var(--nuogo-red); }
 
-.journey-map-progress strong {
+.living-atlas-progress span {
+  min-width: 42px;
   color: var(--nuogo-jade);
-}
-
-@keyframes journey-marker-pulse {
-  0% { opacity: 0.88; transform: scale(0.72); }
-  75%, 100% { opacity: 0; transform: scale(1.36); }
+  font-size: 12px;
+  font-weight: 850;
+  text-align: right;
 }
 
 .strategy-stage {
@@ -841,22 +842,14 @@ body {
     min-height: 760px;
   }
 
-  .journey-map-art {
-    object-position: 63% center;
-  }
-
-  .journey-map-shade {
-    background:
-      linear-gradient(180deg, rgba(4, 12, 10, 0.44) 0%, rgba(4, 12, 10, 0.02) 42%, rgba(4, 12, 10, 0.36) 100%);
-  }
-
   .journey-map-heading {
     top: 50px;
     width: calc(100% - 40px);
   }
 
   .journey-map-heading h2 {
-    font-size: clamp(3rem, 12vw, 4.6rem);
+    font-size: clamp(2.75rem, 11vw, 3.35rem);
+    line-height: 1;
   }
 
   .journey-map-heading > span {
@@ -864,12 +857,33 @@ body {
     font-size: 14px;
   }
 
-  .journey-map-canvas svg {
-    transform: translate(-8%, 13%) scale(0.44);
-    transform-origin: center;
+  .living-atlas-fallback img {
+    object-position: 62% center;
   }
 
-  .journey-map-progress {
+  .living-atlas-stop-list {
+    top: auto;
+    right: 20px;
+    bottom: 66px;
+    left: 20px;
+    width: auto;
+    gap: 8px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .living-atlas-stop-list li {
+    gap: 5px;
+    grid-template-columns: 7px 1fr;
+    font-size: 9px;
+  }
+
+  .living-atlas-stop-list i {
+    width: 7px;
+    height: 7px;
+    border-width: 1px;
+  }
+
+  .living-atlas-progress {
     right: 20px;
     bottom: 24px;
     left: 20px;

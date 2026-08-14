@@ -48,16 +48,16 @@ function createTerrain() {
 function createAircraft() {
   const group = new THREE.Group();
   const body = new THREE.Mesh(
-    new THREE.ConeGeometry(0.16, 0.58, 5),
+    new THREE.ConeGeometry(0.12, 0.44, 5),
     new THREE.MeshStandardMaterial({ color: 0xff6b4a, roughness: 0.48 })
   );
   body.rotation.z = -Math.PI / 2;
   const wing = new THREE.Mesh(
-    new THREE.BoxGeometry(0.12, 0.62, 0.045),
+    new THREE.BoxGeometry(0.09, 0.46, 0.035),
     new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 })
   );
   group.add(body, wing);
-  group.scale.setScalar(1.15);
+  group.scale.setScalar(0.92);
   return group;
 }
 
@@ -81,6 +81,9 @@ export function createLivingAtlas(container, options = {}) {
 
   const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 60);
   const renderer = rendererFactory({ antialias: true, alpha: false, preserveDrawingBuffer: true });
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.78;
   const canvas = renderer.domElement;
   canvas.classList.add("living-atlas-webgl");
   canvas.setAttribute("aria-hidden", "true");
@@ -99,11 +102,16 @@ export function createLivingAtlas(container, options = {}) {
     new THREE.LineBasicMaterial({ color: 0xff5f42, linewidth: 3 })
   );
   route.renderOrder = 3;
-  scene.add(route);
+  const routeDots = new THREE.Points(
+    routeGeometry,
+    new THREE.PointsMaterial({ color: 0xff5f42, size: 0.075, sizeAttenuation: true })
+  );
+  routeDots.renderOrder = 4;
+  scene.add(route, routeDots);
 
-  const waypointMaterial = new THREE.MeshStandardMaterial({ color: 0x13221c, roughness: 0.55 });
+  const waypointMaterial = new THREE.MeshStandardMaterial({ color: 0x15795f, roughness: 0.62 });
   const waypoints = toJourneyVectors(points).map((point, index) => {
-    const marker = new THREE.Mesh(new THREE.SphereGeometry(index === 0 ? 0.18 : 0.14, 18, 12), waypointMaterial);
+    const marker = new THREE.Mesh(new THREE.SphereGeometry(index === 0 ? 0.11 : 0.085, 18, 12), waypointMaterial);
     marker.position.copy(point);
     marker.position.z += 0.04;
     scene.add(marker);
@@ -112,8 +120,8 @@ export function createLivingAtlas(container, options = {}) {
 
   const aircraft = createAircraft();
   scene.add(aircraft);
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x6eaa8a, 2.2));
-  const sun = new THREE.DirectionalLight(0xfff7dc, 3.2);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x6eaa8a, 1.15));
+  const sun = new THREE.DirectionalLight(0xfff7dc, 1.45);
   sun.position.set(-4, -2, 9);
   scene.add(sun);
 

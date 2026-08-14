@@ -63,28 +63,40 @@ test("moves through the pinned strategy journey on desktop", async ({ page }, te
   await expect(page.getByRole("heading", { name: "Comfort-Focused" })).toBeVisible();
 });
 
-test("draws a generic route across the journey map while scrolling", async ({ page }, testInfo) => {
+test("advances the generic Living Atlas route while scrolling", async ({ page }, testInfo) => {
   await expect(page.getByText("Kuala Lumpur")).toHaveCount(0);
   await expect(page.getByText("Beijing")).toHaveCount(0);
   await expect(page.getByText("Shanghai")).toHaveCount(0);
   await expect(page.getByText("Xi'an")).toHaveCount(0);
 
   const map = page.getByRole("img", { name: "Animated journey across China" });
+  const atlas = page.getByTestId("living-atlas");
   const mapTop = await page.locator(".journey-map-section").evaluate((element) => (
     element.getBoundingClientRect().top + window.scrollY
   ));
   await page.evaluate((top) => window.scrollTo(0, top + 650), mapTop);
-  await page.waitForTimeout(300);
-  const route = page.locator(".journey-map-route");
-  const initialOffset = await route.evaluate((element) => element.style.strokeDashoffset);
+  await expect(atlas).toHaveAttribute("data-scene-state", "ready");
+  const initialProgress = Number(await page.getByRole("progressbar", { name: "Journey progress" }).getAttribute("value"));
 
   await page.evaluate(() => window.scrollBy(0, 500));
   await page.waitForTimeout(300);
 
-  const progressedOffset = await route.evaluate((element) => element.style.strokeDashoffset);
-  expect(progressedOffset).not.toBe(initialOffset);
-  await expect(page.locator(".journey-map-progress strong")).not.toHaveText("0%");
-  await expect(page.locator(".journey-map-stop.is-active")).not.toHaveCount(0);
+  const progressedProgress = Number(await page.getByRole("progressbar", { name: "Journey progress" }).getAttribute("value"));
+  expect(progressedProgress).toBeGreaterThan(initialProgress);
+  await expect(atlas.locator("canvas.living-atlas-webgl")).toHaveCount(1);
+  await expect(atlas.getByText("Stop 01")).toBeVisible();
+  expect(await atlas.locator(".living-atlas-fallback").evaluate((element) => (
+    Number.parseFloat(getComputedStyle(element).opacity)
+  ))).toBeGreaterThanOrEqual(0.9);
+  expect(await atlas.locator(".living-atlas-fallback img").evaluate((element) => (
+    Number.parseFloat(getComputedStyle(element).opacity)
+  ))).toBeLessThanOrEqual(0.1);
+  if (testInfo.project.name === "mobile-chromium") {
+    const headingSize = Number.parseFloat(await page.locator(".journey-map-heading h2").evaluate((element) => (
+      getComputedStyle(element).fontSize
+    )));
+    expect(headingSize).toBeLessThanOrEqual(56);
+  }
   await expect(map).toBeInViewport();
-  await page.screenshot({ path: `.artifacts/${testInfo.project.name}-journey-map-midpoint.png` });
+  await page.screenshot({ path: `.artifacts/${testInfo.project.name}-living-atlas-midpoint.png` });
 });

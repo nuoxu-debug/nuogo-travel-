@@ -2,7 +2,7 @@
 
 ## Direction: Living Journey Atlas
 
-Nuogo is a living journey atlas: cinematic China travel imagery introduces the experience, then a pinned topographic map draws the user's route as they scroll. Bright, precise travel instruments follow for planning and comparison. The route is described with generic stops until real itinerary data supplies place names.
+Nuogo is a living journey atlas: cinematic China travel imagery introduces the experience, then a pinned Three.js terrain draws the user's route as they scroll. Bright, precise travel instruments follow for planning and comparison. The route is described with generic stops until real itinerary data supplies place names.
 
 ## Direction Contract
 
@@ -44,13 +44,14 @@ The palette is full but role-bound. Purple, beige, and dark-blue monochrome are 
 - Cards use 12px radius and either a border or shadow, never both.
 - Primary controls are at least 44px tall and use Lucide icons where available.
 
-## Journey Map
+## Living Atlas Scene
 
-- The topographic China artwork is full-bleed and unframed. It is decorative rather than an operational navigation map.
+- A dynamically loaded Three.js terrain uses the daylight map artwork as its color layer. It is full-bleed, unframed, and decorative rather than an operational navigation map.
 - Route labels remain `Departure` and numbered stops until the planner supplies the user's real itinerary data.
-- Scroll draws the route, moves and rotates the plane marker, advances the progress rail, activates completed stops, and adds restrained terrain parallax.
+- Scroll advances the camera, draws the elevated route, moves and rotates a geometric aircraft, and activates waypoint state.
 - Desktop and mobile use separately tuned route framing so the marker stays visible throughout the sequence.
-- Reduced-motion mode shows the completed route as a static, semantic journey preview.
+- Reduced-motion and WebGL failure modes show the completed route as a static, semantic journey preview.
+- The renderer caps DPR at `1.5`, pauses outside the viewport, and disposes its geometry, materials, textures, listeners, frame, observer, and canvas on unmount.
 
 ## Motion
 
