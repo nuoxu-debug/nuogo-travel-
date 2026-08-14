@@ -77,7 +77,7 @@ export class MySqlRepository {
 
   async findUserByEmail(email) {
     const [rows] = await this.pool.execute(
-      "SELECT id, name, email, password_hash AS passwordHash, created_at AS createdAt FROM users WHERE email = ? LIMIT 1",
+      "SELECT id, name, email, password_hash AS passwordHash, created_at AS createdAt FROM users WHERE email = ? AND deleted_at IS NULL LIMIT 1",
       [email]
     );
     return rows[0];
@@ -85,10 +85,37 @@ export class MySqlRepository {
 
   async findUserById(id) {
     const [rows] = await this.pool.execute(
-      "SELECT id, name, email, password_hash AS passwordHash, created_at AS createdAt FROM users WHERE id = ? LIMIT 1",
+      "SELECT id, name, email, password_hash AS passwordHash, created_at AS createdAt FROM users WHERE id = ? AND deleted_at IS NULL LIMIT 1",
       [id]
     );
     return rows[0];
+  }
+
+  async recordPrivacyConsent(userId, input) {
+    const recordedAt = new Date();
+    await this.pool.execute(
+      `INSERT INTO privacy_consents (user_id, version, accepted, recorded_at)
+       VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE version = VALUES(version), accepted = VALUES(accepted), recorded_at = VALUES(recorded_at)`,
+      [userId, input.version, input.accepted, recordedAt]
+    );
+    return {
+      userId,
+      version: input.version,
+      accepted: input.accepted,
+      recordedAt: recordedAt.toISOString()
+    };
+  }
+
+  async deleteAccount(userId) {
+    const anonymizedEmail = `deleted+${userId}@nuogo.local`;
+    await this.pool.execute(
+      `UPDATE users
+       SET name = 'Deleted account', email = ?, password_hash = '', deleted_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND deleted_at IS NULL`,
+      [anonymizedEmail, userId]
+    );
+    return true;
   }
 
   async createTrip(ownerId, preferences, variants) {

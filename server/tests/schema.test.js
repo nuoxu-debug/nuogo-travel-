@@ -16,6 +16,10 @@ const collaborationMigrationUrl = new URL(
   "../../database/migrations/005_trip_collaboration_expenses.sql",
   import.meta.url
 );
+const privacyMigrationUrl = new URL(
+  "../../database/migrations/006_security_privacy.sql",
+  import.meta.url
+);
 const demoSeedUrl = new URL("../../database/seeds/001_demo.sql", import.meta.url);
 
 const demoIds = {
@@ -107,6 +111,15 @@ describe("Nuogo MySQL schema", () => {
     expect(sql).toMatch(/amount_fen INT UNSIGNED NOT NULL/i);
     expect(sql).toMatch(/share_fen INT UNSIGNED NOT NULL/i);
     expect(sql).toMatch(/UNIQUE KEY\s+\w+\s+\(trip_id,\s*user_id\)/i);
+  });
+
+  it("adds account deletion state and versioned privacy consent", () => {
+    const sql = readFileSync(privacyMigrationUrl, "utf8");
+
+    expect(sql).toMatch(/ADD COLUMN deleted_at TIMESTAMP NULL/i);
+    expect(sql).toMatch(/CREATE TABLE privacy_consents/i);
+    expect(sql).toMatch(/version VARCHAR\(40\) NOT NULL/i);
+    expect(sql).toMatch(/FOREIGN KEY \(user_id\) REFERENCES users\(id\) ON DELETE CASCADE/i);
   });
 
   it("seeds an openable collaboration trip with valid taxonomy and reconciled expenses", () => {

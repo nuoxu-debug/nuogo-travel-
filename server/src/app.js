@@ -12,6 +12,7 @@ import { createExpensesRouter } from "./routes/expenses.js";
 import { createFavoritesRouter } from "./routes/favorites.js";
 import { createLegacyMetaRouter, createMetaRouter } from "./routes/meta.js";
 import { createMembersRouter } from "./routes/members.js";
+import { createPrivacyRouter } from "./routes/privacy.js";
 import { createTripsRouter } from "./routes/trips.js";
 import { AuthService } from "./services/authService.js";
 
@@ -20,10 +21,11 @@ export function createApp({
   planProvider,
   attractionCatalogue,
   attractionMediaService,
-  config
+  config,
+  logger = { error() {} }
 }) {
   const app = express();
-  const authenticate = createAuthMiddleware(config.jwtSecret);
+  const authenticate = createAuthMiddleware(config.jwtSecret, repository);
   const authService = new AuthService(repository, config.jwtSecret);
 
   app.use(helmet({ crossOriginResourcePolicy: false }));
@@ -89,6 +91,7 @@ export function createApp({
     authenticate
   }));
   app.use("/api/favorites", createFavoritesRouter({ repository, authenticate }));
+  app.use("/api/privacy", createPrivacyRouter({ repository, authenticate }));
 
   app.use((_req, _res, next) => {
     const error = new Error("Route was not found.");
@@ -101,10 +104,21 @@ export function createApp({
     const isValidation = error instanceof ZodError;
     const status = isValidation ? 400 : error.status ?? 500;
     const code = isValidation ? "VALIDATION_ERROR" : error.code ?? "INTERNAL_ERROR";
+    if (code === "INTERNAL_ERROR") {
+      logger.error("http.internal_error", {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+    }
     res.status(status).json({
       error: {
         code,
-        message: isValidation ? "The submitted data is invalid." : error.message,
+        message: isValidation
+          ? "The submitted data is invalid."
+          : code === "INTERNAL_ERROR"
+            ? "An unexpected error occurred."
+            : error.message,
         details: isValidation
           ? error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message }))
           : undefined

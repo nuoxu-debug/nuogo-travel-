@@ -1,0 +1,11 @@
+ALTER TABLE users
+  ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL;
+
+CREATE TABLE privacy_consents (
+  user_id CHAR(36) PRIMARY KEY,
+  version VARCHAR(40) NOT NULL,
+  accepted BOOLEAN NOT NULL,
+  recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_privacy_consents_user
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);

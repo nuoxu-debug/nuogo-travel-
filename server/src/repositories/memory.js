@@ -26,6 +26,7 @@ export class MemoryRepository {
     this.tripActivity = new Map();
     this.tripMutationLocks = new Map();
     this.expenseMutationLocks = new Map();
+    this.privacyConsents = new Map();
   }
 
   async createUser(user) {
@@ -46,6 +47,33 @@ export class MemoryRepository {
 
   async findUserById(id) {
     return clone(this.users.get(id));
+  }
+
+  async recordPrivacyConsent(userId, input) {
+    if (!this.users.has(userId)) return undefined;
+    const consent = {
+      userId,
+      accepted: input.accepted,
+      version: input.version,
+      recordedAt: new Date().toISOString()
+    };
+    this.privacyConsents.set(userId, consent);
+    return clone(consent);
+  }
+
+  async deleteAccount(userId) {
+    this.users.delete(userId);
+    this.privacyConsents.delete(userId);
+    for (const [id, favorite] of this.favorites) {
+      if (favorite.userId === userId) this.favorites.delete(id);
+    }
+    for (const [id, trip] of this.trips) {
+      if (trip.ownerId === userId) this.trips.delete(id);
+    }
+    for (const [key, member] of this.members) {
+      if (member.userId === userId) this.members.delete(key);
+    }
+    return true;
   }
 
   async createTrip(ownerId, preferences, variants) {

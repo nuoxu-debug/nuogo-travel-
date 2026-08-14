@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { getTripAccess, requireTripRole } from "../services/tripAccess.js";
 
 export function createFavoritesRouter({ repository, authenticate }) {
   const router = Router();
@@ -14,6 +15,11 @@ export function createFavoritesRouter({ repository, authenticate }) {
 
   router.post("/", async (req, res, next) => {
     try {
+      const context = await repository.findActivityContext(req.body.activityId);
+      if (context) {
+        const access = await getTripAccess(repository, context.trip.id, req.user.id);
+        requireTripRole(access, ["viewer"]);
+      }
       const favorite = await repository.addFavorite(req.user.id, req.body.activityId);
       if (!favorite) {
         const error = new Error("Activity was not found.");

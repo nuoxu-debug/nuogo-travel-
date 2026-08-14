@@ -50,6 +50,7 @@
 - Create: `server/src/services/promptInjection.js`
 - Create: `server/src/services/logger.js`
 - Create: `server/src/routes/privacy.js`
+- Create: `database/migrations/006_security_privacy.sql`
 - Modify: `server/tests/api.test.js`
 - Create: `server/tests/security-objectives.test.js`
 
@@ -57,17 +58,17 @@
 - Produces: `screenPromptInput(preferences) -> { safe, code, fields }`, `logger.info/warn/error(event, metadata)`, privacy notice/consent/deletion routes.
 - Consumes: `authenticate`, `tripAccess`, repository ownership methods.
 
-- [ ] **Step 1: Write failing security tests** proving separate guest identities, favorite trip authorization, generic 500 responses, redacted secrets, injection classification, consent capture, and account deletion.
-- [ ] **Step 2: Run the focused server tests** and verify the expected authorization/privacy failures.
-- [ ] **Step 3: Implement minimal fixes**: per-session guest subject in demo mode, trip authorization before favorites, production-secret enforcement, structured redaction, generic internal errors, prompt screening, and authenticated consent/deletion endpoints.
-- [ ] **Step 4: Run focused and full server tests** and confirm 401/403 behavior and no secret-bearing output.
-- [ ] **Step 5: Commit** with `fix(security): enforce privacy and object authorization boundaries`.
+- [x] **Step 1: Write failing security tests** proving separate guest identities, favorite trip authorization, generic 500 responses, redacted secrets, injection classification, consent capture, and account deletion.
+- [x] **Step 2: Run the focused server tests** and verify the expected authorization/privacy failures.
+- [x] **Step 3: Implement minimal fixes**: per-session guest subject in demo mode, trip authorization before favorites, production-secret enforcement, structured redaction, generic internal errors, prompt screening, and authenticated consent/deletion endpoints.
+- [x] **Step 4: Run focused and full server tests** and confirm 401/403 behavior and no secret-bearing output.
+- [x] **Step 5: Commit** with `fix(security): enforce privacy and object authorization boundaries`.
 
 ### Task 3: MySQL Domain Migrations and Repository Contracts
 
 **Files:**
-- Create: `database/migrations/006_objective_aligned_mvp.sql`
-- Create: `database/migrations/007_objective_aligned_seed.sql`
+- Create: `database/migrations/007_objective_aligned_mvp.sql`
+- Create: `database/migrations/008_objective_aligned_seed.sql`
 - Modify: `server/src/repositories/memory.js`
 - Modify: `server/src/repositories/mysql.js`
 - Modify: `server/tests/repository-contract.test.js`

@@ -7,6 +7,7 @@ import { MemoryRepository } from "./repositories/memory.js";
 import { MySqlRepository } from "./repositories/mysql.js";
 import { SqliteAttractionCatalogue } from "./services/attractionCatalogue.js";
 import { AttractionMediaService } from "./services/attractionMedia.js";
+import { createLogger } from "./services/logger.js";
 
 const config = loadConfig();
 const repository = config.demoMode
@@ -25,13 +26,15 @@ const attractionMediaService = new AttractionMediaService({
   repository: attractionRepository,
   storageDir: config.attractionMediaStoragePath
 });
+const logger = createLogger();
 
 const app = createApp({
   repository,
   planProvider,
   attractionCatalogue,
   attractionMediaService,
-  config
+  config,
+  logger
 });
 app.listen(config.port, () => {
   console.log(

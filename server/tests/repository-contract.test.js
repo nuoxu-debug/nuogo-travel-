@@ -9,7 +9,8 @@ import { MySqlRepository } from "../src/repositories/mysql.js";
 import { validActivity, validVariant, validVisitDetails } from "./helpers.js";
 
 const requiredMethods = [
-  "createUser", "findUserByEmail", "findUserById", "createTrip", "listTrips",
+  "createUser", "findUserByEmail", "findUserById", "recordPrivacyConsent",
+  "deleteAccount", "createTrip", "listTrips",
   "getTrip", "updateTrip", "deleteTrip", "duplicateTrip", "selectVariant",
   "findActivityContext", "findDayContext", "addActivity", "updateActivity",
   "deleteActivity", "reorderDay", "replaceDay", "createShare", "getShare",

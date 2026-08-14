@@ -45,15 +45,12 @@ export class AuthService {
   }
 
   async guest() {
-    const email = "guest@nuogo.local";
-    let user = await this.repository.findUserByEmail(email);
-    if (!user) {
-      user = await this.repository.createUser({
-        name: "Nuogo Guest",
-        email,
-        passwordHash: await bcrypt.hash(randomUUID(), 12)
-      });
-    }
+    const guestId = randomUUID();
+    const user = await this.repository.createUser({
+      name: "Nuogo Guest",
+      email: `guest+${guestId}@nuogo.local`,
+      passwordHash: await bcrypt.hash(randomUUID(), 12)
+    });
     return { user: publicUser(user), token: this.createToken(user) };
   }
 

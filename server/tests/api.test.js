@@ -42,22 +42,21 @@ describe("Nuogo REST API", () => {
     expect(meta.body.aiProvider).toBe("demo");
   });
 
-  it("creates and reuses a guest account in demo mode", async () => {
+  it("creates a separate guest identity for each demo session", async () => {
     const first = await request(app)
       .post("/api/auth/guest")
       .expect(200);
 
-    expect(first.body.user).toMatchObject({
-      name: "Nuogo Guest",
-      email: "guest@nuogo.local"
-    });
+    expect(first.body.user.name).toBe("Nuogo Guest");
+    expect(first.body.user.email).toMatch(/^guest\+[0-9a-f-]+@nuogo\.local$/);
     expect(first.body.token).toBeTypeOf("string");
 
     const second = await request(app)
       .post("/api/auth/guest")
       .expect(200);
 
-    expect(second.body.user.id).toBe(first.body.user.id);
+    expect(second.body.user.id).not.toBe(first.body.user.id);
+    expect(second.body.user.email).not.toBe(first.body.user.email);
   });
 
   it("disables guest authentication outside demo mode", async () => {

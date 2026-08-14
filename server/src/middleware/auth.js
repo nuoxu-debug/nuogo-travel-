@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 
-export function createAuthMiddleware(jwtSecret) {
-  return function authenticate(req, _res, next) {
+export function createAuthMiddleware(jwtSecret, repository) {
+  return async function authenticate(req, _res, next) {
     const value = req.get("Authorization") ?? "";
     const token = value.startsWith("Bearer ") ? value.slice(7) : "";
     if (!token) {
@@ -12,6 +12,9 @@ export function createAuthMiddleware(jwtSecret) {
     }
     try {
       const payload = jwt.verify(token, jwtSecret);
+      if (repository && !(await repository.findUserById(payload.sub))) {
+        throw new Error("Account is unavailable.");
+      }
       req.user = { id: payload.sub, email: payload.email };
       return next();
     } catch {
