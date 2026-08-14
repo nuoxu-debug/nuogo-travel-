@@ -17,7 +17,8 @@ const planProvider = config.aiProvider === "openrouter"
   ? new OpenRouterProvider({
       apiKey: config.openRouterKey,
       model: config.openRouterModel,
-      timeoutMs: config.openRouterTimeoutMs
+      timeoutMs: config.openRouterTimeoutMs,
+      supportsStructuredOutput: config.openRouterStructuredOutput
     })
   : new DemoPlanProvider();
 const attractionRepository = new AttractionSqliteRepository(config.attractionDatabasePath);

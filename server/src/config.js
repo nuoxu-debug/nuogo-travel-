@@ -5,6 +5,7 @@ export function loadConfig() {
   const demoMode = process.env.DEMO_MODE !== "false";
   const aiProvider = process.env.AI_PROVIDER || "demo";
   const openRouterTimeoutMs = Number(process.env.OPENROUTER_TIMEOUT_MS) || 30000;
+  const openRouterStructuredOutput = process.env.OPENROUTER_STRUCTURED_OUTPUT === "true";
   const travelDataProvider = process.env.TRAVEL_DATA_PROVIDER || "demo";
   const travelProviderTimeoutMs = Number(process.env.TRAVEL_PROVIDER_TIMEOUT_MS) || 8000;
   if (!["demo", "openrouter"].includes(aiProvider)) {
@@ -47,6 +48,7 @@ export function loadConfig() {
     openRouterKey: process.env.OPENROUTER_API_KEY || "",
     openRouterModel: process.env.OPENROUTER_MODEL || "openai/gpt-4.1-mini",
     openRouterTimeoutMs,
+    openRouterStructuredOutput,
     travelDataProvider,
     travelProviderTimeoutMs,
     amapWebServiceKey: process.env.AMAP_WEB_SERVICE_KEY || "",

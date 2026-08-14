@@ -2,11 +2,18 @@ import { buildPrompt } from "../services/promptBuilder.js";
 import { ExternalServiceError, ExternalServiceTimeoutError } from "../errors.js";
 
 export class OpenRouterProvider {
-  constructor({ apiKey, model = "openai/gpt-4.1-mini", timeoutMs = 30000, fetchImpl = fetch }) {
+  constructor({
+    apiKey,
+    model = "openai/gpt-4.1-mini",
+    timeoutMs = 30000,
+    fetchImpl = fetch,
+    supportsStructuredOutput = true
+  }) {
     this.apiKey = apiKey;
     this.model = model;
     this.timeoutMs = timeoutMs;
     this.fetchImpl = fetchImpl;
+    this.supportsStructuredOutput = supportsStructuredOutput;
   }
 
   async generate(preferences, style, context = {}) {
@@ -15,6 +22,31 @@ export class OpenRouterProvider {
     }
 
     const prompt = buildPrompt(preferences, style, context);
+    return this.#complete({
+      ...prompt,
+      responseFormat: { type: "json_object" },
+      temperature: 0.5
+    });
+  }
+
+  async generateStructured({ system, user, jsonSchema, temperature = 0.2 }) {
+    const responseFormat = this.supportsStructuredOutput
+      ? {
+        type: "json_schema",
+        json_schema: {
+          name: "nuogo_itinerary_draft",
+          strict: true,
+          schema: jsonSchema
+        }
+      }
+      : { type: "json_object" };
+    return this.#complete({ system, user, responseFormat, temperature });
+  }
+
+  async #complete({ system, user, responseFormat, temperature }) {
+    if (!this.apiKey) {
+      throw new Error("OpenRouter API key is not configured.");
+    }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     let response;
@@ -30,11 +62,11 @@ export class OpenRouterProvider {
         body: JSON.stringify({
           model: this.model,
           messages: [
-            { role: "system", content: prompt.system },
-            { role: "user", content: prompt.user }
+            { role: "system", content: system },
+            { role: "user", content: user }
           ],
-          response_format: { type: "json_object" },
-          temperature: 0.5
+          response_format: responseFormat,
+          temperature
         }),
         signal: controller.signal
       });

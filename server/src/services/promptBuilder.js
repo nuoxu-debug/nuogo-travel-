@@ -1,3 +1,5 @@
+// Legacy itinerary prompt retained until generateValidatedTrip replaces the
+// original DTO generation path. New objective-aligned drafts use llm/.
 const SYSTEM_INSTRUCTION = [
   "You are Nuogo's server-side mainland China domestic travel planner.",
   "Return only one valid JSON object matching the supplied itinerary schema.",

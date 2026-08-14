@@ -166,11 +166,11 @@
 - `planDraft({ preferences, profile, candidatePool }) -> ItineraryDraft`
 - User text appears only inside a serialized `UNTRUSTED_USER_DATA` object; candidate POIs are ID-addressable.
 
-- [ ] **Step 1: Write failing tests** for fixed schema, candidate IDs, strategy rules, low temperature, structured-output capability gating, unknown IDs, no sensitive account fields, and malicious preference text.
-- [ ] **Step 2: Verify red.**
-- [ ] **Step 3: Implement the harness** around the existing provider with strict response format when supported and mandatory local Zod validation always.
-- [ ] **Step 4: Verify green and retain existing OpenRouter timeout tests.**
-- [ ] **Step 5: Commit** with `feat(ai): constrain OpenRouter itinerary drafts`.
+- [x] **Step 1: Write failing tests** for fixed schema, candidate IDs, strategy rules, low temperature, structured-output capability gating, unknown IDs, no sensitive account fields, and malicious preference text.
+- [x] **Step 2: Verify red.**
+- [x] **Step 3: Implement the harness** around the existing provider with strict response format when supported and mandatory local Zod validation always.
+- [x] **Step 4: Verify green and retain existing OpenRouter timeout tests.**
+- [x] **Step 5: Commit** with `feat(ai): constrain OpenRouter itinerary drafts`.
 
 ### Task 8: Trip Legs, Scheduling, and Validation Engine
 

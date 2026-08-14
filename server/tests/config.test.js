@@ -11,7 +11,8 @@ const original = {
   TRAVEL_DATA_PROVIDER: process.env.TRAVEL_DATA_PROVIDER,
   TRAVEL_PROVIDER_TIMEOUT_MS: process.env.TRAVEL_PROVIDER_TIMEOUT_MS,
   AMAP_WEB_SERVICE_KEY: process.env.AMAP_WEB_SERVICE_KEY,
-  OPENTRIPMAP_API_KEY: process.env.OPENTRIPMAP_API_KEY
+  OPENTRIPMAP_API_KEY: process.env.OPENTRIPMAP_API_KEY,
+  OPENROUTER_STRUCTURED_OUTPUT: process.env.OPENROUTER_STRUCTURED_OUTPUT
 };
 
 afterEach(() => {
@@ -50,6 +51,13 @@ describe("runtime configuration", () => {
     process.env.OPENROUTER_TIMEOUT_MS = "15000";
 
     expect(loadConfig().openRouterTimeoutMs).toBe(15000);
+  });
+
+  it("enables strict OpenRouter schema mode only when explicitly configured", () => {
+    delete process.env.OPENROUTER_STRUCTURED_OUTPUT;
+    expect(loadConfig().openRouterStructuredOutput).toBe(false);
+    process.env.OPENROUTER_STRUCTURED_OUTPUT = "true";
+    expect(loadConfig().openRouterStructuredOutput).toBe(true);
   });
 
   it("requires MySQL credentials when memory persistence is disabled", () => {
