@@ -203,11 +203,11 @@
 - `repairUntilValid(context, { maxAttempts: 3 }) -> { state, itinerary, summary, attempts }`
 - Derived route/schedule/budget values are invalidated after dependency changes.
 
-- [ ] **Step 1: Write the seven required failing repair tests** from the authoritative brief, including stale-route invalidation and three-attempt safe failure.
-- [ ] **Step 2: Verify red.**
-- [ ] **Step 3: Implement deterministic repair first**, then a constrained semantic repair request carrying codes and allowed candidate IDs only.
-- [ ] **Step 4: Verify green and assert invalid plans never become `FINAL_VALIDATED`.**
-- [ ] **Step 5: Commit** with `feat(repair): finalize only validated itineraries`.
+- [x] **Step 1: Write the seven required failing repair tests** from the authoritative brief, including stale-route invalidation and three-attempt safe failure.
+- [x] **Step 2: Verify red.**
+- [x] **Step 3: Implement deterministic repair first**, then a constrained semantic repair request carrying codes and allowed candidate IDs only.
+- [x] **Step 4: Verify green and assert invalid plans never become `FINAL_VALIDATED`.**
+- [x] **Step 5: Commit** with `feat(repair): finalize only validated itineraries`.
 
 ### Task 10: Objective-Aligned Generation Orchestration
 
