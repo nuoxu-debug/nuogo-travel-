@@ -78,6 +78,31 @@ function enrichedDimensions(preferences, itinerary, driving) {
   };
 }
 
+function attachPoiFacts(itinerary, candidatePool) {
+  const byId = new Map(candidatePool.candidates.map((candidate) => [candidate.candidateId, candidate]));
+  return {
+    ...itinerary,
+    days: itinerary.days.map((day) => ({
+      ...day,
+      activities: day.activities.map((activity) => {
+        const poi = byId.get(activity.poiId);
+        return poi ? {
+          ...activity,
+          poi: {
+            canonicalPoiId: poi.canonicalPoiId,
+            name: poi.name,
+            category: poi.category,
+            coordinates: poi.coordinates,
+            address: poi.address,
+            primarySource: poi.primarySource,
+            sourceRecords: poi.sourceRecords
+          }
+        } : activity;
+      })
+    }))
+  };
+}
+
 async function evaluateDraft(draft, { preferences, candidatePool, dependencies, anchors, references, driving }) {
   const locations = Object.fromEntries(candidatePool.candidates
     .map(({ candidateId, coordinates }) => [candidateId, coordinates]));
@@ -116,7 +141,7 @@ async function generateVariant(profile, context) {
       profile,
       candidatePool: context.candidatePool
     }, { provider: context.dependencies.llmProvider });
-    return await repairUntilValid({
+    const result = await repairUntilValid({
       itinerary: draft,
       preferences: context.preferences,
       candidatePool: context.candidatePool,
@@ -128,6 +153,9 @@ async function generateVariant(profile, context) {
         provider: context.dependencies.llmProvider
       })
     });
+    return result.state === "FINAL_VALIDATED"
+      ? { ...result, itinerary: attachPoiFacts(result.itinerary, context.candidatePool) }
+      : result;
   } catch (error) {
     return {
       state: "FAILED",

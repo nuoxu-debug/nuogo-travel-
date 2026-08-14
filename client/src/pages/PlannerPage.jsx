@@ -2,38 +2,41 @@ import { Bot, Database, Route, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiRequest } from "../api/client.js";
-import PipelineOverlay, { pipelineDuration } from "../components/PipelineOverlay.jsx";
+import PipelineOverlay from "../components/PipelineOverlay.jsx";
 import PlannerJourneyHorizon from "../components/PlannerJourneyHorizon.jsx";
 import PreferenceForm, { initialPreferenceValues } from "../components/PreferenceForm.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import AppShell from "../layout/AppShell.jsx";
 
-function wait(milliseconds) {
-  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
-}
-
 export default function PlannerPage() {
   const { language } = useLanguage();
   const navigate = useNavigate();
   const [generating, setGenerating] = useState(false);
+  const [generationState, setGenerationState] = useState("RETRIEVING");
   const [error, setError] = useState("");
   const [preferences, setPreferences] = useState(initialPreferenceValues);
 
   async function generate(preferences) {
     setError("");
     setGenerating(true);
+    setGenerationState("RETRIEVING");
     try {
-      const [result] = await Promise.all([
-        apiRequest("/trips/generate", {
-          method: "POST",
-          body: JSON.stringify(preferences)
-        }),
-        wait(pipelineDuration * 7)
-      ]);
-      sessionStorage.setItem(`nuogo-trip-${result.trip.id}`, JSON.stringify({
+      const result = await apiRequest("/trips/generate", {
+        method: "POST",
+        body: JSON.stringify(preferences)
+      });
+      setGenerationState(result.state);
+      const trip = {
         ...result.trip,
-        variants: result.variants
-      }));
+        variants: result.variants,
+        validation: result.validation,
+        generationState: result.state,
+        runId: result.id,
+        objectiveAligned: true,
+        revision: 0,
+        selectedVariantId: null
+      };
+      sessionStorage.setItem(`nuogo-trip-${result.trip.id}`, JSON.stringify(trip));
       navigate(`/compare/${result.trip.id}`);
     } catch (requestError) {
       setError(requestError.message);
@@ -78,7 +81,7 @@ export default function PlannerPage() {
               </div>
               <span className="text-xs font-bold text-ink/40">{language === "zh" ? "约 2 分钟" : "About 2 minutes"}</span>
             </div>
-            <PlannerJourneyHorizon values={preferences} language={language} />
+            <PlannerJourneyHorizon values={preferences} />
             <PreferenceForm
               onSubmit={generate}
               values={preferences}
@@ -114,14 +117,14 @@ export default function PlannerPage() {
                   : "Destinations, interests, and stays use fixed categories. System prompts never reach the frontend."}
               </p>
               <div className="mt-6 grid grid-cols-2 border-t border-white/15 pt-5 text-xs">
-                <span><b className="block text-lg text-white">3</b><i className="not-italic text-white/45">parallel routes</i></span>
-                <span><b className="block text-lg text-white">6</b><i className="not-italic text-white/45">budget groups</i></span>
+                <span><b className="block text-lg text-white">3</b><i className="not-italic text-white/45">validated profiles</i></span>
+                <span><b className="block text-lg text-white">8</b><i className="not-italic text-white/45">cost categories</i></span>
               </div>
             </div>
           </aside>
         </div>
       </section>
-      <PipelineOverlay open={generating} />
+      <PipelineOverlay open={generating} state={generationState} />
     </AppShell>
   );
 }

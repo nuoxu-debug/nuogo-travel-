@@ -158,6 +158,11 @@ describe("objective-aligned trip generation", () => {
         expect(variant.validation.valid).toBe(true);
         expect(variant.summary.budgetFen).toBe(500_000);
         expect(variant.summary.totalFen).toBeLessThanOrEqual(500_000);
+        expect(variant.itinerary.days[0].activities[0].poi).toMatchObject({
+          primarySource: "AMAP",
+          name: expect.any(String),
+          coordinates: expect.any(Object)
+        });
       }
     });
   }

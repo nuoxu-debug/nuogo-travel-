@@ -286,11 +286,11 @@
 - Form emits `travelPreferenceSchema` fields.
 - Pipeline renders real server states: retrieval, planning, validating, repairing, failure, and `FINAL_VALIDATED`.
 
-- [ ] **Step 1: Write failing UI tests** for every mandatory field, three supported destinations, accessible validation, profile labels, hard-budget summaries, source labels, and all required generation/error states.
-- [ ] **Step 2: Verify red.**
-- [ ] **Step 3: Rebuild planner as a progressive travel brief** and comparison as three equal, visually distinct but structurally comparable profiles.
-- [ ] **Step 4: Remove simulated timing claims and connect UI state to API responses.**
-- [ ] **Step 5: Verify green and commit** with `feat(ui): align planner and comparison with validated trips`.
+- [x] **Step 1: Write failing UI tests** for every mandatory field, three supported destinations, accessible validation, profile labels, hard-budget summaries, source labels, and all required generation/error states.
+- [x] **Step 2: Verify red.**
+- [x] **Step 3: Rebuild planner as a progressive travel brief** and comparison as three equal, visually distinct but structurally comparable profiles.
+- [x] **Step 4: Remove simulated timing claims and connect UI state to API responses.**
+- [x] **Step 5: Verify green and commit** with `feat(ui): align planner and comparison with validated trips`.
 
 ### Task 14: Daily Workspace, Budget, Map, and Management
 

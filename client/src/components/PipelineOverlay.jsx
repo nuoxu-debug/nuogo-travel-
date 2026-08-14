@@ -1,110 +1,25 @@
-import { Compass, Luggage, MapPin, Route, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useLanguage } from "../context/LanguageContext.jsx";
-import { useAnime } from "../hooks/useAnime.js";
+import { CheckCircle2, Database, LoaderCircle, Route, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 
-const stages = {
-  en: [
-    "Collecting China travel preferences",
-    "Verifying budget & trip length constraints",
-    "Building structured domestic travel LLM prompt",
-    "Fetching three unique itinerary styles",
-    "Parsing validated structured itinerary JSON",
-    "Rendering timeline & map routes"
-  ],
-  zh: [
-    "正在收集中国旅行偏好",
-    "正在核验预算与行程天数",
-    "正在构建境内旅行结构化提示词",
-    "正在获取三种独特行程风格",
-    "正在解析并验证行程JSON数据",
-    "正在渲染时间线与地图路线"
-  ]
+const states = {
+  RETRIEVING: { Icon: Database, label: "Retrieving verified travel data", detail: "Building a destination candidate pool from configured providers." },
+  PLANNING: { Icon: Sparkles, label: "Drafting three travel profiles", detail: "The AI may select only verified candidate IDs." },
+  VALIDATING: { Icon: ShieldCheck, label: "Validating routes, time, and budget", detail: "Server rules recalculate every derived value." },
+  REPAIRING: { Icon: Wrench, label: "Repairing a constrained draft", detail: "A bounded repair pass is resolving validation codes." },
+  FAILED: { Icon: Route, label: "No safe itinerary was produced", detail: "Nothing invalid has been marked ready." },
+  FINAL_VALIDATED: { Icon: CheckCircle2, label: "Three plans validated", detail: "Every accepted profile stays inside the same hard budget." }
 };
 
-export const pipelineDuration = import.meta.env.MODE === "test" ? 45 : 620;
-
-export default function PipelineOverlay({ open }) {
-  const { language } = useLanguage();
-  const animate = useAnime();
-  const root = useRef(null);
-  const [stage, setStage] = useState(0);
-  const activeStages = useMemo(() => stages[language], [language]);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    setStage(0);
-    const timer = window.setInterval(() => {
-      setStage((current) => Math.min(activeStages.length - 1, current + 1));
-    }, pipelineDuration);
-    animate({
-      targets: root.current?.querySelectorAll(".float-glyph"),
-      translateY: [-12, 12],
-      rotate: [-4, 4],
-      direction: "alternate",
-      loop: true,
-      delay: (_target, index) => index * 140,
-      duration: 1200,
-      easing: "easeInOutSine"
-    });
-    animate({
-      targets: root.current?.querySelector(".route-runner"),
-      translateX: ["0%", "620%"],
-      direction: "alternate",
-      loop: true,
-      duration: 2100,
-      easing: "easeInOutQuad"
-    });
-    return () => window.clearInterval(timer);
-  }, [activeStages.length, animate, open]);
-
-  useEffect(() => {
-    if (!open) return;
-    animate({
-      targets: root.current?.querySelector(".pipeline-status"),
-      opacity: [0, 1],
-      translateY: [10, 0],
-      duration: 420,
-      easing: "easeOutExpo"
-    });
-  }, [animate, open, stage]);
-
+export default function PipelineOverlay({ open, state = "RETRIEVING" }) {
   if (!open) return null;
-  const progress = ((stage + 1) / activeStages.length) * 100;
-
-  return (
-    <div ref={root} className="fixed inset-0 z-[100] grid place-items-center overflow-hidden bg-ink px-5 text-white" role="dialog" aria-modal="true" aria-label="Generating itinerary">
-      <div className="absolute inset-y-0 left-[12%] hidden w-px bg-white/10 lg:block" />
-      <div className="absolute inset-y-0 right-[12%] hidden w-px bg-white/10 lg:block" />
-      <div className="absolute left-[8%] top-[16%] text-white/15"><Luggage className="float-glyph h-16 w-16" /></div>
-      <div className="absolute right-[10%] top-[22%] text-gold/25"><Compass className="float-glyph h-20 w-20" /></div>
-      <div className="absolute bottom-[16%] left-[14%] text-vermilion/25"><MapPin className="float-glyph h-14 w-14" /></div>
-      <div className="w-full max-w-3xl">
-        <div className="mx-auto grid h-20 w-20 place-items-center border border-white/20 bg-white/10">
-          <Sparkles className="h-8 w-8 text-gold" />
-        </div>
-        <p className="mt-8 text-center text-xs font-bold uppercase tracking-[0.18em] text-white/45">
-          Nuogo AI pipeline · {stage + 1}/6
-        </p>
-        <h2 key={`${language}-${stage}`} aria-live="polite" className="pipeline-status mx-auto mt-4 min-h-[96px] max-w-2xl text-center font-display text-3xl font-bold leading-tight sm:text-5xl">
-          {activeStages[stage]}
-        </h2>
-        <div className="relative mx-auto mt-12 max-w-xl">
-          <div className="h-1 bg-white/15">
-            <div
-              className="h-full bg-vermilion transition-[width] duration-500"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-          <div className="mt-5 flex items-center gap-3 text-white/30">
-            <MapPin className="h-4 w-4" />
-            <div className="relative h-px flex-1 bg-white/20">
-              <Route className="route-runner absolute -top-3 left-0 h-6 w-6 text-gold" />
-            </div>
-            <MapPin className="h-4 w-4" />
-          </div>
-        </div>
-      </div>
+  const current = states[state] ?? states.RETRIEVING;
+  const Icon = current.Icon;
+  return <div className="fixed inset-0 z-[100] grid place-items-center bg-ink/96 px-5 text-white" role="dialog" aria-modal="true" aria-label="Generating itinerary">
+    <div className="w-full max-w-2xl text-center">
+      <div className="mx-auto grid h-20 w-20 place-items-center rounded-lg border border-white/15 bg-white/8 text-gold"><Icon className="h-8 w-8" /></div>
+      <p className="mt-7 text-xs font-bold uppercase text-white/45">Nuogo validation pipeline</p>
+      <h2 aria-live="polite" className="mt-3 font-display text-3xl font-bold sm:text-5xl">{current.label}</h2>
+      <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-white/58">{current.detail}</p>
+      <div className="mx-auto mt-9 flex max-w-md items-center gap-3 text-lake"><span className="h-2 w-2 rounded-full bg-current" /><span className="h-px flex-1 bg-white/15" /><LoaderCircle className="h-5 w-5 animate-spin motion-reduce:animate-none" /><span className="h-px flex-1 bg-white/15" /><span className="h-2 w-2 rounded-full bg-current" /></div>
     </div>
-  );
+  </div>;
 }

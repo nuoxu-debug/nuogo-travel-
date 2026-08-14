@@ -1,7 +1,18 @@
 import { ShieldCheck } from "lucide-react";
 import { useGsapContext } from "../motion/useGsapContext.js";
 
-const categories = [
+const objectiveCategories = [
+  { label: "Accommodation", keys: ["accommodation"] },
+  { label: "Outbound", keys: ["outboundTransport"] },
+  { label: "Return", keys: ["returnTransport"] },
+  { label: "Local transport", keys: ["localTransportation", "transportation", "transport"] },
+  { label: "Food", keys: ["foodAndBeverages", "localFood", "food"] },
+  { label: "Attractions", keys: ["attractionTickets", "scenicTickets", "attractions"] },
+  { label: "Entertainment", keys: ["entertainmentActivities", "entertainment"] },
+  { label: "Other", keys: ["other"] }
+];
+
+const legacyCategories = [
   { label: "Accommodation", keys: ["accommodation"] },
   { label: "Transport", keys: ["transportation", "transport"] },
   { label: "Food", keys: ["localFood", "food"] },
@@ -19,6 +30,9 @@ function formatCurrency(value) {
 }
 
 export default function ComparisonRouteRail({ variants, activeId, language = "en" }) {
+  const categories = variants.some((variant) => "outboundTransport" in (variant.budget ?? {}))
+    ? objectiveCategories
+    : legacyCategories;
   const budget = variants[0]?.totalBudget ?? 0;
   const signature = `${activeId}|${variants.map((variant) => variant.id).join("|")}`;
   const { scope } = useGsapContext(({ gsap }) => {

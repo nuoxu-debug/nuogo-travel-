@@ -19,6 +19,11 @@ function CompareContent() {
     setChoosing(true);
     setSelectionError("");
     try {
+      if (trip.objectiveAligned) {
+        setTrip({ ...trip, selectedVariantId: variant.itinerary.variant });
+        navigate(`/trip/${trip.id}`);
+        return;
+      }
       const body = await apiRequest(`/trips/${trip.id}/select-variant`, {
         method: "POST",
         body: JSON.stringify({
@@ -55,7 +60,9 @@ function CompareContent() {
           <div>
             <span className="flex items-center gap-2 text-xs font-extrabold uppercase text-lake"><ArrowLeftRight className="h-4 w-4" /> Nuogo compare · step 02</span>
             <h1 className="mt-4 max-w-4xl font-display text-4xl font-extrabold leading-tight sm:text-6xl">
-              {language === "zh" ? "三种旅行风格，一眼做出选择。" : "Three travel styles. One clear choice."}
+              {trip.objectiveAligned
+                ? "Three travel profiles. One hard budget."
+                : (language === "zh" ? "三种旅行风格，一眼做出选择。" : "Three travel styles. One clear choice.")}
             </h1>
           </div>
           <div className="rounded-lg border border-ink/10 bg-white/72 p-5 shadow-panel backdrop-blur-2xl">

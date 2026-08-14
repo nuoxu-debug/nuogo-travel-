@@ -227,6 +227,13 @@ export function TripProvider({ tripId, sharedToken, children }) {
         return;
       }
 
+      if (snapshotRef.current.trip?.objectiveAligned) {
+        commit((current) => current.sourceKey === requestedSource
+          ? { ...current, loading: false, access: ownerFixtureAccess }
+          : current);
+        return;
+      }
+
       try {
         await refreshTrip({ force: true });
       } catch {
