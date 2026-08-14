@@ -104,11 +104,11 @@
 - `enrichTourism({ city, coordinates, radiusMeters, signal }) -> RawTourismRecord[]`
 - Provider errors expose stable codes: `PROVIDER_UNAVAILABLE`, `PROVIDER_RATE_LIMITED`, `PROVIDER_AUTH_FAILED`, `ROUTE_UNAVAILABLE`.
 
-- [ ] **Step 1: Write failing provider tests** for mapping, server-only keys, timeout, transient retry, permanent 4xx no-retry, rate limits, malformed responses, and deterministic demo fixtures.
-- [ ] **Step 2: Run provider tests and verify missing implementations fail.**
-- [ ] **Step 3: Implement the adapters** with injected `fetch`, `AbortController`, bounded retry, Zod response parsing, and no fabricated success fallback.
-- [ ] **Step 4: Run tests and scan the client bundle sources for provider key names.**
-- [ ] **Step 5: Commit** with `feat(travel-data): add AMap and OpenTripMap adapters`.
+- [x] **Step 1: Write failing provider tests** for mapping, server-only keys, timeout, transient retry, permanent 4xx no-retry, rate limits, malformed responses, and deterministic demo fixtures.
+- [x] **Step 2: Run provider tests and verify missing implementations fail.**
+- [x] **Step 3: Implement the adapters** with injected `fetch`, `AbortController`, bounded retry, Zod response parsing, and no fabricated success fallback.
+- [x] **Step 4: Run tests and scan the client bundle sources for provider key names.**
+- [x] **Step 5: Commit** with `feat(travel-data): add AMap and OpenTripMap adapters`.
 
 ### Task 5: Canonical POIs, Matching, and Candidate Pool
 

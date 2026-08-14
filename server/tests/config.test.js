@@ -7,7 +7,11 @@ const original = {
   DEMO_MODE: process.env.DEMO_MODE,
   MYSQL_PASSWORD: process.env.MYSQL_PASSWORD,
   JWT_SECRET: process.env.JWT_SECRET,
-  OPENROUTER_TIMEOUT_MS: process.env.OPENROUTER_TIMEOUT_MS
+  OPENROUTER_TIMEOUT_MS: process.env.OPENROUTER_TIMEOUT_MS,
+  TRAVEL_DATA_PROVIDER: process.env.TRAVEL_DATA_PROVIDER,
+  TRAVEL_PROVIDER_TIMEOUT_MS: process.env.TRAVEL_PROVIDER_TIMEOUT_MS,
+  AMAP_WEB_SERVICE_KEY: process.env.AMAP_WEB_SERVICE_KEY,
+  OPENTRIPMAP_API_KEY: process.env.OPENTRIPMAP_API_KEY
 };
 
 afterEach(() => {
@@ -61,5 +65,38 @@ describe("runtime configuration", () => {
     process.env.MYSQL_PASSWORD = "database-password";
     delete process.env.JWT_SECRET;
     expect(() => loadConfig()).toThrow(/JWT_SECRET/i);
+  });
+
+  it("uses deterministic travel data by default", () => {
+    delete process.env.TRAVEL_DATA_PROVIDER;
+    expect(loadConfig()).toMatchObject({
+      travelDataProvider: "demo",
+      travelProviderTimeoutMs: 8000,
+      amapWebServiceKey: "",
+      openTripMapKey: ""
+    });
+  });
+
+  it("requires both server-side travel keys in live mode", () => {
+    process.env.TRAVEL_DATA_PROVIDER = "live";
+    delete process.env.AMAP_WEB_SERVICE_KEY;
+    delete process.env.OPENTRIPMAP_API_KEY;
+    expect(() => loadConfig()).toThrow(/AMAP_WEB_SERVICE_KEY/i);
+
+    process.env.AMAP_WEB_SERVICE_KEY = "test-amap-key";
+    expect(() => loadConfig()).toThrow(/OPENTRIPMAP_API_KEY/i);
+  });
+
+  it("loads bounded live travel provider configuration", () => {
+    process.env.TRAVEL_DATA_PROVIDER = "live";
+    process.env.AMAP_WEB_SERVICE_KEY = "test-amap-key";
+    process.env.OPENTRIPMAP_API_KEY = "test-otm-key";
+    process.env.TRAVEL_PROVIDER_TIMEOUT_MS = "12000";
+    expect(loadConfig()).toMatchObject({
+      travelDataProvider: "live",
+      travelProviderTimeoutMs: 12000,
+      amapWebServiceKey: "test-amap-key",
+      openTripMapKey: "test-otm-key"
+    });
   });
 });
