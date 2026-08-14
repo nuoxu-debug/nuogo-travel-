@@ -10,6 +10,7 @@ import DayTabs from "../components/DayTabs.jsx";
 import ExpenseWorkspace from "../components/ExpenseWorkspace.jsx";
 import GuidePanel from "../components/GuidePanel.jsx";
 import MemberAvatars from "../components/MemberAvatars.jsx";
+import ObjectiveTripWorkspace from "../components/ObjectiveTripWorkspace.jsx";
 import RouteMap from "../components/RouteMap.jsx";
 import ShareDialog from "../components/ShareDialog.jsx";
 import Timeline from "../components/Timeline.jsx";
@@ -94,11 +95,11 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
 
   const variant = useMemo(() => {
     if (!trip) return null;
-    return trip.variants.find((item) => item.id === trip.selectedVariantId)
+    return trip.variants?.find((item) => item.id === trip.selectedVariantId)
       ?? trip.variants[0];
   }, [trip]);
   const day = useMemo(
-    () => variant?.days.find((item) => item.id === activeDayId) ?? variant?.days[0],
+    () => variant?.days?.find((item) => item.id === activeDayId) ?? variant?.days?.[0],
     [activeDayId, variant]
   );
   const activity = useMemo(
@@ -125,6 +126,10 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
         <div className="h-72 animate-pulse rounded-lg bg-ink/8" />
       </div>
     );
+  }
+
+  if (trip?.objectiveAligned) {
+    return <ObjectiveTripWorkspace trip={trip} setTrip={setTrip} access={access} />;
   }
 
   if (error || !trip || !variant || !day) {

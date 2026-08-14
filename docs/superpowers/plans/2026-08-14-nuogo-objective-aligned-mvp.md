@@ -310,10 +310,10 @@
 - Daily sequence is start point, leg, activity/meal, leg, end point.
 - Management actions expose rename, edit/revalidate, regenerate, delete, and retrieval with role-aware controls.
 
-- [ ] **Step 1: Write failing tests** for legs, timings, sources, eight budget categories, remaining/per-person values, map ordering, coordinate warning, management actions, privacy consent, and invalidated/revalidating states.
-- [ ] **Step 2: Verify red.**
-- [ ] **Step 3: Implement the dense operational workspace** using the Flight Atlas system; keep the map compact/sticky and details scannable.
-- [ ] **Step 4: Verify green and commit** with `feat(ui): display continuous sourced trips`.
+- [x] **Step 1: Write failing tests** for legs, timings, sources, eight budget categories, remaining/per-person values, map ordering, coordinate warning, management actions, privacy consent, and invalidated/revalidating states.
+- [x] **Step 2: Verify red.**
+- [x] **Step 3: Implement the dense operational workspace** using the Flight Atlas system; keep the map compact/sticky and details scannable.
+- [x] **Step 4: Verify green and commit** with `feat(ui): display continuous sourced trips`.
 
 ### Task 15: Legacy Isolation and Documentation Alignment
 

@@ -200,11 +200,13 @@ export async function generateValidatedTrip(preferences, dependencies) {
       tripId,
       trip: {
         id: tripId,
+        title: `${preferences.destination.replace(/^./, (letter) => letter.toUpperCase())} journey`,
         destination: preferences.destination,
         startDate: preferences.startDate,
         endDate: preferences.endDate,
         travellerCount: preferences.travellerCount,
-        totalBudgetCny: preferences.totalBudgetCny
+        totalBudgetCny: preferences.totalBudgetCny,
+        preferences
       },
       state,
       variants,
@@ -220,11 +222,13 @@ export async function generateValidatedTrip(preferences, dependencies) {
       tripId,
       trip: {
         id: tripId,
+        title: `${preferences.destination.replace(/^./, (letter) => letter.toUpperCase())} journey`,
         destination: preferences.destination,
         startDate: preferences.startDate,
         endDate: preferences.endDate,
         travellerCount: preferences.travellerCount,
-        totalBudgetCny: preferences.totalBudgetCny
+        totalBudgetCny: preferences.totalBudgetCny,
+        preferences
       },
       state: "FAILED",
       variants: [],
