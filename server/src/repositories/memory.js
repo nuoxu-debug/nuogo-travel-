@@ -74,6 +74,13 @@ export class MemoryRepository {
     return clone([...this.supportedDestinations.values()]);
   }
 
+  async setDestinationStatus(destinationId, status) {
+    const destination = this.supportedDestinations.get(destinationId);
+    if (!destination) return undefined;
+    destination.status = status;
+    return clone(destination);
+  }
+
   async upsertCanonicalPoi(poi) {
     this.canonicalPois.set(poi.id, clone(poi));
     return clone(poi);

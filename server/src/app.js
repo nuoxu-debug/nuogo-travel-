@@ -6,6 +6,7 @@ import { ZodError } from "zod";
 import { createAuthMiddleware } from "./middleware/auth.js";
 import { createAuthRouter } from "./routes/auth.js";
 import { createActivitiesRouter } from "./routes/activities.js";
+import { createAdminRouter } from "./routes/admin.js";
 import { createAttractionMediaRouter } from "./routes/attractionMedia.js";
 import { createCollaborationRouter } from "./routes/collaboration.js";
 import { createExpensesRouter } from "./routes/expenses.js";
@@ -55,6 +56,7 @@ export function createApp({
     authenticate,
     demoMode: config.demoMode
   }));
+  app.use("/api/admin", createAdminRouter({ repository, authenticate }));
   app.use("/api/meta", createMetaRouter({
     authenticate,
     demoMode: config.demoMode,

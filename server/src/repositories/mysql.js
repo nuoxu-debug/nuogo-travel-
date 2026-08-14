@@ -149,6 +149,14 @@ export class MySqlRepository {
     }));
   }
 
+  async setDestinationStatus(destinationId, status) {
+    const [result] = await this.pool.execute(
+      "UPDATE supported_destinations SET status = ? WHERE id = ?",
+      [status, destinationId]
+    );
+    return result.affectedRows ? { id: destinationId, status } : undefined;
+  }
+
   async upsertCanonicalPoi(poi) {
     const connection = await this.pool.getConnection();
     try {

@@ -239,11 +239,11 @@
 **Interfaces:**
 - Admin CRUD is limited to supported destinations, POI/source metadata, cost/fuel references, dates, and `ACTIVE`/`OUTDATED`/`UNAVAILABLE` status.
 
-- [ ] **Step 1: Write failing role and CRUD tests**, including normal-user denial and validation of source/date/status fields.
-- [ ] **Step 2: Verify red.**
-- [ ] **Step 3: Implement the minimal protected routes and repository calls.**
-- [ ] **Step 4: Verify green.**
-- [ ] **Step 5: Commit** with `feat(admin): manage travel reference data`.
+- [x] **Step 1: Write failing role and CRUD tests**, including normal-user denial and validation of source/date/status fields.
+- [x] **Step 2: Verify red.**
+- [x] **Step 3: Implement the minimal protected routes and repository calls.**
+- [x] **Step 4: Verify green.**
+- [x] **Step 5: Commit** with `feat(admin): manage travel reference data`.
 
 ### Task 12: New Visual System, GSAP Motion, and Scroll-Driven Journey Atlas
 
