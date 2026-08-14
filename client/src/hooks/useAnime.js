@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef } from "react";
 import anime from "animejs/lib/anime.es.js";
+import { useReducedMotion } from "./useReducedMotion.js";
+
+export { useReducedMotion } from "./useReducedMotion.js";
 
 function normalizeTargets(targets) {
   if (!targets) return [];
@@ -32,13 +35,6 @@ function applyReducedMotionState(targets, properties) {
     }
     if (resetsTransform && target?.style) target.style.transform = "none";
   }
-}
-
-export function useReducedMotion() {
-  const query = typeof window === "undefined"
-    ? null
-    : window.matchMedia("(prefers-reduced-motion: reduce)");
-  return Boolean(query?.matches);
 }
 
 export function useAnime() {
