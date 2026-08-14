@@ -16,6 +16,32 @@ export const chinaCities = [
 
 export const cityIds = chinaCities.map((city) => city.id);
 
+export const supportedDestinations = chinaCities.filter((city) =>
+  ["beijing", "shanghai", "xian"].includes(city.id)
+);
+export const supportedDestinationIds = supportedDestinations.map((city) => city.id);
+
+export const spendingProfiles = [
+  "BUDGET_SAVING",
+  "BALANCED",
+  "COMFORT_FOCUSED"
+];
+
+export const transportModes = [
+  "FLIGHT",
+  "DRIVING",
+  "TRAIN",
+  "USER_PROVIDED"
+];
+
+export const localTransportModes = [
+  "WALK",
+  "PUBLIC_TRANSIT",
+  "TAXI",
+  "DRIVE",
+  "MIXED"
+];
+
 export const poiCategories = [
   "natural_scenery",
   "historical_relics",

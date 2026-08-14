@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     "./constants": "./constants.js",
-    "./schemas": "./schemas.js"
+    "./schemas": "./schemas.js",
+    "./itinerary-draft-schema": "./itineraryDraftSchema.js"
   },
   "scripts": {
     "test": "vitest run"

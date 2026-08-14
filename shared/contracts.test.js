@@ -1,15 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { chinaCities } from "./constants.js";
 import {
+  chinaCities,
+  spendingProfiles,
+  supportedDestinations
+} from "./constants.js";
+import {
+  canonicalPoiSchema,
   expenseInputSchema,
   expenseSummarySchema,
+  itineraryDraftSchema,
   itineraryVariantSchema,
   preferenceSchema,
+  travelPreferenceSchema,
+  tripLegSchema,
   tripInvitationSchema,
   tripExpenseSchema,
   tripMemberSchema,
   tripRevisionSchema
 } from "./schemas.js";
+import { itineraryDraftJsonSchema } from "./itineraryDraftSchema.js";
 
 const validActivity = {
   id: "activity-1",
@@ -73,6 +82,148 @@ const validPreferences = {
 };
 
 describe("Nuogo shared contracts", () => {
+  it("limits the objective-aligned planner to three supported destinations", () => {
+    expect(supportedDestinations.map(({ id }) => id)).toEqual([
+      "beijing",
+      "shanghai",
+      "xian"
+    ]);
+    expect(spendingProfiles).toEqual([
+      "BUDGET_SAVING",
+      "BALANCED",
+      "COMFORT_FOCUSED"
+    ]);
+  });
+
+  it("accepts the complete objective-aligned preference contract", () => {
+    const preferences = travelPreferenceSchema.parse({
+      origin: "Kuala Lumpur",
+      destination: "beijing",
+      startDate: "2026-09-01",
+      endDate: "2026-09-05",
+      travellerCount: 2,
+      totalBudgetCny: 10000,
+      interests: ["history", "food"],
+      preferredSights: ["Forbidden City"],
+      accommodationPreference: "BUDGET",
+      foodPreference: "LOCAL",
+      localTransportPreference: "PUBLIC_TRANSIT",
+      activityPreferences: ["CULTURE", "FOOD"],
+      arrivalDateTime: "2026-09-01T10:00:00+08:00",
+      departureDateTime: "2026-09-05T20:00:00+08:00",
+      outboundTransportMode: "FLIGHT",
+      returnTransportMode: "FLIGHT",
+      outboundTransportCostCny: 1200,
+      returnTransportCostCny: 1200,
+      language: "en",
+      consentToLlmProcessing: true
+    });
+
+    expect(preferences.travellerCount).toBe(2);
+    expect(preferences.destination).toBe("beijing");
+  });
+
+  it("rejects unsupported cities and inconsistent travel dates", () => {
+    const base = {
+      origin: "Kuala Lumpur",
+      destination: "beijing",
+      startDate: "2026-09-01",
+      endDate: "2026-09-05",
+      travellerCount: 2,
+      totalBudgetCny: 10000,
+      interests: ["history"],
+      preferredSights: [],
+      accommodationPreference: "MID_RANGE",
+      foodPreference: "BALANCED",
+      localTransportPreference: "MIXED",
+      activityPreferences: ["CULTURE"],
+      arrivalDateTime: "2026-09-01T10:00:00+08:00",
+      departureDateTime: "2026-09-05T20:00:00+08:00",
+      outboundTransportMode: "TRAIN",
+      returnTransportMode: "TRAIN",
+      language: "en",
+      consentToLlmProcessing: true
+    };
+
+    expect(() => travelPreferenceSchema.parse({ ...base, destination: "huangshan" })).toThrow();
+    expect(() => travelPreferenceSchema.parse({ ...base, endDate: "2026-08-31" })).toThrow();
+  });
+
+  it("validates canonical POI provenance and a sourced trip leg", () => {
+    const poi = canonicalPoiSchema.parse({
+      canonicalPoiId: "POI_BJ_001",
+      name: "Forbidden City",
+      city: "beijing",
+      category: "ATTRACTION",
+      coordinates: { latitude: 39.9163, longitude: 116.3972 },
+      primarySource: "AMAP",
+      amapPoiId: "B000A8UIN8",
+      openTripMapXid: "N123",
+      sourceRecords: [{
+        provider: "AMAP",
+        sourceId: "B000A8UIN8",
+        retrievedAt: "2026-08-14T02:00:00.000Z"
+      }],
+      retrievedAt: "2026-08-14T02:00:00.000Z",
+      verificationStatus: "MATCHED"
+    });
+    const leg = tripLegSchema.parse({
+      id: "leg-1",
+      fromLocationId: "hotel-1",
+      toLocationId: poi.canonicalPoiId,
+      mode: "PUBLIC_TRANSIT",
+      distanceMeters: 7200,
+      durationMinutes: 31,
+      estimatedCostFen: 500,
+      routeSource: "AMAP",
+      routeRetrievedAt: "2026-08-14T02:00:00.000Z"
+    });
+
+    expect(leg.estimatedCostFen).toBe(500);
+  });
+
+  it("keeps authoritative coordinates and prices outside the LLM draft", () => {
+    const draft = {
+      variant: "BALANCED",
+      trip: {
+        origin: "Kuala Lumpur",
+        destination: "beijing",
+        startDate: "2026-09-01",
+        endDate: "2026-09-05",
+        travellerCount: 2,
+        totalBudgetCny: 10000
+      },
+      days: [{
+        dayNumber: 1,
+        date: "2026-09-01",
+        startPoint: { locationId: "hotel-1", locationType: "HOTEL" },
+        activities: [{
+          sequence: 1,
+          poiId: "POI_BJ_001",
+          activityType: "CULTURE",
+          plannedStartTime: "11:30",
+          plannedDurationMinutes: 120,
+          reason: "Matches the requested history interest."
+        }],
+        endPoint: { locationId: "hotel-1", locationType: "HOTEL" }
+      }]
+    };
+
+    expect(itineraryDraftSchema.parse(draft).variant).toBe("BALANCED");
+    expect(() => itineraryDraftSchema.parse({
+      ...draft,
+      days: [{
+        ...draft.days[0],
+        activities: [{
+          ...draft.days[0].activities[0],
+          estimatedCostCny: 100,
+          coordinates: { latitude: 39.9, longitude: 116.4 }
+        }]
+      }]
+    })).toThrow();
+    expect(itineraryDraftJsonSchema.additionalProperties).toBe(false);
+  });
+
   it("accepts bounded mainland-China preferences", () => {
     expect(preferenceSchema.parse(validPreferences).destination).toBe("chengdu");
   });

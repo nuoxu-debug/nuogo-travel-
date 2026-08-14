@@ -6,6 +6,10 @@ import {
   groupTypes,
   invitationStatuses,
   poiCategories,
+  localTransportModes,
+  spendingProfiles,
+  supportedDestinationIds,
+  transportModes,
   tripMemberRoles,
   tripStyles
 } from "./constants.js";
@@ -16,6 +20,143 @@ const bilingualTextSchema = z.object({
 }).strict();
 
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+const isoDateTimeSchema = z.string().datetime({ offset: true });
+
+const coordinatesSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180)
+}).strict();
+
+const sourceRecordSchema = z.object({
+  provider: z.enum(["AMAP", "OPENTRIPMAP", "DATABASE", "USER_PROVIDED", "DEMO"]),
+  sourceId: z.string().min(1).max(160),
+  sourceUrl: z.string().url().optional(),
+  retrievedAt: z.string().datetime(),
+  expiresAt: z.string().datetime().optional()
+}).strict();
+
+export const travelPreferenceSchema = z.object({
+  origin: z.string().trim().min(2).max(120),
+  destination: z.enum(supportedDestinationIds),
+  startDate: z.string().date(),
+  endDate: z.string().date(),
+  travellerCount: z.number().int().min(1).max(20),
+  totalBudgetCny: z.number().int().min(100).max(1_000_000),
+  interests: z.array(z.string().trim().min(1).max(80)).min(1).max(10),
+  preferredSights: z.array(z.string().trim().min(1).max(120)).max(12),
+  accommodationPreference: z.enum(["BUDGET", "MID_RANGE", "COMFORT"]),
+  foodPreference: z.enum(["ECONOMY", "LOCAL", "BALANCED", "COMFORT"]),
+  localTransportPreference: z.enum(localTransportModes),
+  activityPreferences: z.array(z.enum([
+    "CULTURE",
+    "HISTORY",
+    "FOOD",
+    "NATURE",
+    "SHOPPING",
+    "ENTERTAINMENT",
+    "FAMILY"
+  ])).min(1).max(7),
+  arrivalDateTime: isoDateTimeSchema,
+  departureDateTime: isoDateTimeSchema,
+  outboundTransportMode: z.enum(transportModes),
+  returnTransportMode: z.enum(transportModes),
+  outboundTransportCostCny: z.number().nonnegative().max(500_000).optional(),
+  returnTransportCostCny: z.number().nonnegative().max(500_000).optional(),
+  fuelConsumptionLitresPer100Km: z.number().positive().max(40).optional(),
+  otherPreferences: z.string().trim().max(500).optional(),
+  language: z.enum(["en", "zh"]).default("en"),
+  consentToLlmProcessing: z.literal(true)
+}).strict().superRefine((preferences, context) => {
+  if (preferences.endDate < preferences.startDate) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["endDate"],
+      message: "End date must be on or after start date."
+    });
+  }
+  if (new Date(preferences.departureDateTime) <= new Date(preferences.arrivalDateTime)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["departureDateTime"],
+      message: "Departure must be after arrival."
+    });
+  }
+});
+
+export const canonicalPoiSchema = z.object({
+  canonicalPoiId: z.string().min(1).max(160),
+  name: z.string().min(1).max(240),
+  city: z.enum(supportedDestinationIds),
+  category: z.enum(["ATTRACTION", "HOTEL", "RESTAURANT", "TRANSPORT_HUB", "OTHER"]),
+  coordinates: coordinatesSchema,
+  address: z.string().max(500).optional(),
+  primarySource: z.enum(["AMAP", "OPENTRIPMAP", "DATABASE", "DEMO"]),
+  amapPoiId: z.string().min(1).max(160).optional(),
+  openTripMapXid: z.string().min(1).max(160).optional(),
+  sourceRecords: z.array(sourceRecordSchema).min(1),
+  retrievedAt: z.string().datetime(),
+  verificationStatus: z.enum([
+    "MATCHED",
+    "PRIMARY_ONLY",
+    "SUPPORTING_ONLY",
+    "AMBIGUOUS",
+    "UNMATCHED"
+  ])
+}).strict();
+
+export const tripLegSchema = z.object({
+  id: z.string().min(1),
+  fromLocationId: z.string().min(1),
+  toLocationId: z.string().min(1),
+  mode: z.enum(localTransportModes),
+  distanceMeters: z.number().int().nonnegative(),
+  durationMinutes: z.number().int().positive(),
+  estimatedCostFen: z.number().int().nonnegative(),
+  routeSource: z.enum(["AMAP", "USER_PROVIDED", "REFERENCE", "DEMO"]),
+  routeRetrievedAt: z.string().datetime()
+}).strict();
+
+const draftPointSchema = z.object({
+  locationId: z.string().min(1),
+  locationType: z.enum(["ORIGIN", "HOTEL", "POI", "TRANSPORT_HUB", "DESTINATION"])
+}).strict();
+
+const draftActivitySchema = z.object({
+  sequence: z.number().int().positive(),
+  poiId: z.string().min(1),
+  activityType: z.enum([
+    "CULTURE",
+    "HISTORY",
+    "FOOD",
+    "NATURE",
+    "SHOPPING",
+    "ENTERTAINMENT",
+    "FAMILY",
+    "HOTEL"
+  ]),
+  plannedStartTime: timeSchema,
+  plannedDurationMinutes: z.number().int().min(15).max(720),
+  reason: z.string().min(1).max(500)
+}).strict();
+
+export const itineraryDraftSchema = z.object({
+  variant: z.enum(spendingProfiles),
+  trip: z.object({
+    origin: z.string().min(1).max(120),
+    destination: z.enum(supportedDestinationIds),
+    startDate: z.string().date(),
+    endDate: z.string().date(),
+    travellerCount: z.number().int().min(1).max(20),
+    totalBudgetCny: z.number().int().positive()
+  }).strict(),
+  days: z.array(z.object({
+    dayNumber: z.number().int().positive(),
+    date: z.string().date(),
+    startPoint: draftPointSchema,
+    activities: z.array(draftActivitySchema).min(1).max(12),
+    endPoint: draftPointSchema
+  }).strict()).min(1).max(14)
+}).strict();
 
 const visitDetailsSchema = z.object({
   suggestedDuration: bilingualTextSchema,
