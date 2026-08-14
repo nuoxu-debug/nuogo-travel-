@@ -118,6 +118,261 @@ export class MySqlRepository {
     return true;
   }
 
+  async getUserRole(userId) {
+    const [rows] = await this.pool.execute(
+      "SELECT role FROM users WHERE id = ? AND deleted_at IS NULL LIMIT 1",
+      [userId]
+    );
+    return rows[0]?.role;
+  }
+
+  async setUserRole(userId, role) {
+    if (!["user", "admin"].includes(role)) return false;
+    const [result] = await this.pool.execute(
+      "UPDATE users SET role = ? WHERE id = ? AND deleted_at IS NULL",
+      [role, userId]
+    );
+    return result.affectedRows > 0;
+  }
+
+  async listSupportedDestinations() {
+    const [rows] = await this.pool.execute(
+      `SELECT id, name_en AS nameEn, name_zh AS nameZh,
+              center_latitude AS latitude, center_longitude AS longitude, status
+       FROM supported_destinations ORDER BY id`
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      name: { en: row.nameEn, zh: row.nameZh },
+      center: { latitude: row.latitude, longitude: row.longitude },
+      status: row.status
+    }));
+  }
+
+  async upsertCanonicalPoi(poi) {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.execute(
+        `INSERT INTO canonical_pois
+          (id, destination_id, name_json, category, latitude, longitude, address_json, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE name_json = VALUES(name_json), category = VALUES(category),
+           latitude = VALUES(latitude), longitude = VALUES(longitude),
+           address_json = VALUES(address_json), status = VALUES(status)`,
+        [
+          poi.id, poi.destinationId, json(poi.name), poi.category,
+          poi.coordinates.latitude, poi.coordinates.longitude,
+          poi.address ? json(poi.address) : null, poi.status ?? "ACTIVE"
+        ]
+      );
+      await connection.execute("DELETE FROM poi_source_records WHERE poi_id = ?", [poi.id]);
+      for (const source of poi.sources ?? []) {
+        await connection.execute(
+          `INSERT INTO poi_source_records
+            (id, poi_id, provider, source_id, source_url, retrieved_at, expires_at, raw_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            randomUUID(), poi.id, source.provider, source.sourceId, source.sourceUrl ?? null,
+            source.retrievedAt, source.expiresAt ?? null, source.raw ? json(source.raw) : null
+          ]
+        );
+      }
+      await connection.commit();
+      return poi;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async listCanonicalPois(destinationId) {
+    const [poiRows] = await this.pool.execute(
+      `SELECT id, destination_id AS destinationId, name_json, category,
+              latitude, longitude, address_json, status
+       FROM canonical_pois WHERE destination_id = ? ORDER BY id`,
+      [destinationId]
+    );
+    if (!poiRows.length) return [];
+    const [sourceRows] = await this.pool.query(
+      `SELECT poi_id AS poiId, provider, source_id AS sourceId, source_url AS sourceUrl,
+              retrieved_at AS retrievedAt, expires_at AS expiresAt, raw_json
+       FROM poi_source_records WHERE poi_id IN (?) ORDER BY provider, source_id`,
+      [poiRows.map(({ id }) => id)]
+    );
+    return poiRows.map((row) => ({
+      id: row.id,
+      destinationId: row.destinationId,
+      name: parseJson(row.name_json),
+      category: row.category,
+      coordinates: { latitude: row.latitude, longitude: row.longitude },
+      ...(row.address_json ? { address: parseJson(row.address_json) } : {}),
+      status: row.status,
+      sources: sourceRows.filter((source) => source.poiId === row.id).map((source) => ({
+        provider: source.provider,
+        sourceId: source.sourceId,
+        ...(source.sourceUrl ? { sourceUrl: source.sourceUrl } : {}),
+        retrievedAt: publicDateTime(source.retrievedAt),
+        ...(source.expiresAt ? { expiresAt: publicDateTime(source.expiresAt) } : {}),
+        ...(source.raw_json ? { raw: parseJson(source.raw_json) } : {})
+      }))
+    }));
+  }
+
+  async putRouteCache(key, route) {
+    await this.pool.execute(
+      `INSERT INTO route_cache
+        (cache_key, mode, distance_meters, duration_seconds, route_json,
+         provider, source_id, retrieved_at, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE distance_meters = VALUES(distance_meters),
+         duration_seconds = VALUES(duration_seconds), route_json = VALUES(route_json),
+         provider = VALUES(provider), source_id = VALUES(source_id),
+         retrieved_at = VALUES(retrieved_at), expires_at = VALUES(expires_at)`,
+      [
+        key, route.mode, route.distanceMeters, route.durationSeconds, json(route),
+        route.source.provider, route.source.sourceId, route.source.retrievedAt,
+        route.source.expiresAt ?? null
+      ]
+    );
+    return route;
+  }
+
+  async getRouteCache(key) {
+    const [rows] = await this.pool.execute(
+      "SELECT route_json FROM route_cache WHERE cache_key = ? AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP) LIMIT 1",
+      [key]
+    );
+    return rows[0] ? parseJson(rows[0].route_json) : undefined;
+  }
+
+  async upsertCostReference(reference) {
+    await this.pool.execute(
+      `INSERT INTO cost_references
+        (id, destination_id, category, unit, amount_fen, source_json,
+         effective_from, effective_to, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE amount_fen = VALUES(amount_fen), source_json = VALUES(source_json),
+         effective_from = VALUES(effective_from), effective_to = VALUES(effective_to),
+         status = VALUES(status)`,
+      [
+        reference.id, reference.destinationId, reference.category, reference.unit,
+        reference.amountFen, reference.source ? json(reference.source) : null,
+        reference.effectiveFrom ?? null, reference.effectiveTo ?? null,
+        reference.status ?? "ACTIVE"
+      ]
+    );
+    return reference;
+  }
+
+  async listCostReferences(destinationId) {
+    const [rows] = await this.pool.execute(
+      `SELECT id, destination_id AS destinationId, category, unit, amount_fen AS amountFen,
+              source_json, effective_from AS effectiveFrom, effective_to AS effectiveTo, status
+       FROM cost_references WHERE destination_id = ? ORDER BY category, unit`,
+      [destinationId]
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      destinationId: row.destinationId,
+      category: row.category,
+      unit: row.unit,
+      amountFen: row.amountFen,
+      ...(row.source_json ? { source: parseJson(row.source_json) } : {}),
+      ...(row.effectiveFrom ? { effectiveFrom: publicDate(row.effectiveFrom) } : {}),
+      ...(row.effectiveTo ? { effectiveTo: publicDate(row.effectiveTo) } : {}),
+      status: row.status
+    }));
+  }
+
+  async saveItineraryRun(run) {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.execute(
+        `INSERT INTO itinerary_runs
+          (id, trip_id, profile, state, estimated_total_fen, summary_json)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE state = VALUES(state),
+           estimated_total_fen = VALUES(estimated_total_fen), summary_json = VALUES(summary_json)`,
+        [run.id, run.tripId, run.profile, run.state, run.estimatedTotalFen ?? null, json(run.summary ?? {})]
+      );
+      for (const table of [
+        "trip_legs", "itinerary_provenance", "itinerary_validation_issues", "itinerary_repairs"
+      ]) {
+        await connection.query(`DELETE FROM ${table} WHERE itinerary_run_id = ?`, [run.id]);
+      }
+      for (const leg of run.legs ?? []) {
+        await connection.execute(
+          "INSERT INTO trip_legs (id, itinerary_run_id, day_number, sequence, leg_json) VALUES (?, ?, ?, ?, ?)",
+          [leg.id ?? randomUUID(), run.id, leg.dayNumber, leg.sequence, json(leg)]
+        );
+      }
+      for (const item of run.provenance ?? []) {
+        await connection.execute(
+          "INSERT INTO itinerary_provenance (id, itinerary_run_id, path, source_json) VALUES (?, ?, ?, ?)",
+          [item.id ?? randomUUID(), run.id, item.path, json(item.source)]
+        );
+      }
+      for (const issue of run.validationIssues ?? []) {
+        await connection.execute(
+          `INSERT INTO itinerary_validation_issues
+            (id, itinerary_run_id, code, path, severity, metadata_json) VALUES (?, ?, ?, ?, ?, ?)`,
+          [
+            issue.id ?? randomUUID(), run.id, issue.code, issue.path,
+            issue.severity, json(issue.metadata ?? {})
+          ]
+        );
+      }
+      for (const repair of run.repairs ?? []) {
+        await connection.execute(
+          "INSERT INTO itinerary_repairs (id, itinerary_run_id, attempt, repair_json) VALUES (?, ?, ?, ?)",
+          [repair.id ?? randomUUID(), run.id, repair.attempt, json(repair)]
+        );
+      }
+      await connection.commit();
+      return run;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async getItineraryRun(id) {
+    const [rows] = await this.pool.execute(
+      `SELECT id, trip_id AS tripId, profile, state,
+              estimated_total_fen AS estimatedTotalFen, summary_json
+       FROM itinerary_runs WHERE id = ? LIMIT 1`,
+      [id]
+    );
+    if (!rows[0]) return undefined;
+    const [legs, provenance, validationIssues, repairs] = await Promise.all([
+      this.pool.execute("SELECT leg_json FROM trip_legs WHERE itinerary_run_id = ? ORDER BY day_number, sequence", [id]),
+      this.pool.execute("SELECT id, path, source_json FROM itinerary_provenance WHERE itinerary_run_id = ? ORDER BY id", [id]),
+      this.pool.execute("SELECT id, code, path, severity, metadata_json FROM itinerary_validation_issues WHERE itinerary_run_id = ? ORDER BY id", [id]),
+      this.pool.execute("SELECT repair_json FROM itinerary_repairs WHERE itinerary_run_id = ? ORDER BY attempt", [id])
+    ]);
+    return {
+      id: rows[0].id,
+      tripId: rows[0].tripId,
+      profile: rows[0].profile,
+      state: rows[0].state,
+      estimatedTotalFen: rows[0].estimatedTotalFen,
+      summary: parseJson(rows[0].summary_json),
+      legs: legs[0].map((row) => parseJson(row.leg_json)),
+      provenance: provenance[0].map((row) => ({ id: row.id, path: row.path, source: parseJson(row.source_json) })),
+      validationIssues: validationIssues[0].map((row) => ({
+        id: row.id, code: row.code, path: row.path, severity: row.severity,
+        metadata: parseJson(row.metadata_json)
+      })),
+      repairs: repairs[0].map((row) => parseJson(row.repair_json))
+    };
+  }
+
   async createTrip(ownerId, preferences, variants) {
     const connection = await this.pool.getConnection();
     const tripId = variants[0]?.tripId ?? randomUUID();

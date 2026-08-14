@@ -27,6 +27,15 @@ export class MemoryRepository {
     this.tripMutationLocks = new Map();
     this.expenseMutationLocks = new Map();
     this.privacyConsents = new Map();
+    this.supportedDestinations = new Map([
+      ["beijing", { id: "beijing", status: "ACTIVE" }],
+      ["shanghai", { id: "shanghai", status: "ACTIVE" }],
+      ["xian", { id: "xian", status: "ACTIVE" }]
+    ]);
+    this.canonicalPois = new Map();
+    this.routeCache = new Map();
+    this.costReferences = new Map();
+    this.itineraryRuns = new Map();
   }
 
   async createUser(user) {
@@ -35,6 +44,7 @@ export class MemoryRepository {
       name: user.name,
       email: user.email,
       passwordHash: user.passwordHash,
+      role: user.role ?? "user",
       createdAt: new Date().toISOString()
     };
     this.users.set(record.id, record);
@@ -47,6 +57,59 @@ export class MemoryRepository {
 
   async findUserById(id) {
     return clone(this.users.get(id));
+  }
+
+  async getUserRole(userId) {
+    return this.users.get(userId)?.role;
+  }
+
+  async setUserRole(userId, role) {
+    const user = this.users.get(userId);
+    if (!user || !["user", "admin"].includes(role)) return false;
+    user.role = role;
+    return true;
+  }
+
+  async listSupportedDestinations() {
+    return clone([...this.supportedDestinations.values()]);
+  }
+
+  async upsertCanonicalPoi(poi) {
+    this.canonicalPois.set(poi.id, clone(poi));
+    return clone(poi);
+  }
+
+  async listCanonicalPois(destinationId) {
+    return clone([...this.canonicalPois.values()]
+      .filter((poi) => poi.destinationId === destinationId));
+  }
+
+  async putRouteCache(key, route) {
+    this.routeCache.set(key, clone(route));
+    return clone(route);
+  }
+
+  async getRouteCache(key) {
+    return clone(this.routeCache.get(key));
+  }
+
+  async upsertCostReference(reference) {
+    this.costReferences.set(reference.id, clone(reference));
+    return clone(reference);
+  }
+
+  async listCostReferences(destinationId) {
+    return clone([...this.costReferences.values()]
+      .filter((reference) => reference.destinationId === destinationId));
+  }
+
+  async saveItineraryRun(run) {
+    this.itineraryRuns.set(run.id, clone(run));
+    return clone(run);
+  }
+
+  async getItineraryRun(id) {
+    return clone(this.itineraryRuns.get(id));
   }
 
   async recordPrivacyConsent(userId, input) {

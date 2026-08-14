@@ -78,11 +78,11 @@
 **Interfaces:**
 - Produces repository methods for roles, consent, supported destinations, canonical POIs/source records, route cache, cost references, final itinerary state, legs, provenance, validation summaries, and repairs.
 
-- [ ] **Step 1: Write failing repository-contract and migration-order tests** for every new entity and owner/admin boundary.
-- [ ] **Step 2: Run tests and confirm missing repository methods/migrations fail.**
-- [ ] **Step 3: Add additive migrations and matching memory/MySQL methods** without deleting historical migrations. Store money as integer fen and timestamps in UTC.
-- [ ] **Step 4: Run repository and migration tests.**
-- [ ] **Step 5: Commit** with `feat(database): add grounded itinerary domain storage`.
+- [x] **Step 1: Write failing repository-contract and migration-order tests** for every new entity and owner/admin boundary.
+- [x] **Step 2: Run tests and confirm missing repository methods/migrations fail.**
+- [x] **Step 3: Add additive migrations and matching memory/MySQL methods** without deleting historical migrations. Store money as integer fen and timestamps in UTC.
+- [x] **Step 4: Run repository and migration tests.**
+- [x] **Step 5: Commit** with `feat(database): add grounded itinerary domain storage`.
 
 ### Task 4: Travel Provider Abstractions and Resilience
 

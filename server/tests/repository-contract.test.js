@@ -10,7 +10,10 @@ import { validActivity, validVariant, validVisitDetails } from "./helpers.js";
 
 const requiredMethods = [
   "createUser", "findUserByEmail", "findUserById", "recordPrivacyConsent",
-  "deleteAccount", "createTrip", "listTrips",
+  "deleteAccount", "getUserRole", "setUserRole", "listSupportedDestinations",
+  "upsertCanonicalPoi", "listCanonicalPois", "putRouteCache", "getRouteCache",
+  "upsertCostReference", "listCostReferences", "saveItineraryRun",
+  "getItineraryRun", "createTrip", "listTrips",
   "getTrip", "updateTrip", "deleteTrip", "duplicateTrip", "selectVariant",
   "findActivityContext", "findDayContext", "addActivity", "updateActivity",
   "deleteActivity", "reorderDay", "replaceDay", "createShare", "getShare",
@@ -28,6 +31,60 @@ describe("repository adapters", () => {
       expect(typeof MemoryRepository.prototype[method]).toBe("function");
       expect(typeof MySqlRepository.prototype[method]).toBe("function");
     }
+  });
+
+  it("stores objective-aligned reference data and validated runs in memory", async () => {
+    const repository = new MemoryRepository();
+    const user = await repository.createUser({
+      name: "Admin",
+      email: "admin@example.com",
+      passwordHash: "hash"
+    });
+    await repository.setUserRole(user.id, "admin");
+    expect(await repository.getUserRole(user.id)).toBe("admin");
+
+    await repository.upsertCanonicalPoi({
+      id: "poi-1",
+      destinationId: "beijing",
+      name: { en: "Museum", zh: "Museum" },
+      category: "CULTURE",
+      coordinates: { latitude: 39.9, longitude: 116.4 },
+      status: "ACTIVE",
+      sources: [{ provider: "AMAP", sourceId: "amap-1", retrievedAt: "2026-08-14T00:00:00.000Z" }]
+    });
+    expect(await repository.listCanonicalPois("beijing")).toHaveLength(1);
+
+    await repository.putRouteCache("route-key", {
+      mode: "DRIVE",
+      distanceMeters: 1200,
+      durationSeconds: 420,
+      source: { provider: "AMAP", sourceId: "route-1", retrievedAt: "2026-08-14T00:00:00.000Z" }
+    });
+    expect(await repository.getRouteCache("route-key")).toMatchObject({ distanceMeters: 1200 });
+
+    await repository.upsertCostReference({
+      id: "cost-1",
+      destinationId: "beijing",
+      category: "FOOD",
+      unit: "PERSON_MEAL",
+      amountFen: 3500,
+      status: "ACTIVE"
+    });
+    expect(await repository.listCostReferences("beijing")).toHaveLength(1);
+
+    await repository.saveItineraryRun({
+      id: "run-1",
+      tripId: "trip-1",
+      profile: "BALANCED",
+      state: "FINAL_VALIDATED",
+      estimatedTotalFen: 880000,
+      legs: [],
+      provenance: [],
+      validationIssues: [],
+      repairs: []
+    });
+    expect(await repository.getItineraryRun("run-1"))
+      .toMatchObject({ state: "FINAL_VALIDATED", estimatedTotalFen: 880000 });
   });
 
   it("stores one accepted membership per user and trip", async () => {
