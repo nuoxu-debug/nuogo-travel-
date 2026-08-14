@@ -138,6 +138,7 @@ export default function LeafletRouteMap({
             type="button"
             key={activity.id}
             aria-label={`Map marker: ${activity.name[language]}`}
+            aria-current={activity.id === selectedActivityId ? "location" : undefined}
             onClick={() => onSelect(activity.id)}
           >
             {activity.name[language]}

@@ -1,6 +1,7 @@
 import { AlertTriangle, ArrowDownRight, Coins } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { useGsapContext } from "../motion/useGsapContext.js";
 
 const labels = {
   scenicTickets: { en: "Scenic tickets", zh: "景点门票" },
@@ -17,24 +18,62 @@ export function deriveBudget(variant, limit) {
 
 export default function BudgetPanel({ budget, onCheaper, disabled }) {
   const { language } = useLanguage();
-  const ratio = useMemo(() => Math.min(100, (budget.total / Math.max(1, budget.limit)) * 100), [budget]);
+  const ratio = useMemo(
+    () => Math.min(100, (budget.total / Math.max(1, budget.limit)) * 100),
+    [budget]
+  );
+  const previousTotal = useRef(budget.total);
+  const [delta, setDelta] = useState(0);
+  const { scope } = useGsapContext(({ gsap }) => {
+    gsap.fromTo("[data-budget-total]", { y: 6, opacity: 0.55 }, {
+      y: 0,
+      opacity: 1,
+      duration: 0.34,
+      ease: "power2.out"
+    });
+  }, [budget.total]);
+
+  useEffect(() => {
+    setDelta(budget.total - previousTotal.current);
+    previousTotal.current = budget.total;
+  }, [budget.total]);
+
+  const deltaText = delta === 0
+    ? ""
+    : language === "zh"
+      ? `¥${Math.abs(delta).toLocaleString()} ${delta > 0 ? "增加" : "减少"}`
+      : `¥${Math.abs(delta).toLocaleString()} ${delta > 0 ? "increase" : "decrease"}`;
 
   return (
-    <section className="rounded-lg border border-ink/10 bg-white/78 p-5 shadow-panel backdrop-blur-2xl">
+    <section ref={scope} className="rounded-lg border border-ink/10 bg-white/78 p-5 shadow-panel backdrop-blur-2xl">
       <div className="flex items-center justify-between">
         <span className="grid h-11 w-11 place-items-center rounded-lg bg-gold/15 text-amber-800"><Coins className="h-5 w-5" /></span>
         <span className={`text-xs font-bold uppercase ${budget.overBudget ? "text-vermilion" : "text-jade"}`}>
-          {budget.overBudget ? (language === "zh" ? "超出预算" : "Over budget") : (language === "zh" ? "预算正常" : "On budget")}
+          {budget.overBudget
+            ? (language === "zh" ? "超出预算" : "Over budget")
+            : (language === "zh" ? "预算正常" : "On budget")}
         </span>
       </div>
       <p className="mt-5 text-xs font-bold uppercase text-ink/45">{language === "zh" ? "当前行程花费" : "Current plan cost"}</p>
-      <strong className="mt-1 block font-display text-4xl">¥{Number(budget.total).toLocaleString()}</strong>
-      <div className="mt-4 h-2 overflow-hidden rounded-full bg-ink/10"><div className={`h-full rounded-full ${budget.overBudget ? "bg-vermilion" : "bg-jade"}`} style={{ width: `${ratio}%` }} /></div>
+      <div className="flex items-end justify-between gap-3">
+        <strong data-budget-total data-testid="budget-total" className="mt-1 block font-display text-4xl">¥{Number(budget.total).toLocaleString()}</strong>
+        <output
+          role="status"
+          aria-label={language === "zh" ? "预算变化" : "Budget change"}
+          aria-live="polite"
+          className={`pb-1 text-xs font-bold ${delta > 0 ? "text-vermilion" : "text-jade"}`}
+        >
+          {deltaText}
+        </output>
+      </div>
+      <div className="mt-4 h-2 overflow-hidden rounded-full bg-ink/10">
+        <div className={`h-full rounded-full ${budget.overBudget ? "bg-vermilion" : "bg-jade"}`} style={{ width: `${ratio}%` }} />
+      </div>
       <div className="mt-2 flex justify-between text-xs text-ink/45"><span>¥0</span><span>¥{budget.limit.toLocaleString()}</span></div>
       <dl className="mt-6 grid gap-3">
         {Object.entries(budget.categories).map(([key, value]) => (
           <div key={key} className="flex justify-between border-b border-ink/8 pb-2 text-sm">
-            <dt className="text-ink/55">{labels[key][language]}</dt>
+            <dt className="text-ink/55">{labels[key]?.[language] ?? key}</dt>
             <dd className="font-bold">¥{Number(value).toLocaleString()}</dd>
           </div>
         ))}

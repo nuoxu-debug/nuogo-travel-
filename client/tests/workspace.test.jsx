@@ -2,6 +2,8 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App.jsx";
+import BudgetPanel from "../src/components/BudgetPanel.jsx";
+import { LanguageProvider } from "../src/context/LanguageContext.jsx";
 import { demoMembers, demoTrip } from "./fixtures.js";
 
 const ownerAccess = { role: "owner", canEdit: true, isOwner: true };
@@ -105,6 +107,50 @@ describe("comparison and editable workspace", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Trip was not found.");
     expect(screen.getByRole("link", { name: "Create new plans" })).toHaveAttribute("href", "/planner");
+  });
+
+  it("keeps timeline selection, route progress, and map focus synchronized", async () => {
+    render(<App initialPath="/trip/trip-1" />);
+    expect(await screen.findByText("Trip workspace")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Route leg progress" }))
+      .toHaveTextContent("Stop 1 of 3");
+
+    fireEvent.click(screen.getByTestId("activity-people-park-budget"));
+    expect(screen.getByTestId("activity-people-park-budget")).toHaveAttribute("data-selected", "true");
+    expect(screen.getByRole("status", { name: "Route leg progress" }))
+      .toHaveTextContent("Stop 2 of 3");
+    expect(screen.getByRole("button", { name: "Map marker: People's Park" }))
+      .toHaveAttribute("aria-current", "location");
+
+    fireEvent.click(screen.getByRole("button", { name: "Map marker: Sichuan Food Market" }));
+    expect(screen.getByTestId("activity-food-budget")).toHaveAttribute("data-selected", "true");
+  });
+
+  it("announces a budget delta while retaining the current total", () => {
+    const budget = {
+      categories: { scenicTickets: 80, localFood: 260, transportation: 90, accommodation: 1040 },
+      total: 1470,
+      remaining: 3330,
+      limit: 4800,
+      overBudget: false
+    };
+    const { rerender } = render(
+      <LanguageProvider><BudgetPanel budget={budget} onCheaper={vi.fn()} disabled={false} /></LanguageProvider>
+    );
+
+    rerender(
+      <LanguageProvider>
+        <BudgetPanel
+          budget={{ ...budget, total: 1590, remaining: 3210 }}
+          onCheaper={vi.fn()}
+          disabled={false}
+        />
+      </LanguageProvider>
+    );
+
+    expect(screen.getByTestId("budget-total")).toHaveTextContent("¥1,590");
+    expect(screen.getByRole("status", { name: "Budget change" }))
+      .toHaveTextContent("¥120 increase");
   });
 
   it("shows source attribution for a grounded attraction", async () => {

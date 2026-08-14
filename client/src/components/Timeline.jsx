@@ -12,7 +12,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy
 } from "@dnd-kit/sortable";
-import { Plus } from "lucide-react";
+import { MapPin, Plus } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useAnime } from "../hooks/useAnime.js";
@@ -59,8 +59,20 @@ export default function Timeline({
     onReorder(arrayMove(day.activities, oldIndex, newIndex));
   }
 
+  const selectedIndex = Math.max(0, day.activities.findIndex((item) => item.id === selectedActivityId));
+  const selectedActivity = day.activities[selectedIndex];
+  const legLabel = language === "zh"
+    ? `第 ${selectedIndex + 1} 站，共 ${day.activities.length} 站`
+    : `Stop ${selectedIndex + 1} of ${day.activities.length}`;
+
   return (
     <div ref={root} className="mt-5">
+      <div className="workspace-leg-progress" role="status" aria-label={language === "zh" ? "路线进度" : "Route leg progress"}>
+        <MapPin aria-hidden="true" />
+        <span>{legLabel}</span>
+        <strong>{selectedActivity?.name?.[language]}</strong>
+        <progress max={Math.max(1, day.activities.length)} value={selectedIndex + 1} aria-hidden="true" />
+      </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={dragEnd}>
         <SortableContext items={day.activities.map((item) => item.id)} strategy={verticalListSortingStrategy}>
           <div className="grid gap-4">
