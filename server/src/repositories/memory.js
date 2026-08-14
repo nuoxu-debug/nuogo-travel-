@@ -115,6 +115,31 @@ export class MemoryRepository {
     return clone(run);
   }
 
+  async saveObjectiveTrip(ownerId, result) {
+    const now = new Date().toISOString();
+    const trip = {
+      ...clone(result.trip),
+      ownerId,
+      status: "draft",
+      title: result.trip.title ?? `${result.trip.destination} journey`,
+      preferences: clone(result.trip.preferences ?? {}),
+      variants: clone(result.variants),
+      validation: clone(result.validation),
+      generationState: result.state,
+      objectiveAligned: true,
+      selectedVariantId: null,
+      revision: 0,
+      createdAt: now,
+      updatedAt: now
+    };
+    this.trips.set(trip.id, trip);
+    this.members.set(`${trip.id}:${ownerId}`, {
+      id: randomUUID(), tripId: trip.id, userId: ownerId,
+      role: "owner", status: "active", joinedAt: now
+    });
+    return clone(trip);
+  }
+
   async getItineraryRun(id) {
     return clone(this.itineraryRuns.get(id));
   }
@@ -340,6 +365,17 @@ export class MemoryRepository {
     );
     if (revision === undefined) return undefined;
     return this.getTrip(id);
+  }
+
+  async selectObjectiveVariant(id, actorId, variantId, expectedRevision, audit) {
+    const trip = this.trips.get(id);
+    if (!trip?.objectiveAligned) return undefined;
+    if (!trip.variants.some((variant) => variant.itinerary?.variant === variantId)) return undefined;
+    const revision = await this.mutateWithRevision(
+      id, expectedRevision, actorId, audit,
+      (current) => { current.selectedVariantId = variantId; return true; }
+    );
+    return revision === undefined ? undefined : this.getTrip(id);
   }
 
   async findActivityContext(activityId) {

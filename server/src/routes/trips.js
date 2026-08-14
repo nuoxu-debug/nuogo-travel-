@@ -65,7 +65,11 @@ export function createTripsRouter({
           status: 503
         });
         const result = await objectivePlanner(travelPreferenceSchema.parse(req.body));
-        return res.status(result.state === "FINAL_VALIDATED" ? 201 : 422).json(result);
+        if (result.state !== "FINAL_VALIDATED") return res.status(422).json(result);
+        const trip = repository.saveObjectiveTrip
+          ? await repository.saveObjectiveTrip(req.user.id, result)
+          : result.trip;
+        return res.status(201).json({ ...result, trip });
       }
       const preferences = validatePreferences(req.body);
       const attractions = attractionCatalogue?.listApproved(preferences.destination) ?? [];
@@ -170,9 +174,15 @@ export function createTripsRouter({
         req.user.id,
         ["editor"]
       );
-      if (!access.trip.variants.some(({ id }) => id === req.body.variantId)) throw notFound();
+      const hasVariant = access.trip.variants.some((variant) => (
+        (variant.id ?? variant.itinerary?.variant) === req.body.variantId
+      ));
+      if (!hasVariant) throw notFound();
       const revision = expectedRevision(req.body);
-      const trip = await repository.selectVariant(
+      const select = access.trip.objectiveAligned && repository.selectObjectiveVariant
+        ? repository.selectObjectiveVariant.bind(repository)
+        : repository.selectVariant.bind(repository);
+      const trip = await select(
         req.params.tripId,
         req.user.id,
         req.body.variantId,

@@ -27,6 +27,7 @@ export function createApp({
   logger = { error() {} }
 }) {
   const app = express();
+  const enableLegacyFeatures = config.enableLegacyFeatures ?? process.env.NODE_ENV === "test";
   const authenticate = createAuthMiddleware(config.jwtSecret, repository);
   const authService = new AuthService(repository, config.jwtSecret);
 
@@ -80,11 +81,13 @@ export function createApp({
     attractionCatalogue,
     authenticate
   }));
-  app.use("/api", createCollaborationRouter({
-    repository,
-    authenticate,
-    clientOrigin: config.clientOrigin
-  }));
+  if (enableLegacyFeatures) {
+    app.use("/api", createCollaborationRouter({
+      repository,
+      authenticate,
+      clientOrigin: config.clientOrigin
+    }));
+  }
   app.use("/api", createMembersRouter({
     repository,
     authenticate,

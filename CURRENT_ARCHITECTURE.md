@@ -1,10 +1,31 @@
 # Current Architecture
 
-Date: 2026-07-24
+Baseline date: 2026-07-24
+Objective-alignment addendum: 2026-08-14
 
 Nuogo is a bilingual AI-assisted smart travel planner for domestic travel in mainland China. It is a pragmatic full-stack Final Year Project prototype: React/Vite frontend, Express REST API, shared Zod contracts, memory or MySQL trip storage, a local SQL.js/SQLite attraction catalogue, deterministic demo generation, and optional OpenRouter live AI generation.
 
 The current architecture is a modular monolith. It does not use microservices, job queues, CQRS, event sourcing, Kubernetes, or a separate API gateway.
+
+## 0. Assessed MVP Addendum
+
+This section supersedes conflicting product-scope statements later in this baseline document. The modular-monolith architecture remains frozen; the objective pass adds bounded services and isolates legacy surfaces rather than reorganizing the application.
+
+The assessed MVP has three objectives:
+
+1. Security and privacy.
+2. Constraint-aware generation of `BUDGET_SAVING`, `BALANCED`, and `COMFORT_FOCUSED` alternatives under the same hard budget.
+3. Grounded tourism information for exactly Beijing, Shanghai, and Xi'an.
+
+The active generation path is `PreferenceForm` -> `POST /api/trips/generate` -> Zod validation -> prompt-injection screening -> AMap/OpenTripMap candidate normalization and matching -> profile-specific structured LLM draft -> route and schedule propagation -> deterministic budget calculation -> validation and bounded repair -> `FINAL_VALIDATED` DTO -> comparison/workspace. OpenTripMap is supporting enrichment; AMap is the primary China POI and routing source.
+
+The objective workspace uses `ObjectiveTripWorkspace.jsx`, `TripLegRow.jsx`, `LeafletRouteMap.jsx`, and `PrivacyDialog.jsx`. It displays continuous start/leg/activity/end sequences, eight deterministic budget lines, remaining and per-person values, compact map markers, and source records.
+
+Human guide recommendations, booking/payment, live operational data, nationwide coverage, advanced route optimisation, and social-media/public bearer-link sharing are out of scope. Historical `GuidePanel.jsx`, Anhui/Mafengwo ingestion, legacy generator code, and public-share routes remain as isolated compatibility evidence. They are not mounted in the assessed runtime unless both legacy feature flags are deliberately enabled.
+
+Demo mode is deterministic and every demo travel candidate carries `DEMO` provenance. It is suitable for tests and demonstrations, not evidence of a live provider call. Live-provider evidence is recorded separately.
+
+The sections below preserve the frozen 2026-07-24 baseline and therefore include clearly superseded legacy inventory. Use [docs/OBJECTIVE_ALIGNMENT.md](docs/OBJECTIVE_ALIGNMENT.md) for current objective traceability.
 
 ## 1. Project Overview
 
@@ -13,10 +34,10 @@ Implemented user-facing capabilities:
 - Chinese-first bilingual UI with English/Chinese switching.
 - Guest login, registration, login, and current-user hydration.
 - Structured China-only travel preference form.
-- Generation of three itinerary variants: budget, food, and leisure.
+- Objective path generation of three itinerary variants: Budget-Saving, Balanced, and Comfort-Focused. The older budget/food/leisure path is retained only for legacy compatibility.
 - Plan comparison and preferred-variant selection.
-- Editable itinerary workspace with day tabs, activity cards, details dialog, drag reorder, budget panel, guide panel, route map, favorites, sharing, voting, duplication, archive, and partial regeneration.
-- Huangshan/Anhui attraction grounding from approved local catalogue records.
+- Objective itinerary workspace with day tabs, continuous route legs, grounded details, deterministic budget, compact map, rename/delete, regeneration, and privacy controls. Guide/public-share features are legacy-gated.
+- Legacy Huangshan/Anhui attraction grounding from approved local catalogue records; not reachable from the assessed planner.
 - Attraction image serving through trusted source URLs and local hydration.
 - Leaflet/OpenStreetMap route map by default, optional browser Amap renderer when `VITE_AMAP_KEY` exists and locations are not estimated.
 - Anime.js-based motion in frontend interactions.
@@ -168,7 +189,7 @@ flowchart LR
 
 This remains an accepted prototype risk because localStorage tokens are exposed to XSS. It is documented in `SECURITY_SETUP.md`.
 
-### Itinerary Generation
+### Legacy Itinerary Generation (Superseded For Assessment)
 
 1. The user submits validated travel preferences.
 2. `POST /api/trips/generate` validates preferences and loads approved Huangshan attractions when needed.
@@ -319,7 +340,7 @@ No weather, flight, booking, payment, or live hotel API is implemented.
 | Resolved locally | `.env.example` exposed a real-looking OpenRouter key | `.env.example` | Replaced with a placeholder. Manual credential rotation remains required in OpenRouter because local cleanup does not revoke the old key. |
 | Accepted prototype risk | JWT stored in localStorage | `client/src/api/authToken.js`, `client/src/context/AuthContext.jsx` | Token access is centralized and 401 clears stale auth, but localStorage can be exposed by XSS. Keep for FYP demo; use stronger auth for production. |
 | Mitigated | OpenRouter request timeout was missing | `server/src/config.js`, `server/src/index.js`, `server/src/providers/openRouter.js` | Added validated `OPENROUTER_TIMEOUT_MS`, `AbortController`, and typed timeout/provider errors. |
-| Accepted by design | Shared-trip read is public by token | `server/src/routes/collaboration.js` | `GET /api/shared/:token` is intentionally public bearer-link sharing. Treat share tokens as private URLs. |
+| Legacy-gated | Shared-trip read is public by token | `server/src/routes/collaboration.js`, `server/src/app.js` | Disabled in the assessed runtime. When explicitly enabled for compatibility, treat bearer URLs as private. |
 | Mitigated with residual risk | Prompt injection | `server/src/services/promptBuilder.js`, `server/src/services/parser.js`, `server/src/services/grounding.js` | Prompt separates system/data, labels catalogue text as untrusted, caps long descriptions, validates output, and grounds Huangshan IDs. LLM prompt injection cannot be considered fully solved. |
 | No issue found | Browser exposure of OpenRouter key | `client/src` | OpenRouter key is not read by frontend code. |
 | No issue found | Password hashing | `server/src/services/authService.js` | bcryptjs is used. |

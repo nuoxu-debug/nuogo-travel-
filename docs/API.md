@@ -45,7 +45,11 @@ Registration accepts `name`, `email`, and `password`. Login accepts `email` and 
 | POST | `/trips/:tripId/duplicate` | Owner | Duplicate a trip with new stable IDs |
 | POST | `/trips/:tripId/select-variant` | Owner or editor | Select one generated variant; requires `expectedRevision` |
 
-Generation accepts `destination`, `departureCity`, `days`, `totalBudget`, `interests`, `groupType`, `accommodation`, `language`, and `startDate`.
+The assessed generation request accepts `origin`, `destination`, `startDate`, `endDate`, `arrivalDateTime`, `departureDateTime`, `travellerCount`, `totalBudgetCny`, `interests`, `preferredSights`, accommodation/food/local-transport/activity preferences, outbound and return transport modes/costs, `otherPreferences`, `language`, and `consentToLlmProcessing`. `destination` is limited to `beijing`, `shanghai`, or `xian`.
+
+The assessed response contains three variants (`BUDGET_SAVING`, `BALANCED`, and `COMFORT_FOCUSED`). Each accepted variant is `FINAL_VALIDATED`, uses the same hard budget, includes routed daily legs and POI provenance, and carries an eight-category deterministic budget summary in integer fen. A failed pipeline returns HTTP 422 and does not present an invalid itinerary as complete.
+
+Requests using the older `days`/`totalBudget` contract enter the legacy compatibility generator and are not part of current objective evidence.
 
 Collaborative trip updates, variant selection, and timeline activity/day mutations require an integer `expectedRevision`. Successful revision-checked mutations increment and return the trip `revision`. Trip deletion and duplication do not accept `expectedRevision`. A stale revision-checked write returns HTTP 409:
 
@@ -137,7 +141,7 @@ Expense responses include `amountFen` and participant records with `shareFen`. T
 - `members[].netFen`
 - `settlements[].amountFen`
 
-## Collaboration and Favorites
+## Legacy Public Sharing and Favorites
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
@@ -148,13 +152,13 @@ Expense responses include `amountFen` and participant records with `shareFen`. T
 | POST | `/favorites` | Yes | Save an activity by `activityId` |
 | DELETE | `/favorites/:favoriteId` | Yes | Remove a favorite |
 
-Public shares are bearer links, not memberships. A `view` share is read-only. An `edit` share supports authenticated activity voting only; it does not grant itinerary editing, member access, or expense access.
+Public bearer-link sharing is outside the assessed MVP and is not mounted by default. It can be enabled only for historical compatibility with `ENABLE_LEGACY_FEATURES=true` on the server and `VITE_ENABLE_LEGACY_FEATURES=true` in the client build. Authenticated membership is a separate access-control mechanism.
 
 ## Adapter Behavior
 
-`DEMO_MODE` selects `MemoryRepository` or `MySqlRepository`. `AI_PROVIDER` independently selects `DemoPlanProvider` or `OpenRouterProvider`. `OPENROUTER_TIMEOUT_MS` bounds live OpenRouter calls and timeout/provider failures are returned as typed API errors before the generator falls back where appropriate. Both providers receive the same approved Huangshan catalogue, and Amap is used when its browser key is set. Route handlers depend on common interfaces, so response shapes stay the same.
+`DEMO_MODE` selects `MemoryRepository` or `MySqlRepository`. `AI_PROVIDER` selects `DemoPlanProvider` or the server-side OpenRouter adapter. `TRAVEL_DATA_PROVIDER` selects deterministic `DEMO` travel records or live server-side AMap plus OpenTripMap adapters. `OPENROUTER_TIMEOUT_MS` and `TRAVEL_PROVIDER_TIMEOUT_MS` bound external calls. Demo records are labelled `DEMO`; live provider verification must be recorded separately.
 
-## Attraction Ingestion Boundary
+## Legacy Anhui Ingestion Boundary
 
 The first Anhui ingestion slice is operated through local CLI commands rather than a public REST endpoint:
 
@@ -164,4 +168,4 @@ npm run attractions:list -- --status pending --region huangshan
 npm run attractions:review -- --region huangshan --status approved --ids <id,id,...>
 ```
 
-It writes a local SQLite catalogue and has an equivalent MySQL migration. Only active, explicitly approved records are supplied to Huangshan generation. A Huangshan request with no approved records returns HTTP 422 and `ATTRACTION_CATALOGUE_EMPTY`.
+This CLI and its historical migrations remain available as legacy project evidence. Huangshan/Anhui is not selectable in the assessed three-city planner and this ingestion path is not evidence for Objective 3.

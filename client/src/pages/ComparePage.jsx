@@ -19,15 +19,10 @@ function CompareContent() {
     setChoosing(true);
     setSelectionError("");
     try {
-      if (trip.objectiveAligned) {
-        setTrip({ ...trip, selectedVariantId: variant.itinerary.variant });
-        navigate(`/trip/${trip.id}`);
-        return;
-      }
       const body = await apiRequest(`/trips/${trip.id}/select-variant`, {
         method: "POST",
         body: JSON.stringify({
-          variantId: variant.id,
+          variantId: variant.itinerary?.variant ?? variant.id,
           expectedRevision: trip.revision
         })
       });

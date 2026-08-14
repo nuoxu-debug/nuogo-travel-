@@ -15,7 +15,8 @@ describe("objective-aligned migration ordering", () => {
       "005_trip_collaboration_expenses.sql",
       "006_security_privacy.sql",
       "007_objective_aligned_mvp.sql",
-      "008_objective_aligned_seed.sql"
+      "008_objective_aligned_seed.sql",
+      "009_objective_trip_payload.sql"
     ]);
   });
 

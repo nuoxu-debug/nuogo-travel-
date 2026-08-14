@@ -8,6 +8,7 @@ export function loadConfig() {
   const openRouterStructuredOutput = process.env.OPENROUTER_STRUCTURED_OUTPUT === "true";
   const travelDataProvider = process.env.TRAVEL_DATA_PROVIDER || "demo";
   const travelProviderTimeoutMs = Number(process.env.TRAVEL_PROVIDER_TIMEOUT_MS) || 8000;
+  const enableLegacyFeatures = process.env.ENABLE_LEGACY_FEATURES === "true";
   if (!["demo", "openrouter"].includes(aiProvider)) {
     throw new Error("AI_PROVIDER must be either demo or openrouter.");
   }
@@ -51,6 +52,7 @@ export function loadConfig() {
     openRouterStructuredOutput,
     travelDataProvider,
     travelProviderTimeoutMs,
+    enableLegacyFeatures,
     amapWebServiceKey: process.env.AMAP_WEB_SERVICE_KEY || "",
     openTripMapKey: process.env.OPENTRIPMAP_API_KEY || "",
     attractionDatabasePath: process.env.ATTRACTION_SQLITE_PATH ||

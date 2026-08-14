@@ -2,79 +2,43 @@
 
 ## Product
 
-Nuogo is a bilingual AI-powered smart travel planner for domestic travel in China. The current grounded prototype focuses on Anhui, especially Huangshan and nearby heritage destinations.
+Nuogo is an LLM-assisted travel planner for a bounded China MVP covering Beijing, Shanghai, and Xi'an. It generates three grounded, constraint-aware itinerary alternatives and keeps each final estimate inside one user-supplied hard budget.
 
-## Primary Users
+## Current Objectives
 
-- Young independent travellers and university students planning trips in China
-- English- and Chinese-speaking travellers who need a clear, visual planning flow
-- Small groups that need itinerary comparison, budget visibility, and shared decisions
+1. Protect profile and travel data through validation, authentication, authorization, server-side keys, consent, safe logging, deletion controls, and prompt-injection screening.
+2. Generate Budget-Saving, Balanced, and Comfort-Focused itineraries from the same mandatory preferences and hard total budget.
+3. Ground destination information in provider records, using AMap as the primary China POI/routing source and OpenTripMap as a supporting tourism source, with provenance shown to the user.
 
-## Core Purpose
+## Primary Workflow
 
-Nuogo turns structured travel preferences into at least three distinct itinerary options, explains their trade-offs, and lets travellers compare, select, edit, save, regenerate, and share a practical trip plan.
+1. Sign in or continue as a guest and provide consent.
+2. Enter origin, one supported destination, dates and times, travellers, hard budget, sights, interests, and travel preferences.
+3. Retrieve and normalize destination candidates, then generate three strategy-specific structured drafts.
+4. Route, schedule, calculate deterministic costs, validate, and repair each draft.
+5. Present only `FINAL_VALIDATED` alternatives with source labels, category costs, total, remaining budget, and per-person cost.
+6. Select an alternative and inspect its continuous daily sequence, map, travel legs, POI details, and data provenance.
 
-## Product Positioning
+## Information Boundary
 
-Nuogo is not an open-ended travel chatbot. It combines:
+- **User-provided:** dates, budget, party size, origin, preferences, and consent.
+- **API-sourced:** POI identifiers, names, categories, coordinates, addresses, and retrieval metadata.
+- **Database-backed:** accounts, privacy consent, supported destinations, POIs, and cost references.
+- **AI-generated:** activity selection/order, explanation, and recommendation reason.
+- **System-estimated:** route duration/cost and all eight budget totals.
 
-- Structured preference collection
-- A reviewed local attraction catalogue
-- Three parallel itinerary strategies
-- Dynamic budget planning and allocation
-- Route-aware day planning
-- Tour guide recommendations
-- An editable map and timeline workspace
+Demo provider records are always labelled `DEMO`; they are not represented as live current information.
 
-The experience should feel grounded, inspectable, and useful enough to demonstrate a real final-year computing project.
+## Assessed MVP Boundary
 
-## Core Workflows
+The assessed MVP excludes human tour guides, booking, payments, live fares, weather, traffic, navigation, social-media/public bearer-link sharing, nationwide coverage, and advanced route optimisation. Historical Anhui ingestion, `GuidePanel`, and public-share code remain isolated legacy evidence and are disabled unless `ENABLE_LEGACY_FEATURES=true` and `VITE_ENABLE_LEGACY_FEATURES=true` are set deliberately.
 
-1. Choose destination, departure city, dates, travellers, budget, interests, pace, and language.
-2. Generate three meaningfully different itinerary options.
-3. Compare route shape, activities, budget, pace, and included experiences.
-4. Select a preferred itinerary and open the trip workspace.
-5. Review each day on a real map and timeline.
-6. Adjust category budgets and regenerate while respecting the new allocation.
-7. Review and compare recommended local guides.
-8. Edit, save, delete, share, and revisit trips.
+Authenticated trip membership and equal/flexible group expense splitting remain reusable project capabilities, but they are not used as evidence for the three current objectives.
 
-## Current Constraints
+## Design Commitments
 
-- English is the default language; Simplified Chinese is supported throughout the main flow.
-- The project currently uses an Anhui-focused local catalogue and OpenStreetMap route display.
-- OpenRouter can provide AI generation, with deterministic local fallback for a reliable demo.
-- Source attribution and licensing must remain visible where external place data or imagery is used.
-- The interface must remain responsive, keyboard accessible, and usable with reduced motion.
-- Do not fabricate testimonials, usage statistics, guide credentials, or destination source claims.
-
-## Brand Commitments
-
-- Product name: Nuogo
-- Use the supplied Nuogo mascot and wordmark assets
-- Visual character: modern, kinetic, optimistic, editorial, and unmistakably travel-oriented
-- Motion engine: anime.js
-- Motion should explain route progression, comparison, hierarchy, and state changes
-
-## Evidence Available
-
-- Locally stored attraction records and cached attraction media
-- Approved source references for Anhui attraction content
-- OpenStreetMap tiles and geographic coordinates
-- Real itinerary, cost, route, and guide data generated by the application
-
-## Design Principles
-
-1. Show the journey, not only the form.
-2. Make the three itinerary strategies visibly and functionally distinct.
-3. Keep maps, costs, timings, and sources legible before decoration.
-4. Use motion to clarify sequence and change.
-5. Let bilingual content breathe without breaking layout.
-6. Use confidence honestly: distinguish estimates, generated suggestions, and sourced facts.
-
-## Accessibility
-
-- Target WCAG 2.1 AA contrast for core text and controls.
-- Preserve visible focus states and complete keyboard navigation.
-- Respect `prefers-reduced-motion`.
-- Never rely on colour or animation alone to communicate state.
+- Product name: Nuogo.
+- English is the assessed UI language; Simplified Chinese remains optional legacy-compatible localization.
+- The interface is responsive, keyboard accessible, and usable with reduced motion.
+- GSAP communicates route progression and state; Leaflet/OpenStreetMap provides the operational map.
+- Sources and estimates are labelled honestly. Nuogo does not claim bookings, live prices, or live navigation.

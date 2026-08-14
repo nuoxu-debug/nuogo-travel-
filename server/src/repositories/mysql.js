@@ -350,6 +350,60 @@ export class MySqlRepository {
     }
   }
 
+  async saveObjectiveTrip(ownerId, result) {
+    const payload = {
+      ...result.trip,
+      variants: result.variants,
+      validation: result.validation,
+      generationState: result.state,
+      objectiveAligned: true,
+      selectedVariantId: null,
+      revision: 0
+    };
+    const title = result.trip.title ?? `${result.trip.destination} journey`;
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.execute(
+        `INSERT INTO trips
+          (id, user_id, status, title_en, title_zh, destination, start_date, end_date,
+           total_budget, preferences_json, objective_payload_json)
+         VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          result.trip.id, ownerId, title, title, result.trip.destination,
+          result.trip.startDate, result.trip.endDate, result.trip.totalBudgetCny,
+          json(result.trip.preferences ?? {}), json(payload)
+        ]
+      );
+      await connection.execute(
+        "INSERT INTO trip_members (id, trip_id, user_id, role, status) VALUES (?, ?, ?, 'owner', 'active')",
+        [randomUUID(), result.trip.id, ownerId]
+      );
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+
+    for (const variant of result.variants) {
+      const profile = variant.itinerary?.variant ?? variant.summary?.profile;
+      await this.saveItineraryRun({
+        id: `${result.id}:${profile}`,
+        tripId: result.trip.id,
+        profile,
+        state: variant.state,
+        estimatedTotalFen: variant.summary?.totalFen,
+        summary: variant,
+        legs: (variant.itinerary?.days ?? []).flatMap((day) => day.legs.map((leg, sequence) => ({ ...leg, dayNumber: day.dayNumber, sequence }))),
+        provenance: (variant.itinerary?.days ?? []).flatMap((day) => day.activities.flatMap((activity) => (activity.poi?.sourceRecords ?? []).map((source, sourceIndex) => ({ path: `days.${day.dayNumber}.activities.${activity.sequence}.sources.${sourceIndex}`, source })))),
+        validationIssues: (variant.validation?.issues ?? []).map((issue) => ({ ...issue, path: Array.isArray(issue.path) ? issue.path.join(".") : issue.path }))
+      });
+    }
+    return this.getTrip(result.trip.id);
+  }
+
   async getItineraryRun(id) {
     const [rows] = await this.pool.execute(
       `SELECT id, trip_id AS tripId, profile, state,
@@ -487,6 +541,17 @@ export class MySqlRepository {
     return trip;
   }
 
+  async selectObjectiveVariant(id, _actorId, variantId, expectedRevision) {
+    const [result] = await this.pool.execute(
+      `UPDATE trips
+       SET objective_payload_json = JSON_SET(objective_payload_json, '$.selectedVariantId', ?),
+           revision = revision + 1
+       WHERE id = ? AND objective_payload_json IS NOT NULL AND revision = ?`,
+      [variantId, id, expectedRevision]
+    );
+    return result.affectedRows === 1 ? this.getTrip(id) : undefined;
+  }
+
   async loadTrips(ids) {
     if (!ids.length) return [];
     const placeholders = ids.map(() => "?").join(", ");
@@ -494,12 +559,23 @@ export class MySqlRepository {
       `SELECT id, user_id AS ownerId, status, title_en, title_zh, destination,
               start_date AS startDate, end_date AS endDate, total_budget AS totalBudget,
               selected_variant_id AS selectedVariantId, revision, preferences_json,
-              created_at AS createdAt, updated_at AS updatedAt
+              objective_payload_json, created_at AS createdAt, updated_at AS updatedAt
        FROM trips WHERE id IN (${placeholders})`,
       ids
     );
     if (!tripRows.length) return [];
-    const tripsById = new Map(tripRows.map((row) => [row.id, {
+    const tripsById = new Map(tripRows.map((row) => {
+      const objective = row.objective_payload_json ? parseJson(row.objective_payload_json) : null;
+      return [row.id, objective ? {
+        ...objective,
+        ownerId: row.ownerId,
+        status: row.status,
+        title: row.title_en,
+        selectedVariantId: objective.selectedVariantId ?? null,
+        revision: row.revision ?? 0,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt
+      } : {
       id: row.id,
       ownerId: row.ownerId,
       status: row.status,
@@ -514,7 +590,8 @@ export class MySqlRepository {
       revision: row.revision ?? 0,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt
-    }]));
+      }];
+    }));
     const tripIds = [...tripsById.keys()];
     const tripPlaceholders = tripIds.map(() => "?").join(", ");
     const [variantRows] = await this.pool.execute(

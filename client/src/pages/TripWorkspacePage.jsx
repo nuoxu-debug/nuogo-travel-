@@ -58,7 +58,7 @@ const newActivityTemplate = {
   isFavorite: false
 };
 
-export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
+export function WorkspaceContent({ forceReadOnly = false, sharedToken, enableLegacyFeatures = true }) {
   const {
     trip,
     setTrip,
@@ -351,7 +351,7 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
           {!forceReadOnly && !sharedToken && access && (
             <div className="flex flex-wrap items-center gap-2">
               <MemberAvatars members={members} />
-              {access?.isOwner && (
+              {enableLegacyFeatures && access?.isOwner && (
                 <button
                   type="button"
                   onClick={openCollaboration}
@@ -426,9 +426,7 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
             selectedActivityId={activity?.id}
             onSelect={setSelectedActivityId}
           />
-          <div className="mt-4">
-            <GuidePanel activity={activity} />
-          </div>
+          {enableLegacyFeatures && <div className="mt-4"><GuidePanel activity={activity} /></div>}
         </div>
         <div className="min-w-0">
           <ExpenseWorkspace
@@ -463,11 +461,7 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
         open={Boolean(detailActivity)}
         onClose={() => setDetailActivity(null)}
       />
-      <ShareDialog
-        tripId={trip.id}
-        open={shareOpen}
-        onClose={closeShare}
-      />
+      {enableLegacyFeatures && <ShareDialog tripId={trip.id} open={shareOpen} onClose={closeShare} />}
       <CollaborationDrawer
         tripId={trip.id}
         open={collaborationOpen}
@@ -482,12 +476,12 @@ export function WorkspaceContent({ forceReadOnly = false, sharedToken }) {
   );
 }
 
-export default function TripWorkspacePage() {
+export default function TripWorkspacePage({ enableLegacyFeatures = true }) {
   const { tripId } = useParams();
   return (
     <AppShell hideFooter>
       <TripProvider tripId={tripId}>
-        <WorkspaceContent />
+        <WorkspaceContent enableLegacyFeatures={enableLegacyFeatures} />
       </TripProvider>
     </AppShell>
   );

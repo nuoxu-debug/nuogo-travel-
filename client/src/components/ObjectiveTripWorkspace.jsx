@@ -100,9 +100,26 @@ export default function ObjectiveTripWorkspace({ trip, setTrip, access }) {
   const day = variant.itinerary.days.find((item) => item.dayNumber === activeDayNumber) ?? variant.itinerary.days[0];
   const mapActivities = useMemo(() => day.activities.filter((activity) => activity.poi?.coordinates).map(mapActivity), [day]);
 
-  function rename() {
-    const title = window.prompt("Trip name", trip.title);
-    if (title?.trim()) setTrip((current) => ({ ...current, title: title.trim() }));
+  const tripTitle = typeof trip.title === "string" ? trip.title : trip.title?.en;
+
+  async function rename() {
+    const title = window.prompt("Trip name", tripTitle);
+    if (!title?.trim()) return;
+    setBusy(true);
+    try {
+      const body = await apiRequest(`/trips/${trip.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          title: { en: title.trim(), zh: title.trim() },
+          expectedRevision: trip.revision
+        })
+      });
+      setTrip((current) => ({ ...current, ...body.trip, title: body.trip.title?.en ?? body.trip.title, revision: body.revision }));
+    } catch {
+      setStatus("FAILED");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function revalidate() {
@@ -120,9 +137,16 @@ export default function ObjectiveTripWorkspace({ trip, setTrip, access }) {
     }
   }
 
-  function remove() {
-    sessionStorage.removeItem(`nuogo-trip-${trip.id}`);
-    navigate("/trips");
+  async function remove() {
+    setBusy(true);
+    try {
+      await apiRequest(`/trips/${trip.id}`, { method: "DELETE" });
+      sessionStorage.removeItem(`nuogo-trip-${trip.id}`);
+      navigate("/archive");
+    } catch {
+      setStatus("FAILED");
+      setBusy(false);
+    }
   }
 
   return (
@@ -131,7 +155,7 @@ export default function ObjectiveTripWorkspace({ trip, setTrip, access }) {
         <div className="mx-auto flex max-w-[1520px] flex-col justify-between gap-5 lg:flex-row lg:items-end">
           <div>
             <p className="text-xs font-extrabold uppercase text-lake">Validated trip workspace {"\u00b7"} {variant.itinerary.variant}</p>
-            <h1 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">{trip.title ?? `${trip.destination} journey`}</h1>
+            <h1 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">{tripTitle ?? `${trip.destination} journey`}</h1>
             <p className="mt-2 text-sm text-ink/55">{trip.startDate} - {trip.endDate} {"\u00b7"} {trip.travellerCount} travellers</p>
           </div>
           {access?.canEdit && <div className="flex flex-wrap gap-2">

@@ -64,7 +64,6 @@ const objectivePlanner = (preferences) => generateValidatedTrip(preferences, {
     const anchor = { longitude, latitude };
     return { origin: anchor, hotel: anchor, destination: anchor };
   },
-  saveRun: (run) => repository.saveItineraryRun(run),
   now: () => new Date().toISOString()
 });
 const attractionRepository = new AttractionSqliteRepository(config.attractionDatabasePath);

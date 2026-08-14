@@ -85,7 +85,7 @@ export default function ArchivePage() {
             ) : tripsState === "error" ? (
               <ArchiveError label={t("archive.tripsLoadFailed")} retry={loadTrips} retryLabel={t("common.retry")} />
             ) : (
-              <TripArchive trips={filtered} onDuplicate={duplicate} onReuse={reuse} />
+              <TripArchive trips={filtered} onDuplicate={duplicate} onReuse={reuse} onOpen={(trip) => navigate(`/trip/${trip.id}`)} />
             )}
           </div>
           <section className="mt-14 border-t border-ink/10 pt-8">

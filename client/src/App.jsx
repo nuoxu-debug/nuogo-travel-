@@ -16,7 +16,7 @@ function Placeholder({ title }) {
   return <div className="grid min-h-screen place-items-center bg-mist"><h1 className="font-display text-4xl font-bold">{title}</h1></div>;
 }
 
-function ApplicationRoutes() {
+function ApplicationRoutes({ enableLegacyFeatures }) {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
@@ -25,16 +25,19 @@ function ApplicationRoutes() {
       <Route path="/invite/:token" element={<InvitationPage />} />
       <Route path="/planner" element={<PlannerPage />} />
       <Route path="/compare/:tripId" element={<ComparePage />} />
-      <Route path="/trip/:tripId" element={<TripWorkspacePage />} />
-      <Route path="/shared/:token" element={<SharedTripPage />} />
+      <Route path="/trip/:tripId" element={<TripWorkspacePage enableLegacyFeatures={enableLegacyFeatures} />} />
+      {enableLegacyFeatures && <Route path="/shared/:token" element={<SharedTripPage />} />}
       <Route path="/archive" element={<ArchivePage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
 
-export default function App({ initialPath }) {
+export default function App({ initialPath, enableLegacyFeatures }) {
   const Router = initialPath ? MemoryRouter : BrowserRouter;
+  const legacyFeaturesEnabled = enableLegacyFeatures ?? (
+    import.meta.env.MODE === "test" || import.meta.env.VITE_ENABLE_LEGACY_FEATURES === "true"
+  );
   const routerProps = {
     future: { v7_startTransition: true, v7_relativeSplatPath: true },
     ...(initialPath ? { initialEntries: [initialPath] } : {})
@@ -44,7 +47,7 @@ export default function App({ initialPath }) {
       <LanguageProvider>
         <AuthProvider>
           <Router {...routerProps}>
-            <ApplicationRoutes />
+            <ApplicationRoutes enableLegacyFeatures={legacyFeaturesEnabled} />
           </Router>
         </AuthProvider>
       </LanguageProvider>

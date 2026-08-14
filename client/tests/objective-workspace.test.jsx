@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import App from "../src/App.jsx";
 
 function objectiveTrip() {
@@ -71,6 +71,46 @@ async function renderWorkspace() {
 }
 
 describe("validated itinerary workspace", () => {
+  it("renders saved objective trips in the archive", async () => {
+    localStorage.setItem("nuogo-token", "test-token");
+    fetch.mockImplementation(async (url) => {
+      if (url.endsWith("/auth/me")) return { ok: true, json: async () => ({ user: { id: "user-1", name: "Student", email: "student@nuogo.test" } }) };
+      if (url.endsWith("/trips")) return { ok: true, json: async () => ({ trips: [{ ...objectiveTrip(), status: "draft" }] }) };
+      if (url.endsWith("/favorites")) return { ok: true, json: async () => ({ favorites: [] }) };
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    render(<App initialPath="/archive" />);
+    expect(await screen.findByRole("heading", { name: "Beijing study trip" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open itinerary" })).toBeInTheDocument();
+  });
+
+  it("deletes an owned objective trip through the API", async () => {
+    await renderWorkspace();
+    fetch.mockResolvedValueOnce({ ok: true, status: 204, json: async () => ({}) });
+    await userEvent.click(screen.getByRole("button", { name: "Delete trip" }));
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/trips/trip-objective"),
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+
+  it("persists the selected spending profile before opening the workspace", async () => {
+    localStorage.setItem("nuogo-token", "test-token");
+    sessionStorage.setItem("nuogo-trip-trip-objective", JSON.stringify(objectiveTrip()));
+    fetch.mockImplementation(async (url) => {
+      if (url.endsWith("/auth/me")) return { ok: true, json: async () => ({ user: { id: "user-1", name: "Student", email: "student@nuogo.test" } }) };
+      if (url.endsWith("/trips/trip-objective/select-variant")) return { ok: true, json: async () => ({ trip: { ...objectiveTrip(), selectedVariantId: "BALANCED", revision: 1 }, revision: 1 }) };
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    render(<App initialPath="/compare/trip-objective" />);
+    await userEvent.click(await screen.findByRole("button", { name: "Choose this plan" }));
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/trips/trip-objective/select-variant"),
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(await screen.findByRole("heading", { name: "Beijing study trip" })).toBeInTheDocument();
+  });
+
   it("shows a continuous day sequence with route legs and grounded activity details", async () => {
     await renderWorkspace();
     const timeline = screen.getByRole("region", { name: "Day 1 continuous itinerary" });
@@ -103,6 +143,14 @@ describe("validated itinerary workspace", () => {
   it("exposes owner management, invalidation, and privacy consent states", async () => {
     await renderWorkspace();
     expect(screen.getByRole("button", { name: "Rename trip" })).toBeInTheDocument();
+    vi.spyOn(window, "prompt").mockReturnValue("Beijing graduation trip");
+    fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ trip: { ...objectiveTrip(), title: "Beijing graduation trip", revision: 1 }, revision: 1 }) });
+    await userEvent.click(screen.getByRole("button", { name: "Rename trip" }));
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/trips/trip-objective"),
+      expect.objectContaining({ method: "PATCH" })
+    );
+    expect(await screen.findByRole("heading", { name: "Beijing graduation trip" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Regenerate trip" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Edit preferences" }));
     expect(screen.getByRole("status")).toHaveTextContent("INVALIDATED");

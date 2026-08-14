@@ -328,11 +328,11 @@
 **Interfaces:**
 - Development demo fixtures remain explicitly tagged `DEMO`; production cannot silently use them.
 
-- [ ] **Step 1: Write failing route/UI tests** proving out-of-scope public paths are disabled in the assessed MVP and demo records are visibly labelled.
-- [ ] **Step 2: Verify red.**
-- [ ] **Step 3: Isolate legacy functionality and update active documentation** without deleting historical migrations or audit evidence.
-- [ ] **Step 4: Run repository-wide searches** for old styles, human guide claims, unsupported city options, and unlabeled demo data.
-- [ ] **Step 5: Commit** with `chore(scope): isolate legacy Nuogo features`.
+- [x] **Step 1: Write failing route/UI tests** proving out-of-scope public paths are disabled in the assessed MVP and demo records are visibly labelled.
+- [x] **Step 2: Verify red.**
+- [x] **Step 3: Isolate legacy functionality and update active documentation** without deleting historical migrations or audit evidence.
+- [x] **Step 4: Run repository-wide searches** for old styles, human guide claims, unsupported city options, and unlabeled demo data.
+- [x] **Step 5: Commit** with `chore(scope): isolate legacy Nuogo features`.
 
 ### Task 16: Playwright, CI, Quality, and Final Acceptance
 

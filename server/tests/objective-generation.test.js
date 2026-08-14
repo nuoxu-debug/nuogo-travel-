@@ -211,11 +211,12 @@ describe("objective-aligned trip generation", () => {
     const objectivePlanner = vi.fn(async (input) => ({
       state: "FINAL_VALIDATED",
       trip: { id: "objective-trip", destination: input.destination },
-      variants: [],
+      variants: [{ itinerary: { variant: "BALANCED" }, state: "FINAL_VALIDATED" }],
       validation: { valid: true, issues: [] }
     }));
+    const repository = new MemoryRepository();
     const app = createApp({
-      repository: new MemoryRepository(),
+      repository,
       planProvider: {},
       objectivePlanner,
       attractionCatalogue: { listApproved: () => [] },
@@ -241,5 +242,16 @@ describe("objective-aligned trip generation", () => {
       destination: "beijing",
       totalBudgetCny: 5000
     }));
+    expect(await repository.getTrip("objective-trip")).toMatchObject({
+      id: "objective-trip",
+      ownerId: auth.body.user.id,
+      objectiveAligned: true,
+      destination: "beijing"
+    });
+    const selected = await request(app).post("/api/trips/objective-trip/select-variant")
+      .set("Authorization", `Bearer ${auth.body.token}`)
+      .send({ variantId: "BALANCED", expectedRevision: 0 })
+      .expect(200);
+    expect(selected.body.trip).toMatchObject({ selectedVariantId: "BALANCED", revision: 1 });
   });
 });
