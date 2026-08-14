@@ -78,16 +78,38 @@ function enrichedDimensions(preferences, itinerary, driving) {
   };
 }
 
-function attachPoiFacts(itinerary, candidatePool) {
+function activityEstimateFen(activityType, references, travellerCount) {
+  if (["CULTURE", "HISTORY", "NATURE", "FAMILY"].includes(activityType)) {
+    return references.attractionPersonEntryFen * travellerCount;
+  }
+  if (activityType === "ENTERTAINMENT") {
+    return references.entertainmentPersonEntryFen * travellerCount;
+  }
+  if (activityType === "FOOD") {
+    return references.foodPersonMealFen * travellerCount;
+  }
+  return 0;
+}
+
+function attachPoiFacts(itinerary, candidatePool, { anchors, references, preferences }) {
   const byId = new Map(candidatePool.candidates.map((candidate) => [candidate.candidateId, candidate]));
+  const attachAnchor = (point) => ({
+    ...point,
+    coordinates: anchors[point.locationId],
+    locationIsEstimated: true,
+    locationSource: "SYSTEM_ESTIMATE"
+  });
   return {
     ...itinerary,
     days: itinerary.days.map((day) => ({
       ...day,
+      startPoint: attachAnchor(day.startPoint),
+      endPoint: attachAnchor(day.endPoint),
       activities: day.activities.map((activity) => {
         const poi = byId.get(activity.poiId);
         return poi ? {
           ...activity,
+          estimatedActivityCostFen: activityEstimateFen(activity.activityType, references, preferences.travellerCount),
           poi: {
             canonicalPoiId: poi.canonicalPoiId,
             name: poi.name,
@@ -154,7 +176,7 @@ async function generateVariant(profile, context) {
       })
     });
     return result.state === "FINAL_VALIDATED"
-      ? { ...result, itinerary: attachPoiFacts(result.itinerary, context.candidatePool) }
+      ? { ...result, itinerary: attachPoiFacts(result.itinerary, context.candidatePool, context) }
       : result;
   } catch (error) {
     return {

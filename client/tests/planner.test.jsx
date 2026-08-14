@@ -129,7 +129,7 @@ describe("objective-aligned China preference planner", () => {
     render(<App initialPath="/planner" />);
     await userEvent.click(screen.getByRole("button", { name: "Generate 3 validated plans" }));
     expect(await screen.findByRole("dialog", { name: "Generating itinerary" })).toHaveTextContent(
-      "Retrieving verified travel data"
+      "Retrieving source-labelled travel data"
     );
     expect(intervalSpy.mock.calls.some(([, delay]) => delay === 45)).toBe(false);
 

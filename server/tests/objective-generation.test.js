@@ -40,9 +40,9 @@ function preferences(destination = "beijing", overrides = {}) {
 
 function rawPois(city) {
   const { longitude, latitude } = centres[city];
-  return Array.from({ length: 4 }, (_, index) => ({
+  return Array.from({ length: 12 }, (_, index) => ({
     id: `${city}-poi-${index + 1}`,
-    name: `${city} place ${index + 1}`,
+    name: city === "beijing" && index === 0 ? "Forbidden City" : `${city} place ${index + 1}`,
     category: index === 3 ? "RESTAURANT" : "ATTRACTION",
     typecode: index === 3 ? "050000" : "110000",
     address: city,
@@ -60,46 +60,44 @@ function draftProvider() {
       const profile = data.profile ?? request.variant;
       const ids = data.allowedCandidateIds;
       const offset = spendingProfileIds.indexOf(profile);
+      const trip = request.preferences ?? request.trip;
+      const start = new Date(`${trip.startDate}T00:00:00Z`);
+      const end = new Date(`${trip.endDate}T00:00:00Z`);
+      const dayCount = Math.round((end - start) / 86_400_000) + 1;
+      const includesPreferredSight = (trip.preferredSights ?? []).includes("Forbidden City");
+      const days = Array.from({ length: dayCount }, (_, dayIndex) => {
+        const date = new Date(start);
+        date.setUTCDate(start.getUTCDate() + dayIndex);
+        const poiIndex = includesPreferredSight && dayIndex === 0 ? 0 : offset + dayIndex + (includesPreferredSight ? 1 : 0);
+        return {
+          dayNumber: dayIndex + 1,
+          date: date.toISOString().slice(0, 10),
+          startPoint: { locationId: dayIndex === 0 ? "origin" : "hotel", locationType: dayIndex === 0 ? "ORIGIN" : "HOTEL" },
+          activities: [{
+            sequence: 1,
+            poiId: ids[poiIndex % ids.length],
+            activityType: dayIndex === 1 ? "FOOD" : "HISTORY",
+            plannedStartTime: dayIndex === 0 ? (trip.arrivalDateTime?.slice(11, 16) ?? "10:00") : "10:00",
+            plannedDurationMinutes: dayIndex === 1 ? 60 : 90,
+            reason: dayIndex === 1 ? "Nearby local meal." : "Profile-specific grounded stop."
+          }],
+          endPoint: {
+            locationId: dayIndex === dayCount - 1 ? "destination" : "hotel",
+            locationType: dayIndex === dayCount - 1 ? "DESTINATION" : "HOTEL"
+          }
+        };
+      });
       return JSON.stringify({
         variant: profile,
         trip: {
-          origin: request.preferences?.origin ?? request.trip.origin,
-          destination: request.preferences?.destination ?? request.trip.destination,
-          startDate: request.preferences?.startDate ?? request.trip.startDate,
-          endDate: request.preferences?.endDate ?? request.trip.endDate,
-          travellerCount: request.preferences?.travellerCount ?? request.trip.travellerCount,
-          totalBudgetCny: request.preferences?.totalBudgetCny ?? request.trip.totalBudgetCny
+          origin: trip.origin,
+          destination: trip.destination,
+          startDate: trip.startDate,
+          endDate: trip.endDate,
+          travellerCount: trip.travellerCount,
+          totalBudgetCny: trip.totalBudgetCny
         },
-        days: [
-          {
-            dayNumber: 1,
-            date: "2026-10-10",
-            startPoint: { locationId: "origin", locationType: "ORIGIN" },
-            activities: [{
-              sequence: 1,
-              poiId: ids[offset],
-              activityType: "HISTORY",
-              plannedStartTime: "10:00",
-              plannedDurationMinutes: 90,
-              reason: "Profile-specific grounded stop."
-            }],
-            endPoint: { locationId: "hotel", locationType: "HOTEL" }
-          },
-          {
-            dayNumber: 2,
-            date: "2026-10-11",
-            startPoint: { locationId: "hotel", locationType: "HOTEL" },
-            activities: [{
-              sequence: 1,
-              poiId: ids[(offset + 1) % ids.length],
-              activityType: "FOOD",
-              plannedStartTime: "10:00",
-              plannedDurationMinutes: 60,
-              reason: "Nearby local meal."
-            }],
-            endPoint: { locationId: "destination", locationType: "DESTINATION" }
-          }
-        ]
+        days
       });
     })
   };
@@ -146,6 +144,42 @@ function dependencies(overrides = {}) {
 }
 
 describe("objective-aligned trip generation", () => {
+  it("passes the five-day Kuala Lumpur to Beijing acceptance fixture for all three profiles", async () => {
+    const input = preferences("beijing", {
+      origin: "Kuala Lumpur",
+      startDate: "2026-10-10",
+      endDate: "2026-10-14",
+      arrivalDateTime: "2026-10-10T10:00:00+08:00",
+      departureDateTime: "2026-10-14T20:00:00+08:00",
+      totalBudgetCny: 10_000,
+      preferredSights: ["Forbidden City"],
+      outboundTransportMode: "FLIGHT",
+      returnTransportMode: "FLIGHT",
+      outboundTransportCostCny: 1500,
+      returnTransportCostCny: 1500
+    });
+    const result = await generateValidatedTrip(input, dependencies());
+
+    expect(result.state).toBe("FINAL_VALIDATED");
+    expect(result.variants).toHaveLength(3);
+    for (const variant of result.variants) {
+      expect(variant.state).toBe("FINAL_VALIDATED");
+      expect(variant.validation.valid).toBe(true);
+      expect(variant.summary.totalFen).toBeLessThanOrEqual(1_000_000);
+      expect(Object.keys(variant.summary.categoriesFen)).toHaveLength(8);
+      expect(variant.itinerary.days).toHaveLength(5);
+      expect(variant.itinerary.days[0].activities.some(({ poi }) => poi.name === "Forbidden City")).toBe(true);
+      expect(variant.itinerary.days[0].activities[0].scheduledStartTime >= "10:00").toBe(true);
+      expect(variant.itinerary.days.at(-1).activities.at(-1).scheduledEndTime <= "20:00").toBe(true);
+      for (const [index, day] of variant.itinerary.days.entries()) {
+        expect(day.legs).toHaveLength(day.activities.length + 1);
+        expect(day.legs.every(({ durationMinutes }) => durationMinutes > 0)).toBe(true);
+        expect(day.activities.every(({ poi }) => poi.primarySource === "AMAP")).toBe(true);
+        if (index > 0) expect(day.startPoint.locationId).toBe(variant.itinerary.days[index - 1].endPoint.locationId);
+      }
+    }
+  });
+
   for (const city of ["beijing", "shanghai", "xian"]) {
     it(`generates three independently validated hard-budget variants for ${city}`, async () => {
       const result = await generateValidatedTrip(preferences(city), dependencies());
@@ -162,6 +196,17 @@ describe("objective-aligned trip generation", () => {
           primarySource: "AMAP",
           name: expect.any(String),
           coordinates: expect.any(Object)
+        });
+        expect(variant.itinerary.days[0].activities[0].estimatedActivityCostFen).toBe(6000);
+        expect(variant.itinerary.days[0].startPoint).toMatchObject({
+          locationType: "ORIGIN",
+          coordinates: expect.any(Object),
+          locationIsEstimated: true
+        });
+        expect(variant.itinerary.days[0].endPoint).toMatchObject({
+          locationType: "HOTEL",
+          coordinates: expect.any(Object),
+          locationIsEstimated: true
         });
       }
     });
@@ -187,8 +232,8 @@ describe("objective-aligned trip generation", () => {
 
     expect(result.state).toBe("FAILED");
     expect(result.variants.every(({ state }) => state === "FAILED")).toBe(true);
-    expect(result.variants.flatMap(({ validation }) => validation.issues)
-      .some(({ code }) => code === "BUDGET_EXCEEDED")).toBe(true);
+    const issueCodes = result.variants.flatMap(({ validation }) => validation.issues).map(({ code }) => code);
+    expect(issueCodes).toContain("BUDGET_EXCEEDED");
     expect(deps.saveRun).toHaveBeenCalledWith(expect.objectContaining({ state: "FAILED" }));
   });
 

@@ -109,7 +109,7 @@ export default function PlannerPage() {
             <div className="absolute inset-x-0 bottom-0 bg-ink/90 p-7">
               <ShieldCheck className="h-7 w-7 text-lake" />
               <h2 className="mt-4 font-display text-2xl font-bold">
-                {language === "zh" ? "结构化输入，由服务端验证" : "Structured here. Verified on the server."}
+                {language === "zh" ? "结构化输入，由服务端校验约束" : "Structured here. Constraint-checked on the server."}
               </h2>
               <p className="mt-3 text-sm leading-6 text-white/65">
                 {language === "zh"

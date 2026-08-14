@@ -229,7 +229,7 @@ Remaining frontend limitations:
 
 - Some workflow logic still lives in `PlannerPage.jsx`, `ComparePage.jsx`, and `TripWorkspacePage.jsx`.
 - There is no integrated browser E2E test command.
-- Vite emits a chunk-size warning because the SPA imports map rendering, drag-and-drop, Anime.js, lucide icons, and application pages into one 577.72 kB JavaScript bundle.
+- Vite emits chunk-size warnings. The latest main JavaScript bundle is 724.56 kB (232.08 kB gzip), with the Three.js living-atlas chunk at 529.46 kB (134.64 kB gzip).
 
 ## 6. Backend Architecture
 
@@ -358,7 +358,7 @@ No weather, flight, booking, payment, or live hotel API is implemented.
 | Maintainability | 3 | Docs and small boundaries improved; large demo provider and page workflow logic remain. |
 | Scalability | 3 | MySQL mode and batched graph loading help, but generation is still request/response and no production queue/cache model exists. |
 | Security | 4 | Secret placeholder cleanup, timeout, typed errors, validation, and docs improved; localStorage JWT remains a prototype risk. |
-| Performance | 4 | MySQL trip graph loading no longer loops per variant/day; Vite 577.72 kB JavaScript bundle warning remains. |
+| Performance | 4 | MySQL trip graph loading no longer loops per variant/day; the Vite 724.56 kB main JavaScript bundle warning remains. |
 | Reliability | 4 | OpenRouter calls now have timeout/error classification and generator fallback behavior remains. |
 | Testability | 4 | Added focused tests for OpenRouter errors, auth cleanup, typed error middleware, prompt hardening, authz, and MySQL batching. No real MySQL/E2E tests yet. |
 | Reusability | 3 | Shared schemas and adapters help; frontend workflow extraction remains. |
@@ -381,7 +381,7 @@ No weather, flight, booking, payment, or live hotel API is implemented.
 | Remaining issue | Medium | `package.json` | No lint/typecheck scripts | Add ESLint and optional JSDoc/TypeScript checking |
 | Remaining issue | Medium | `server/tests` | MySQL tests use mocked pool, not real MySQL | Add integration test against a disposable MySQL database |
 | Remaining issue | Medium | `client` | No integrated browser E2E smoke test | Add Playwright smoke flow for login/generate/select/workspace |
-| Remaining issue | Low | `client/dist` build output | Vite chunk-size warning: JavaScript bundle is 577.72 kB | Investigate route-level lazy loading and dependency chunking |
+| Remaining issue | Low | `client/dist` build output | Vite chunk-size warning: main JavaScript bundle is 724.56 kB | Investigate route-level lazy loading and dependency chunking |
 | Remaining issue | Low | `client/src/components/AmapRouteMap.jsx` | Amap script load failure is not surfaced to the user | Show non-blocking map-provider fallback reason |
 
 ## 13. Testing Status
@@ -403,7 +403,7 @@ Final post-change verification:
 - Server: 76 tests.
 - Client: 29 tests.
 - `npm run build`: passed after the architecture pass.
-- Vite chunk-size warning remains: generated JavaScript bundle is 577.72 kB after minification.
+- Vite chunk-size warning remains: the generated main JavaScript bundle is 724.56 kB after minification.
 - `npm run lint`: no root script exists.
 - `npm run typecheck`: no root script exists.
 
@@ -420,7 +420,7 @@ New or strengthened test coverage:
 
 ## 14. Bundle Warning Review
 
-Latest post-review build output contains one JavaScript bundle of 577.72 kB (177.51 kB gzip) and one CSS bundle of 58.53 kB (15.57 kB gzip). No sourcemap/metafile report is configured.
+Latest post-review build output contains a main JavaScript bundle of 724.56 kB (232.08 kB gzip), a Three.js living-atlas chunk of 529.46 kB (134.64 kB gzip), and a CSS bundle of 76.43 kB (19.37 kB gzip). No sourcemap/metafile report is configured.
 
 Likely contributors from direct imports:
 
@@ -493,7 +493,7 @@ Remaining plan:
 | P1 | Add real MySQL integration testing | Mocked pool tests do not prove migration/runtime compatibility. |
 | P2 | Add ESLint | No current lint script catches style/import issues. |
 | P2 | Add integrated browser E2E smoke test | Root tests do not exercise the full browser flow. |
-| P2 | Investigate Vite bundle size | Build warning remains with a 577.72 kB JavaScript bundle. |
+| P2 | Investigate Vite bundle size | Build warning remains with a 724.56 kB main JavaScript bundle. |
 | P2 | Extract repeated frontend workflow logic | Pages still coordinate API/session/navigation logic directly. |
 | P3 | Split `demoProvider.js` after snapshot tests | It is large, but generated output should be pinned before splitting. |
 | P3 | Consider stronger production authentication | localStorage JWT is acceptable for FYP but not ideal for production. |
@@ -670,4 +670,4 @@ The invitation token hash is stored in `trip_invitations`; plaintext tokens are 
 
 ### Current Verification
 
-The complete shared, server, and client test suites cover collaboration contracts, role authorization, invitation state transitions, revision conflicts, repository transactions, expense reconciliation, and responsive frontend behavior. The fresh post-review run passed 12 shared, 174 server, and 108 client tests (294 total). The production build emits one JavaScript bundle of 577.72 kB (177.51 kB gzip) and one CSS bundle of 58.53 kB (15.57 kB gzip); the existing Vite chunk-size warning remains a performance follow-up and was not optimized during this documentation pass.
+The complete shared, server, and client test suites cover collaboration contracts, role authorization, invitation state transitions, revision conflicts, repository transactions, expense reconciliation, and responsive frontend behavior. The fresh 2026-08-14 run passed 17 shared, 249 server, and 139 client tests (405 total). The production build emits a 724.56 kB main JavaScript bundle (232.08 kB gzip), a 529.46 kB Three.js living-atlas chunk (134.64 kB gzip), and a 76.43 kB CSS bundle (19.37 kB gzip); the existing Vite chunk-size warning remains a performance follow-up.

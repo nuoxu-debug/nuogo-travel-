@@ -124,7 +124,7 @@ No existing success response shapes were intentionally changed.
 - No root lint/typecheck scripts exist.
 - MySQL tests use a mocked pool, not a real MySQL container.
 - No integrated Playwright end-to-end test command exists.
-- Vite still emits a chunk-size warning: the JavaScript bundle is 505.32 kB.
+- Vite still emits a chunk-size warning: the latest main JavaScript bundle is 724.56 kB (232.08 kB gzip).
 
 ## 14. Future Optional Improvements
 
@@ -202,5 +202,5 @@ Verification additions:
 
 Current build note:
 
-- The final post-review production build emits 577.72 kB of JavaScript (177.51 kB gzip) and 58.53 kB of CSS (15.57 kB gzip).
+- The final post-review production build emits a 724.56 kB main JavaScript bundle (232.08 kB gzip), a 529.46 kB Three.js living-atlas chunk (134.64 kB gzip), and 76.43 kB of CSS (19.37 kB gzip).
 - Vite's existing chunk-size warning remains. Bundle optimization is intentionally outside this documentation and verification task.

@@ -32,10 +32,31 @@ function mapActivity(activity) {
     name: { en: activity.poi?.name ?? activity.poiId, zh: activity.poi?.name ?? activity.poiId },
     startTime: activity.scheduledStartTime ?? activity.plannedStartTime,
     endTime: activity.scheduledEndTime ?? activity.plannedStartTime,
-    address: { en: address ?? "Verified point of interest", zh: address ?? "Verified point of interest" },
+    address: { en: address ?? "Source-matched point of interest", zh: address ?? "Source-matched point of interest" },
     location: activity.poi?.coordinates,
     locationIsEstimated: false
   };
+}
+
+function mapAnchor(point, label, time) {
+  const name = `${label}: ${pointLabel(point)}`;
+  return {
+    id: `anchor-${label.toLowerCase()}-${point.locationId}`,
+    name: { en: name, zh: name },
+    startTime: time,
+    endTime: time,
+    address: { en: "Estimated journey anchor", zh: "Estimated journey anchor" },
+    location: point.coordinates,
+    locationIsEstimated: true
+  };
+}
+
+function activityCostLabel(activity) {
+  if (!activity.estimatedActivityCostFen) return null;
+  const suffix = activity.activityType === "FOOD"
+    ? "estimated meal"
+    : activity.activityType === "ENTERTAINMENT" ? "estimated activity" : "estimated entry";
+  return `${cny(activity.estimatedActivityCostFen)} ${suffix}`;
 }
 
 function ActivityDetails({ activity, onClose }) {
@@ -46,7 +67,7 @@ function ActivityDetails({ activity, onClose }) {
       <section role="dialog" aria-modal="true" aria-label={`${poi.name} details`} className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-paper p-6 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-5">
           <div>
-            <p className="text-xs font-bold uppercase text-lake">Verified activity</p>
+            <p className="text-xs font-bold uppercase text-lake">Source-matched activity</p>
             <h2 className="mt-2 font-display text-2xl font-bold">{poi.name}</h2>
             <p className="mt-3 leading-7 text-ink/65">{activity.reason}</p>
           </div>
@@ -57,6 +78,8 @@ function ActivityDetails({ activity, onClose }) {
           <div><dt className="text-ink/45">Primary source</dt><dd className="mt-1 font-semibold">{poi.primarySource}</dd></div>
           <div><dt className="text-ink/45">Category</dt><dd className="mt-1 font-semibold">{poi.category}</dd></div>
           <div><dt className="text-ink/45">Address</dt><dd className="mt-1 font-semibold">{typeof poi.address === "string" ? poi.address : poi.address?.en}</dd></div>
+          <div><dt className="text-ink/45">Scheduled duration</dt><dd className="mt-1 font-semibold">{activity.plannedDurationMinutes} min</dd></div>
+          <div><dt className="text-ink/45">System estimate</dt><dd className="mt-1 font-semibold">{activityCostLabel(activity) ?? "No separate entry estimate"}</dd></div>
         </dl>
         <div className="mt-5 rounded-lg bg-ink/[0.035] p-4 text-xs text-ink/55">
           {(poi.sourceRecords ?? []).map((record) => <p key={`${record.provider}-${record.sourceId}`}>{record.provider} source record {record.sourceId}</p>)}
@@ -98,7 +121,11 @@ export default function ObjectiveTripWorkspace({ trip, setTrip, access }) {
   const [status, setStatus] = useState(trip.generationState ?? variant.state);
   const [busy, setBusy] = useState(false);
   const day = variant.itinerary.days.find((item) => item.dayNumber === activeDayNumber) ?? variant.itinerary.days[0];
-  const mapActivities = useMemo(() => day.activities.filter((activity) => activity.poi?.coordinates).map(mapActivity), [day]);
+  const mapActivities = useMemo(() => [
+    ...(day.startPoint?.coordinates ? [mapAnchor(day.startPoint, "Start", day.activities[0]?.scheduledStartTime ?? "08:00")] : []),
+    ...day.activities.filter((activity) => activity.poi?.coordinates).map(mapActivity),
+    ...(day.endPoint?.coordinates ? [mapAnchor(day.endPoint, "End", day.activities.at(-1)?.scheduledEndTime ?? "20:00")] : [])
+  ], [day]);
 
   const tripTitle = typeof trip.title === "string" ? trip.title : trip.title?.en;
 
@@ -177,7 +204,7 @@ export default function ObjectiveTripWorkspace({ trip, setTrip, access }) {
           <section role="region" aria-label={`Day ${day.dayNumber} continuous itinerary`} className="min-w-0 border border-ink/10 bg-paper p-4">
             <div className="mb-2 flex items-center justify-between"><div><p className="text-xs font-bold uppercase text-jade">{day.date}</p><h2 className="mt-1 font-display text-xl font-bold">Day {day.dayNumber} route</h2></div><span className="text-xs font-semibold text-ink/45">{day.activities.length} stops</span></div>
             <div className="mt-4 flex items-center gap-3 rounded-lg bg-ink/[0.035] p-3 text-sm font-bold"><span className="grid h-8 w-8 place-items-center rounded-full bg-ink text-white">S</span>Start {"\u00b7"} {pointLabel(day.startPoint)}</div>
-            {day.activities.map((activity, index) => <div key={activity.poiId}>{day.legs[index] && <TripLegRow leg={day.legs[index]} />}<button type="button" aria-label={`${activity.poi?.name ?? activity.poiId} details`} onClick={() => setDetail(activity)} className="w-full rounded-lg border border-ink/10 bg-white p-4 text-left transition-colors hover:border-lake focus-visible:outline focus-visible:outline-2 focus-visible:outline-lake"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase text-lake">{activity.scheduledStartTime ?? activity.plannedStartTime} {"\u00b7"} {activity.activityType.replaceAll("_", " ")}</p><h3 className="mt-1 font-display text-xl font-bold">{activity.poi?.name ?? activity.poiId}</h3><p className="mt-2 line-clamp-2 text-sm leading-6 text-ink/60">{activity.reason}</p></div><span className="rounded-full bg-jade/10 px-2.5 py-1 text-xs font-bold text-jade">{activity.poi?.primarySource}</span></div></button></div>)}
+            {day.activities.map((activity, index) => <div key={activity.poiId}>{day.legs[index] && <TripLegRow leg={day.legs[index]} />}<button type="button" aria-label={`${activity.poi?.name ?? activity.poiId} details`} onClick={() => setDetail(activity)} className="w-full rounded-lg border border-ink/10 bg-white p-4 text-left transition-colors hover:border-lake focus-visible:outline focus-visible:outline-2 focus-visible:outline-lake"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase text-lake">{activity.scheduledStartTime ?? activity.plannedStartTime} {"\u00b7"} {activity.plannedDurationMinutes} min {"\u00b7"} {activity.activityType.replaceAll("_", " ")}</p><h3 className="mt-1 font-display text-xl font-bold">{activity.poi?.name ?? activity.poiId}</h3><p className="mt-2 line-clamp-2 text-sm leading-6 text-ink/60">{activity.reason}</p>{activityCostLabel(activity) && <p className="mt-2 text-xs font-bold text-jade">{activityCostLabel(activity)}</p>}</div><span className="rounded-full bg-jade/10 px-2.5 py-1 text-xs font-bold text-jade">{activity.poi?.primarySource}</span></div></button></div>)}
             {day.legs.at(-1) && <TripLegRow leg={day.legs.at(-1)} />}
             <div className="flex items-center gap-3 rounded-lg bg-ink/[0.035] p-3 text-sm font-bold"><span className="grid h-8 w-8 place-items-center rounded-full border border-ink/20 bg-white">E</span>End {"\u00b7"} {pointLabel(day.endPoint)}</div>
           </section>

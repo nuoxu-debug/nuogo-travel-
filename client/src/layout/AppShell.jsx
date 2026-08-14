@@ -80,6 +80,11 @@ export default function AppShell({ children, dark = false, hideFooter = false })
             <Link to="/planner" className="min-h-11 rounded-lg px-3 py-3 font-bold" onClick={() => setOpen(false)}>{t("nav.plan")}</Link>
             {user && <Link to="/archive" className="min-h-11 rounded-lg px-3 py-3 font-bold" onClick={() => setOpen(false)}>{t("nav.archive")}</Link>}
             <div className="p-2"><LanguageToggle tone="light" /></div>
+            {user && (
+              <button type="button" onClick={() => { logout(); setOpen(false); }} className="flex min-h-11 items-center gap-2 rounded-lg px-3 py-3 text-left font-bold">
+                <LogOut className="h-4 w-4" /> {t("nav.signOut")}
+              </button>
+            )}
             {!user && (
               <>
                 <Link to={authPath("/login")} className="min-h-11 rounded-lg px-3 py-3 font-bold" onClick={() => setOpen(false)}>{t("nav.signIn")}</Link>

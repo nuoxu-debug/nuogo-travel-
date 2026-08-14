@@ -22,6 +22,7 @@ function objectiveTrip() {
     scheduledStartTime: "10:05",
     scheduledEndTime: "11:35",
     plannedDurationMinutes: 90,
+    estimatedActivityCostFen: 6000,
     reason: "Selected from verified destination candidates.",
     poi: {
       canonicalPoiId: id,
@@ -42,14 +43,14 @@ function objectiveTrip() {
     variant: "BALANCED",
     trip: { origin: "Shanghai", destination: "beijing", startDate: "2026-10-10", endDate: "2026-10-11", travellerCount: 2, totalBudgetCny: 5000 },
     days: [{
-      dayNumber: 1, date: "2026-10-10", startPoint: { locationId: "origin", locationType: "ORIGIN" },
+      dayNumber: 1, date: "2026-10-10", startPoint: { locationId: "origin", locationType: "ORIGIN", coordinates: { longitude: 116.3901, latitude: 39.9075 } },
       activities: [poi("candidate:beijing:1", "Palace Museum", 116.3972, 39.9163)],
-      endPoint: { locationId: "hotel", locationType: "HOTEL" },
+      endPoint: { locationId: "hotel", locationType: "HOTEL", coordinates: { longitude: 116.405, latitude: 39.91 } },
       legs: [leg("leg-1", "origin", "candidate:beijing:1"), leg("leg-2", "candidate:beijing:1", "hotel")]
     }, {
-      dayNumber: 2, date: "2026-10-11", startPoint: { locationId: "hotel", locationType: "HOTEL" },
+      dayNumber: 2, date: "2026-10-11", startPoint: { locationId: "hotel", locationType: "HOTEL", coordinates: { longitude: 116.405, latitude: 39.91 } },
       activities: [poi("candidate:beijing:2", "Temple of Heaven", 116.4066, 39.8819)],
-      endPoint: { locationId: "destination", locationType: "DESTINATION" },
+      endPoint: { locationId: "destination", locationType: "DESTINATION", coordinates: { longitude: 116.42, latitude: 39.9 } },
       legs: [leg("leg-3", "hotel", "candidate:beijing:2"), leg("leg-4", "candidate:beijing:2", "destination")]
     }]
   };
@@ -117,10 +118,13 @@ describe("validated itinerary workspace", () => {
     expect(within(timeline).getByText("Start · Origin")).toBeInTheDocument();
     expect(within(timeline).getAllByText("1.2 km · 5 min")).toHaveLength(2);
     expect(within(timeline).getByRole("button", { name: /Palace Museum/ })).toHaveTextContent("AMAP");
+    expect(within(timeline).getByRole("button", { name: /Palace Museum/ })).toHaveTextContent("90 min");
+    expect(within(timeline).getByRole("button", { name: /Palace Museum/ })).toHaveTextContent("CNY 60 estimated entry");
     expect(within(timeline).getByText("End · Hotel")).toBeInTheDocument();
 
     await userEvent.click(within(timeline).getByRole("button", { name: /Palace Museum/ }));
     expect(screen.getByRole("dialog", { name: "Palace Museum details" })).toHaveTextContent("Selected from verified destination candidates");
+    expect(screen.getByRole("dialog", { name: "Palace Museum details" })).toHaveTextContent("Source-matched activity");
     expect(screen.getByText("candidate:beijing:1", { selector: "dd" })).toBeInTheDocument();
   });
 
@@ -138,6 +142,8 @@ describe("validated itinerary workspace", () => {
     expect(screen.getByTestId("route-map-panel")).toHaveClass("h-[280px]");
     expect(screen.getByText("Origin and hotel anchors may be estimated; POI coordinates retain their provider source.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Map marker: Palace Museum" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Map marker: Start: Origin" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Map marker: End: Hotel" })).toBeInTheDocument();
   });
 
   it("exposes owner management, invalidation, and privacy consent states", async () => {

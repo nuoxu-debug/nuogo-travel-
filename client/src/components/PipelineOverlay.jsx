@@ -1,8 +1,8 @@
 import { CheckCircle2, Database, LoaderCircle, Route, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 
 const states = {
-  RETRIEVING: { Icon: Database, label: "Retrieving verified travel data", detail: "Building a destination candidate pool from configured providers." },
-  PLANNING: { Icon: Sparkles, label: "Drafting three travel profiles", detail: "The AI may select only verified candidate IDs." },
+  RETRIEVING: { Icon: Database, label: "Retrieving source-labelled travel data", detail: "Building a destination candidate pool from configured providers." },
+  PLANNING: { Icon: Sparkles, label: "Drafting three travel profiles", detail: "The AI may select only source-matched candidate IDs." },
   VALIDATING: { Icon: ShieldCheck, label: "Validating routes, time, and budget", detail: "Server rules recalculate every derived value." },
   REPAIRING: { Icon: Wrench, label: "Repairing a constrained draft", detail: "A bounded repair pass is resolving validation codes." },
   FAILED: { Icon: Route, label: "No safe itinerary was produced", detail: "Nothing invalid has been marked ready." },

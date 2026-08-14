@@ -7,6 +7,33 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+test("account registration, logout, login, and protected API access work end to end", async ({ page, request }, testInfo) => {
+  const email = `objective-${testInfo.project.name}-${Date.now()}@nuogo.test`;
+  const password = "Nuogo123!";
+
+  const unauthenticated = await request.get("http://127.0.0.1:8788/api/trips");
+  expect(unauthenticated.status()).toBe(401);
+
+  await page.goto("/register");
+  await page.getByLabel("Full name").fill("Objective Student");
+  await page.getByLabel("Email address").fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page).toHaveURL(/\/planner$/);
+
+  const signOut = page.getByRole("button", { name: "Sign out" });
+  if (!await signOut.isVisible()) await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("nuogo-token"))).toBeNull();
+
+  await page.goto("/login");
+  await page.getByLabel("Email address").fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/planner$/);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("nuogo-token"))).not.toBeNull();
+});
+
 test("guest can generate, compare, select, and manage a validated trip", async ({ page, request }, testInfo) => {
   const consoleErrors = [];
   page.on("console", (message) => {
@@ -66,6 +93,15 @@ test("guest can generate, compare, select, and manage a validated trip", async (
     path: `.artifacts/${testInfo.project.name}-objective-workspace.png`,
     fullPage: true
   });
+
+  await page.getByRole("button", { name: "Edit preferences" }).click();
+  await expect(page.getByRole("status")).toContainText("INVALIDATED");
+  await page.getByRole("button", { name: "Revalidate itinerary" }).click();
+  await expect(page.getByRole("heading", { name: "Three travel profiles. One hard budget." })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Choose this plan" }).first().click();
+  await expect(page).toHaveURL(/\/trip\/[^/]+$/);
+  await page.getByRole("button", { name: "Delete trip" }).click();
+  await expect(page).toHaveURL(/\/archive$/);
   expect(consoleErrors).toEqual([]);
 });
 

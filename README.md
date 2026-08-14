@@ -64,6 +64,10 @@ Get-Content -Raw database/migrations/002_anhui_ingestion.sql | mysql -u root -p
 Get-Content -Raw database/migrations/003_grounded_activity_sources.sql | mysql -u root -p
 Get-Content -Raw database/migrations/004_activity_media_details.sql | mysql -u root -p
 Get-Content -Raw database/migrations/005_trip_collaboration_expenses.sql | mysql -u root -p
+Get-Content -Raw database/migrations/006_security_privacy.sql | mysql -u root -p
+Get-Content -Raw database/migrations/007_objective_aligned_mvp.sql | mysql -u root -p
+Get-Content -Raw database/migrations/008_objective_aligned_seed.sql | mysql -u root -p
+Get-Content -Raw database/migrations/009_objective_trip_payload.sql | mysql -u root -p
 Get-Content -Raw database/seeds/001_demo.sql | mysql -u root -p
 ```
 
@@ -74,7 +78,7 @@ The browser calls only the Express API. OpenRouter credentials stay server-side.
 ## Project Structure
 
 ```text
-client/      React, Vite, Tailwind CSS, Anime.js
+client/      React, Vite, Tailwind CSS, Anime.js, GSAP, Three.js, Leaflet
 server/      Express, JWT, AI providers, repositories
 shared/      Zod contracts and China travel taxonomy
 database/    MySQL migrations and safe local seed

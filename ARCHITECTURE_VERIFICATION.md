@@ -11,7 +11,7 @@ This document verifies the current Nuogo architecture against the actual source 
 | Command | Result | Notes |
 | --- | --- | --- |
 | `npm test` | Passed | Shared: 4 tests passed. Server: 67 tests passed. Client: 26 tests passed. |
-| `npm run build` | Passed | Shared tests passed, server syntax check passed, client Vite build passed. Vite reported a 505.32 kB JavaScript bundle warning. |
+| `npm run build` | Passed | Shared tests passed, server syntax check passed, client Vite build passed. Latest main JavaScript bundle: 724.56 kB (232.08 kB gzip). |
 | `npm run lint` | Not run | No root `lint` script exists in `package.json`. |
 | `npm run typecheck` | Not run | No root `typecheck` script exists in `package.json`. |
 
@@ -20,7 +20,7 @@ This document verifies the current Nuogo architecture against the actual source 
 | Command | Result | Notes |
 | --- | --- | --- |
 | `npm test` | Passed | Shared: 4 tests passed. Server: 76 tests passed. Client: 29 tests passed. |
-| `npm run build` | Passed | Shared tests passed, server syntax check passed, client Vite build passed. Vite reported a 505.32 kB JavaScript bundle warning. |
+| `npm run build` | Passed | Shared tests passed, server syntax check passed, client Vite build passed. Latest main JavaScript bundle: 724.56 kB (232.08 kB gzip). |
 | `npm run lint` | Not run | No root `lint` script exists in `package.json`. |
 | `npm run typecheck` | Not run | No root `typecheck` script exists in `package.json`. |
 | Secret scan | Passed | No checked OpenRouter key or non-placeholder env secret pattern remained in scanned project text files. |
