@@ -348,14 +348,14 @@
 - Normal CI uses deterministic provider fixtures.
 - Live provider suites run only under `RUN_LIVE_TRAVEL_API_TESTS=true` with all required keys.
 
-- [ ] **Step 1: Add failing Playwright scenarios** for authentication, planning, all three under-budget alternatives, management, privacy, and cross-user access.
-- [ ] **Step 2: Run E2E and verify red against missing final UI behaviors.**
-- [ ] **Step 3: Implement fixtures/configuration and add lint/CI scripts.**
-- [ ] **Step 4: Run `npm test`, `npm run build`, `npm run lint`, `npm run test:e2e`, `npm audit`, and `npm audit --omit=dev`.**
-- [ ] **Step 5: Start the app and inspect desktop/mobile screenshots plus journey-map pixels, resize, interaction, reduced motion, overlap, localization, and console/network errors.**
-- [ ] **Step 6: Run the Impeccable detector once across changed UI targets and resolve valid findings.**
-- [ ] **Step 7: Record live-provider verification separately; never claim it passed without keys and executed evidence.**
-- [ ] **Step 8: Commit** with `chore: verify objective-aligned Nuogo MVP`.
+- [x] **Step 1: Add failing Playwright scenarios** for authentication, planning, all three under-budget alternatives, management, privacy, and cross-user access.
+- [x] **Step 2: Run E2E and verify red before correcting the test's strict selectors and authorization-status expectation.**
+- [x] **Step 3: Implement fixtures/configuration and add lint/CI scripts.**
+- [x] **Step 4: Run `npm test`, `npm run build`, `npm run lint`, `npm run test:e2e`, `npm audit`, and `npm audit --omit=dev`.**
+- [x] **Step 5: Start the app and inspect desktop/mobile screenshots plus journey-map pixels, resize, interaction, reduced motion, overlap, localization, and console/network errors.**
+- [x] **Step 6: Run the Impeccable detector once across changed UI targets and resolve valid findings.**
+- [x] **Step 7: Record live-provider verification separately; never claim it passed without keys and executed evidence.**
+- [x] **Step 8: Commit** with `chore: verify objective-aligned Nuogo MVP`.
 
 ## Plan Self-Review
 

@@ -9,7 +9,7 @@ import { localizeAuthError } from "../i18n/apiErrors.js";
 import AppShell from "../layout/AppShell.jsx";
 
 export default function LoginPage() {
-  const { language, t } = useLanguage();
+  const { t } = useLanguage();
   const { login, loginAsGuest, ready } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();

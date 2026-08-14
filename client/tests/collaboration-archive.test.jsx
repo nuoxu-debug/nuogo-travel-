@@ -234,7 +234,7 @@ describe("map, collaboration, and archive", () => {
           access: accessByRole.owner
         };
       },
-      mutation: async (url, options) => {
+      mutation: async (url, _options) => {
         if (url.endsWith("/activities/jinli-budget/cheaper-alternative")) {
           return response({
             error: {

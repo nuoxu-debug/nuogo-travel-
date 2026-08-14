@@ -87,7 +87,7 @@ Verified on 2026-08-14 against desktop Chromium at `1440x900` and mobile Chromiu
 - The landing and planner routes produced no browser console errors during the final Playwright run.
 - Screenshots: `.artifacts/desktop-chromium-living-atlas-midpoint.png` and `.artifacts/mobile-chromium-living-atlas-midpoint.png`.
 - Impeccable detector: zero reported findings for `client/src`.
-- Regression evidence: 332 repository tests passed; Playwright reported 13 passed and one intentional desktop-only skip.
-- Production output: main JavaScript `701.90 kB` (`226.83 kB` gzip), lazy Living Atlas chunk `529.46 kB` (`134.64 kB` gzip), and CSS `75.97 kB` (`19.33 kB` gzip).
+- Regression evidence: 404 repository tests passed; Playwright reported 17 passed and one intentional mobile skip.
+- Production output: main JavaScript `723.04 kB` (`231.69 kB` gzip), lazy Living Atlas chunk `529.46 kB` (`134.64 kB` gzip), and CSS `76.43 kB` (`19.37 kB` gzip).
 
 The Vite 500 kB chunk warning remains accepted for this visual checkpoint. Bundle optimization is intentionally deferred to the dedicated performance phase so this design pass does not alter application boundaries.

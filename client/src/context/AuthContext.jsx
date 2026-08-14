@@ -30,6 +30,7 @@ export function safeReturnTo(value) {
       if (
         decoded.startsWith("//")
         || decoded.includes("\\")
+        // eslint-disable-next-line no-control-regex -- reject decoded control characters in return URLs
         || /[\u0000-\u001f\u007f]/.test(decoded)
       ) {
         return "/planner";

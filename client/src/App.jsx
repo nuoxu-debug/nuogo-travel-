@@ -12,10 +12,6 @@ import RegisterPage from "./pages/RegisterPage.jsx";
 import SharedTripPage from "./pages/SharedTripPage.jsx";
 import TripWorkspacePage from "./pages/TripWorkspacePage.jsx";
 
-function Placeholder({ title }) {
-  return <div className="grid min-h-screen place-items-center bg-mist"><h1 className="font-display text-4xl font-bold">{title}</h1></div>;
-}
-
 function ApplicationRoutes({ enableLegacyFeatures }) {
   return (
     <Routes>

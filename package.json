@@ -17,13 +17,19 @@
     "build": "npm --workspace shared run test && npm --workspace server run build && npm --workspace client run build",
     "test": "npm --workspace shared run test && npm --workspace server run test && npm --workspace client run test",
     "test:e2e": "playwright test",
+    "lint": "eslint client/src client/tests server/src server/tests shared tests/e2e playwright.config.js",
     "test:shared": "npm --workspace shared run test",
     "ingest:anhui": "npm --workspace server run ingest:anhui --",
     "attractions:list": "npm --workspace server run attractions:list --",
     "attractions:review": "npm --workspace server run attractions:review --"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.0",
     "@playwright/test": "^1.62.1",
-    "concurrently": "^9.0.1"
+    "concurrently": "^9.0.1",
+    "eslint": "^9.39.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.11.0"
   }
 }
