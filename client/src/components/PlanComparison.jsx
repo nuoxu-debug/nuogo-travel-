@@ -1,7 +1,9 @@
 import { ArrowRight, Check, Gauge, Utensils, WalletCards } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useState } from "react";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useAnime } from "../hooks/useAnime.js";
+import { useGsapContext } from "../motion/useGsapContext.js";
+import ComparisonRouteRail from "./ComparisonRouteRail.jsx";
 import RouteRail from "./RouteRail.jsx";
 
 const styles = {
@@ -34,18 +36,17 @@ const styles = {
 export default function PlanComparison({ variants, onChoose, choosing }) {
   const { language } = useLanguage();
   const animate = useAnime();
-  const root = useRef(null);
-
-  useEffect(() => {
-    animate({
-      targets: root.current?.querySelectorAll(".plan-column"),
-      translateY: [32, 0],
-      opacity: [0, 1],
-      delay: (_target, index) => 100 + index * 130,
-      duration: 800,
-      easing: "easeOutExpo"
+  const [activeId, setActiveId] = useState(variants[0]?.id);
+  const { scope } = useGsapContext(({ gsap }) => {
+    gsap.to(".plan-column", {
+      y: 0,
+      opacity: (index, element) => element.dataset.active === "true" ? 1 : 0.82,
+      scale: (index, element) => element.dataset.active === "true" ? 1 : 0.985,
+      duration: 0.42,
+      stagger: 0.04,
+      ease: "power3.out"
     });
-  }, [animate]);
+  }, [activeId]);
 
   function choose(variant, element) {
     animate({
@@ -58,8 +59,10 @@ export default function PlanComparison({ variants, onChoose, choosing }) {
   }
 
   return (
-    <div ref={root} className="grid snap-x snap-mandatory gap-5 overflow-x-auto pb-4 xl:grid-cols-3 xl:overflow-visible">
-      {variants.map((variant, index) => {
+    <div ref={scope} className="plan-comparison-shell">
+      <ComparisonRouteRail variants={variants} activeId={activeId} language={language} />
+      <div className="grid snap-x snap-mandatory gap-5 overflow-x-auto pb-4 xl:grid-cols-3 xl:overflow-visible">
+        {variants.map((variant, index) => {
         const style = styles[variant.style] ?? styles.budget;
         const Icon = style.Icon;
         const total = Object.values(variant.budget).reduce((sum, amount) => sum + amount, 0);
@@ -72,6 +75,10 @@ export default function PlanComparison({ variants, onChoose, choosing }) {
         return (
           <article
             key={variant.id}
+            aria-label={variant.title[language] ?? variant.title.en}
+            data-active={variant.id === activeId ? "true" : "false"}
+            onFocusCapture={() => setActiveId(variant.id)}
+            onPointerEnter={() => setActiveId(variant.id)}
             className="plan-column flex min-h-[690px] min-w-[min(88vw,390px)] snap-center flex-col overflow-hidden rounded-lg border border-ink/10 bg-white/78 opacity-0 shadow-panel backdrop-blur-2xl xl:min-w-0"
           >
             <div className={`${style.tint} border-b border-ink/10 p-6`}>
@@ -141,7 +148,8 @@ export default function PlanComparison({ variants, onChoose, choosing }) {
             </button>
           </article>
         );
-      })}
+        })}
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App.jsx";
@@ -52,8 +52,27 @@ describe("comparison and editable workspace", () => {
       throw new Error(`Unexpected request: ${url}`);
     });
     render(<App initialPath="/compare/trip-1" />);
-    expect(await screen.findAllByText(/4 day itinerary/i)).toHaveLength(3);
-    await userEvent.click((await screen.findAllByRole("button", { name: "Choose this plan" }))[1]);
+    expect(await screen.findAllByRole("heading", { level: 2, name: /4 day itinerary/i }))
+      .toHaveLength(3);
+    const overview = screen.getByRole("region", { name: "Plan comparison overview" });
+    expect(within(overview).getByText("¥4,800 hard budget")).toBeInTheDocument();
+    ["Accommodation", "Transport", "Food", "Attractions", "Entertainment", "Other"]
+      .forEach((category) => expect(within(overview).getByText(category)).toBeInTheDocument());
+
+    const cards = screen.getAllByRole("article");
+    expect(cards).toHaveLength(3);
+    expect(cards.map((card) => card.getAttribute("aria-label"))).toEqual([
+      "Budget Backpack: 4 day itinerary",
+      "Food-Focused: 4 day itinerary",
+      "Slow Leisure: 4 day itinerary"
+    ]);
+
+    const chooseButtons = await screen.findAllByRole("button", { name: "Choose this plan" });
+    fireEvent.focus(chooseButtons[1]);
+    expect(cards[1]).toHaveAttribute("data-active", "true");
+    expect(cards.every((card) => card.isConnected)).toBe(true);
+
+    await userEvent.click(chooseButtons[1]);
     expect(await screen.findByText("Trip workspace", {}, { timeout: 5_000 })).toBeInTheDocument();
     expect(screen.getByText("Food-Focused: 4 day itinerary")).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(

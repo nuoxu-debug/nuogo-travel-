@@ -639,6 +639,132 @@ body {
   white-space: nowrap;
 }
 
+.comparison-overview {
+  margin-bottom: 28px;
+  padding: 22px 0 24px;
+  border-top: 1px solid rgba(19, 34, 28, 0.12);
+  border-bottom: 1px solid rgba(19, 34, 28, 0.12);
+}
+
+.comparison-overview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.comparison-overview-head span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--nuogo-jade);
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.comparison-overview-head svg {
+  width: 17px;
+  height: 17px;
+}
+
+.comparison-overview-head strong {
+  max-width: 58%;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comparison-profile-route {
+  position: relative;
+  display: grid;
+  align-items: center;
+  margin: 20px 0;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.comparison-profile-route::before {
+  position: absolute;
+  right: 16.666%;
+  left: 16.666%;
+  height: 2px;
+  background: rgba(19, 34, 28, 0.12);
+  content: "";
+}
+
+.comparison-profile-route i {
+  z-index: 1;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-self: center;
+  place-items: center;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: var(--nuogo-ink);
+  box-shadow: 0 0 0 1px rgba(19, 34, 28, 0.16);
+  color: white;
+  font-size: 9px;
+  font-style: normal;
+  transition: background-color 220ms ease, transform 220ms ease;
+}
+
+.comparison-profile-route i.is-active {
+  background: var(--nuogo-red);
+  transform: scale(1.14);
+}
+
+.comparison-allocation-grid {
+  display: grid;
+  gap: 14px 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.comparison-allocation {
+  display: grid;
+  gap: 7px;
+}
+
+.comparison-allocation > span {
+  color: rgba(19, 34, 28, 0.52);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.comparison-allocation-bars {
+  display: grid;
+  gap: 3px;
+}
+
+.comparison-allocation-bars i {
+  display: block;
+  height: 3px;
+  overflow: hidden;
+  background: rgba(19, 34, 28, 0.08);
+}
+
+.comparison-allocation-fill {
+  display: block;
+  height: 100%;
+  background: rgba(19, 34, 28, 0.28);
+}
+
+.comparison-allocation-bars i.is-active .comparison-allocation-fill {
+  background: var(--nuogo-red);
+}
+
+.plan-column {
+  transform-origin: center top;
+  transition: border-color 220ms ease, box-shadow 220ms ease;
+}
+
+.plan-column[data-active="true"] {
+  border-color: rgba(255, 107, 74, 0.52);
+  box-shadow: 0 22px 60px rgba(19, 34, 28, 0.14);
+}
+
 .strategy-stage {
   height: 100svh;
   min-height: 680px;
@@ -994,6 +1120,20 @@ body {
   }
 
   .planner-horizon-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .comparison-overview-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .comparison-overview-head strong {
+    max-width: 100%;
+  }
+
+  .comparison-allocation-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
