@@ -185,11 +185,11 @@
 - Validators return `{ code, path, severity, metadata }` without chain-of-thought.
 - Required codes include `UNKNOWN_POI`, `LOCATION_CONTINUITY_ERROR`, `TRAVEL_TIME_CONFLICT`, `TIME_OVERLAP`, `DAILY_DURATION_EXCEEDED`, `ARRIVAL_CONSTRAINT_VIOLATION`, `DEPARTURE_CONSTRAINT_VIOLATION`, `BUDGET_EXCEEDED`, and `ROUTE_UNAVAILABLE`.
 
-- [ ] **Step 1: Write failing tests** for POI whitelist, duplicate detection, consecutive-day continuity, first/final day boundaries, route enrichment, time propagation, overlap, date range, daily duration, and route unavailability.
-- [ ] **Step 2: Verify red.**
-- [ ] **Step 3: Implement pure validators and deterministic propagation**; no missing route duration/cost becomes zero.
-- [ ] **Step 4: Verify green.**
-- [ ] **Step 5: Commit** with `feat(validation): enforce continuous feasible itineraries`.
+- [x] **Step 1: Write failing tests** for POI whitelist, duplicate detection, consecutive-day continuity, first/final day boundaries, route enrichment, time propagation, overlap, date range, daily duration, and route unavailability.
+- [x] **Step 2: Verify red.**
+- [x] **Step 3: Implement pure validators and deterministic propagation**; no missing route duration/cost becomes zero.
+- [x] **Step 4: Verify green.**
+- [x] **Step 5: Commit** with `feat(validation): enforce continuous feasible itineraries`.
 
 ### Task 9: Repair Loop and Finalisation
 
