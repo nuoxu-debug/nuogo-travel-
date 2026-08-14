@@ -398,6 +398,13 @@ export const translations = {
       sessionExpiredBody: "Your session ended while responding. Sign in again to continue with this invitation.",
       unknownDestination: "Destination unavailable"
     },
+    archive: {
+      eyebrow: "Nuogo archive",
+      loadingTrips: "Loading saved trips",
+      loadingFavorites: "Loading favorite places",
+      tripsLoadFailed: "Saved trips could not be loaded.",
+      favoritesLoadFailed: "Favorite places could not be loaded."
+    },
     common: {
       demo: "Demo mode",
       loading: "Loading",
@@ -507,6 +514,13 @@ export const translations = {
       authRequiredTitle: "登录后继续",
       sessionExpiredBody: "回应邀请时登录状态已结束，请重新登录后继续。",
       unknownDestination: "目的地信息暂不可用"
+    },
+    archive: {
+      eyebrow: "Nuogo 行程资料库",
+      loadingTrips: "正在加载已保存行程",
+      loadingFavorites: "正在加载收藏地点",
+      tripsLoadFailed: "暂时无法加载已保存行程。",
+      favoritesLoadFailed: "暂时无法加载收藏地点。"
     },
     common: {
       demo: "演示模式",

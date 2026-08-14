@@ -536,6 +536,31 @@ describe("map, collaboration, and archive", () => {
     expect(screen.getByRole("tab", { name: "Drafts" })).toHaveAttribute("aria-selected", "true");
   });
 
+  it("distinguishes archive loading from an empty library", () => {
+    const pending = deferred();
+    fetch.mockReturnValue(pending.promise);
+
+    render(<App initialPath="/archive" />);
+
+    expect(screen.getByRole("status", { name: "Loading saved trips" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Loading favorite places" })).toBeInTheDocument();
+    expect(screen.queryByText("No trips here yet")).not.toBeInTheDocument();
+  });
+
+  it("shows actionable archive errors instead of silent empty states", async () => {
+    fetch.mockResolvedValue(response({
+      error: { code: "REQUEST_FAILED", message: "Unavailable" }
+    }, { ok: false, status: 503 }));
+
+    render(<App initialPath="/archive" />);
+
+    expect(await screen.findByRole("alert", { name: "Saved trips could not be loaded." }))
+      .toBeInTheDocument();
+    expect(screen.getByRole("alert", { name: "Favorite places could not be loaded." }))
+      .toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Try again" })).toHaveLength(2);
+  });
+
   it("keeps vote-enabled public shares itinerary read-only", async () => {
     fetch.mockImplementation(async (url, options = {}) => {
       if (url.endsWith("/shared/sharetoken") && !options.method) {
