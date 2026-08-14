@@ -125,11 +125,11 @@
 - `matchPois(primary, supporting, threshold) -> CanonicalPoi[]`
 - `buildCandidatePool(preferences, canonicalPois) -> ApprovedCandidatePool`
 
-- [ ] **Step 1: Write failing tests** for IDs, categories, coordinates, city isolation, distance/name/category matching, ambiguous/unmatched states, retrieval timestamps, and stable candidate IDs.
-- [ ] **Step 2: Verify red.**
-- [ ] **Step 3: Implement normalization and conservative matching**; AMap remains operational primary and unmatched OpenTripMap records are never fabricated as support.
-- [ ] **Step 4: Verify green and run shared/provider tests.**
-- [ ] **Step 5: Commit** with `feat(poi): build grounded candidate pool`.
+- [x] **Step 1: Write failing tests** for IDs, categories, coordinates, city isolation, distance/name/category matching, ambiguous/unmatched states, retrieval timestamps, and stable candidate IDs.
+- [x] **Step 2: Verify red.**
+- [x] **Step 3: Implement normalization and conservative matching**; AMap remains operational primary and unmatched OpenTripMap records are never fabricated as support.
+- [x] **Step 4: Verify green and run shared/provider tests.**
+- [x] **Step 5: Commit** with `feat(poi): build grounded candidate pool`.
 
 ### Task 6: Cost References and Deterministic Budget Engine
 
