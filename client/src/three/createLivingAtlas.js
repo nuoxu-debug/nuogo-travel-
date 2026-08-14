@@ -152,6 +152,7 @@ export function createLivingAtlas(container, options = {}) {
   const applyProgress = (nextProgress) => {
     const sample = sampleJourneyPath(curve, nextProgress);
     progress = sample.progress;
+    canvas.dataset.progress = progress.toFixed(3);
     routeDrawCount = Math.max(2, Math.ceil(progress * routePoints.length));
     routeGeometry.setDrawRange(0, routeDrawCount);
     aircraft.position.copy(sample.point);
@@ -178,7 +179,9 @@ export function createLivingAtlas(container, options = {}) {
     if (!width || !height) return;
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    renderer.setPixelRatio?.(getRendererPixelRatio(window.devicePixelRatio, width < 720));
+    const pixelRatio = getRendererPixelRatio(window.devicePixelRatio, width < 720);
+    renderer.setPixelRatio?.(pixelRatio);
+    canvas.dataset.pixelRatio = String(pixelRatio);
     renderer.setSize(width, height, false);
     render();
   };

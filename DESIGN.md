@@ -76,3 +76,18 @@ The palette is full but role-bound. Purple, beige, and dark-blue monochrome are 
 - Text remains valid in English and Simplified Chinese, but English is the default presentation.
 - Mobile keeps the route marker within the viewport, avoids horizontal overflow, and retains the reduced-motion fallback.
 - Generated visual assets are presentation-only; operational places, prices, and routes continue to use provider and system data.
+
+## Verification Record
+
+Verified on 2026-08-14 against desktop Chromium at `1440x900` and mobile Chromium using the Pixel 7 profile.
+
+- WebGL pixel sampling confirmed a nonblank, varied scene and a changed frame after scroll progress.
+- The renderer reports a capped device pixel ratio, uses one canvas, and removes it on route navigation.
+- Reduced-motion and forced WebGL-failure runs retain the complete static journey without creating a canvas.
+- The landing and planner routes produced no browser console errors during the final Playwright run.
+- Screenshots: `.artifacts/desktop-chromium-living-atlas-midpoint.png` and `.artifacts/mobile-chromium-living-atlas-midpoint.png`.
+- Impeccable detector: zero reported findings for `client/src`.
+- Regression evidence: 332 repository tests passed; Playwright reported 13 passed and one intentional desktop-only skip.
+- Production output: main JavaScript `701.90 kB` (`226.83 kB` gzip), lazy Living Atlas chunk `529.46 kB` (`134.64 kB` gzip), and CSS `75.97 kB` (`19.33 kB` gzip).
+
+The Vite 500 kB chunk warning remains accepted for this visual checkpoint. Bundle optimization is intentionally deferred to the dedicated performance phase so this design pass does not alter application boundaries.

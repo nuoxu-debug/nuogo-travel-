@@ -1,5 +1,7 @@
 # Nuogo Objective-Aligned MVP Implementation Plan
 
+> **Visual checkpoint (2026-08-14):** The Living Journey Atlas work is verified: 332 tests passed, the production build succeeded, and Playwright passed 13 checks with one intentional desktop-only skip. Tasks 4-11 and 13-16 below remain the active objective implementation scope; the visual checkpoint does not mark those tasks complete.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver the current three FYP objectives as a secure, grounded, hard-budget travel planner for Beijing, Shanghai, and Xi'an, while rebuilding Nuogo's interface as a modern animated travel product with GSAP and a scroll-driven journey atlas.
