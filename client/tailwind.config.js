@@ -4,13 +4,18 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: "#1d1d1f",
-        mist: "#f5f5f7",
-        paper: "#fbfbfd",
-        jade: "#148a64",
-        vermilion: "#ff6b35",
-        gold: "#b7791f",
-        lake: "#007aff"
+        night: "#07130f",
+        ink: "#13221c",
+        mist: "#eef2ed",
+        paper: "#f7f8f4",
+        cloud: "#f7f8f4",
+        jade: "#1da77a",
+        vermilion: "#ff6b4a",
+        coral: "#ff6b4a",
+        gold: "#f4bf4f",
+        sun: "#f4bf4f",
+        lake: "#2e88ff",
+        sky: "#2e88ff"
       },
       fontFamily: {
         sans: ["-apple-system", "BlinkMacSystemFont", "SF Pro Text", "Manrope", "Noto Sans SC", "system-ui", "sans-serif"],

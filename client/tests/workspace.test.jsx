@@ -198,6 +198,7 @@ describe("comparison and editable workspace", () => {
 
   it("uses Chinese workspace labels and opens activity details with ticket tiers", async () => {
     localStorage.setItem("nuogo-language", "zh");
+    localStorage.setItem("nuogo-language-default", "en-v3");
     const trip = demoTrip();
     Object.assign(trip.variants[0].days[0].activities[0], {
       visitDetails: {

@@ -2,13 +2,13 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { translate } from "../i18n/translations.js";
 
 const LanguageContext = createContext(null);
-const LANGUAGE_DEFAULT_VERSION = "zh-v2";
+const LANGUAGE_DEFAULT_VERSION = "en-v3";
 
 export function LanguageProvider({ children }) {
   const [language, setLanguageState] = useState(() => {
     const migrated = localStorage.getItem("nuogo-language-default") === LANGUAGE_DEFAULT_VERSION;
-    if (!migrated) return "zh";
-    return localStorage.getItem("nuogo-language") === "en" ? "en" : "zh";
+    if (!migrated) return "en";
+    return localStorage.getItem("nuogo-language") === "zh" ? "zh" : "en";
   });
 
   useEffect(() => {

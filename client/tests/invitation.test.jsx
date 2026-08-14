@@ -409,8 +409,8 @@ describe("trip invitation acceptance", () => {
   });
 
   it("uses the shared destination labels without raw identifiers in Chinese", async () => {
-    localStorage.removeItem("nuogo-language");
-    localStorage.removeItem("nuogo-language-default");
+    localStorage.setItem("nuogo-language", "zh");
+    localStorage.setItem("nuogo-language-default", "en-v3");
     fetch.mockResolvedValueOnce(response({
       invitation: {
         ...invitation,
@@ -429,8 +429,8 @@ describe("trip invitation acceptance", () => {
   });
 
   it("keeps invitation decisions completely Chinese in Chinese mode", async () => {
-    localStorage.removeItem("nuogo-language");
-    localStorage.removeItem("nuogo-language-default");
+    localStorage.setItem("nuogo-language", "zh");
+    localStorage.setItem("nuogo-language-default", "en-v3");
     localStorage.setItem("nuogo-token", "member-token");
     fetch.mockImplementation(signedInFetch());
 

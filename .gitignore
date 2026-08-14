@@ -11,4 +11,6 @@ database/local/
 server/.cache/
 server/storage/attractions/
 /artifacts/
+/.artifacts/
+/client/.artifacts/
 .worktrees/

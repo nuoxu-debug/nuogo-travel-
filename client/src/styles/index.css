@@ -5,18 +5,19 @@
 @tailwind utilities;
 
 :root {
-  color: #1d1d1f;
-  background: #fbfbfd;
+  color: #13221c;
+  background: #f7f8f4;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Manrope, "Noto Sans SC", system-ui, sans-serif;
   font-synthesis: none;
-  --nuogo-ink: #1d1d1f;
-  --nuogo-paper: #fbfbfd;
-  --nuogo-mist: #f5f5f7;
-  --nuogo-jade: #148a64;
-  --nuogo-red: #ff6b35;
-  --nuogo-gold: #b7791f;
-  --nuogo-lake: #007aff;
-  --nuogo-border: rgba(29, 29, 31, 0.12);
+  --nuogo-night: #07130f;
+  --nuogo-ink: #13221c;
+  --nuogo-paper: #f7f8f4;
+  --nuogo-mist: #eef2ed;
+  --nuogo-jade: #1da77a;
+  --nuogo-red: #ff6b4a;
+  --nuogo-gold: #f4bf4f;
+  --nuogo-lake: #2e88ff;
+  --nuogo-border: rgba(19, 34, 28, 0.12);
   --nuogo-material: rgba(255, 255, 255, 0.74);
 }
 
@@ -32,9 +33,961 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
-  background:
-    linear-gradient(180deg, #fbfbfd 0%, #f5f5f7 48%, #eef4f0 100%);
+  background: var(--nuogo-paper);
   overflow-x: hidden;
+}
+
+.flight-atlas {
+  background: var(--nuogo-paper);
+}
+
+.flight-hero {
+  position: relative;
+  min-height: 720px;
+  height: 92svh;
+  max-height: 960px;
+  overflow: hidden;
+  color: white;
+  background: var(--nuogo-night);
+}
+
+.flight-hero::before {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  content: "";
+  background:
+    linear-gradient(90deg, rgba(5, 15, 13, 0.62) 0%, rgba(5, 15, 13, 0.34) 38%, rgba(5, 15, 13, 0.01) 72%),
+    linear-gradient(0deg, rgba(5, 15, 13, 0.42) 0%, transparent 38%);
+  pointer-events: none;
+}
+
+.flight-hero-media {
+  position: absolute;
+  inset: 0;
+}
+
+.flight-hero-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 54%;
+  filter: saturate(1.08) contrast(1.01) brightness(1.22);
+}
+
+.travel-globe,
+.travel-globe canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.travel-globe {
+  position: relative;
+  min-height: 520px;
+  overflow: hidden;
+}
+
+.travel-globe canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.travel-globe-fallback {
+  position: absolute;
+  inset: 0;
+  display: none;
+  place-items: center;
+}
+
+.travel-globe[data-webgl="unavailable"] .travel-globe-fallback,
+.travel-globe[data-motion="reduced"] .travel-globe-fallback {
+  display: grid;
+}
+
+.travel-globe-disc {
+  display: block;
+  width: min(66vw, 620px);
+  aspect-ratio: 1;
+  border: 1px solid rgba(130, 216, 187, 0.34);
+  border-radius: 50%;
+  background: #174d3a;
+  box-shadow: 36px 32px 0 rgba(255, 107, 74, 0.1), -24px -10px 0 rgba(46, 136, 255, 0.08);
+}
+
+.flight-hero-inner {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  width: min(100%, 1440px);
+  height: 100%;
+  margin: 0 auto;
+  padding: 112px 32px 34px;
+  grid-template-columns: minmax(0, 0.92fr) minmax(380px, 1.08fr);
+  grid-template-rows: 1fr auto;
+  column-gap: 9vw;
+}
+
+.flight-hero-copy {
+  align-self: center;
+  max-width: 720px;
+}
+
+.flight-edition {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.6;
+  text-transform: uppercase;
+}
+
+.flight-edition span + span::before {
+  margin-right: 12px;
+  content: "/";
+  color: var(--nuogo-red);
+}
+
+.flight-kicker {
+  margin: 38px 0 0;
+  color: #82d8bb;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.flight-hero h1 {
+  max-width: 680px;
+  margin: 18px 0 0;
+  font-family: "Aptos Display", "Segoe UI Variable Display", "Noto Sans SC", system-ui, sans-serif;
+  font-size: clamp(3.35rem, 5.2vw, 5.2rem);
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.flight-hero h1 span {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.flight-hero-lede {
+  max-width: 620px;
+  margin: 24px 0 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 18px;
+  line-height: 1.65;
+}
+
+.flight-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 32px;
+}
+
+.flight-primary-action,
+.flight-secondary-action,
+.journey-close-action {
+  display: inline-flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  border-radius: 12px;
+  padding: 0 22px;
+  font-weight: 800;
+  transition: transform 220ms ease, background-color 220ms ease;
+}
+
+.flight-primary-action {
+  color: var(--nuogo-night);
+  background: var(--nuogo-red);
+}
+
+.flight-secondary-action {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: white;
+  background: rgba(7, 19, 15, 0.56);
+}
+
+.flight-primary-action:hover,
+.flight-secondary-action:hover,
+.journey-close-action:hover {
+  transform: translateY(-3px);
+}
+
+.flight-primary-action svg,
+.flight-secondary-action svg,
+.journey-close-action svg {
+  width: 18px;
+  height: 18px;
+}
+
+.flight-manifest {
+  grid-column: 1 / -1;
+  align-self: end;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  padding-top: 18px;
+}
+
+.flight-manifest-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.flight-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flight-status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--nuogo-jade);
+}
+
+.route-constellation {
+  position: relative;
+  display: grid;
+  margin: 0;
+  padding: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  list-style: none;
+}
+
+.route-constellation::before {
+  position: absolute;
+  top: 16px;
+  right: 10%;
+  left: 4%;
+  height: 1px;
+  content: "";
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.route-constellation-stop {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.route-constellation-marker {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: 50%;
+  color: var(--nuogo-red);
+  background: var(--nuogo-night);
+}
+
+.route-constellation-marker svg {
+  width: 14px;
+  height: 14px;
+}
+
+.route-constellation-stop b,
+.route-constellation-stop small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-constellation-stop b {
+  margin-top: 2px;
+  font-size: 13px;
+}
+
+.route-constellation-stop small {
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 11px;
+}
+
+.flight-scroll-cue {
+  position: absolute;
+  z-index: 3;
+  right: 26px;
+  bottom: 30px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 12px;
+  font-weight: 700;
+  writing-mode: vertical-rl;
+}
+
+.flight-scroll-cue svg {
+  width: 16px;
+  height: 16px;
+}
+
+.journey-map-section,
+.journey-map-sticky {
+  height: 100svh;
+  min-height: 700px;
+  background: var(--nuogo-night);
+}
+
+.journey-map-sticky {
+  position: relative;
+  overflow: hidden;
+  color: white;
+}
+
+.journey-map-art,
+.journey-map-shade,
+.journey-map-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.journey-map-art {
+  object-fit: cover;
+  object-position: center;
+  filter: saturate(1.04) contrast(0.98) brightness(1.04);
+  transform-origin: center;
+  will-change: transform;
+}
+
+.journey-map-shade {
+  z-index: 1;
+  background:
+    linear-gradient(90deg, rgba(4, 12, 10, 0.42) 0%, rgba(4, 12, 10, 0.06) 42%, transparent 100%),
+    linear-gradient(0deg, rgba(4, 12, 10, 0.38) 0%, transparent 42%);
+}
+
+.journey-map-heading {
+  position: absolute;
+  z-index: 3;
+  top: max(9vh, 74px);
+  left: max(4vw, 28px);
+  width: min(430px, 38vw);
+}
+
+.journey-map-heading p {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  color: var(--nuogo-jade);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.journey-map-heading p svg {
+  width: 17px;
+  height: 17px;
+}
+
+.journey-map-heading h2 {
+  margin: 20px 0 0;
+  font-family: "Aptos Display", "Segoe UI Variable Display", "Noto Sans SC", system-ui, sans-serif;
+  font-size: clamp(3.2rem, 5.8vw, 6rem);
+  line-height: 0.98;
+  letter-spacing: 0;
+}
+
+.journey-map-heading > span {
+  display: block;
+  max-width: 380px;
+  margin-top: 22px;
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.journey-map-canvas {
+  z-index: 2;
+}
+
+.journey-map-canvas svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.journey-map-route-shadow,
+.journey-map-route {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.journey-map-route-shadow {
+  stroke: rgba(255, 107, 74, 0.34);
+  stroke-width: 16;
+  filter: blur(5px);
+}
+
+.journey-map-route {
+  stroke: var(--nuogo-red);
+  stroke-width: 5;
+}
+
+.journey-map-stop circle:first-child {
+  fill: rgba(5, 15, 13, 0.86);
+  stroke: white;
+  stroke-width: 2;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: fill 260ms ease, transform 260ms ease;
+}
+
+.journey-map-stop circle:nth-child(2) {
+  fill: var(--nuogo-gold);
+}
+
+.journey-map-stop text {
+  fill: white;
+  font-size: 13px;
+  font-weight: 800;
+  paint-order: stroke;
+  stroke: rgba(5, 15, 13, 0.88);
+  stroke-width: 5px;
+  text-anchor: middle;
+  opacity: 0.48;
+  transition: opacity 260ms ease;
+}
+
+.journey-map-stop.is-active circle:first-child {
+  fill: var(--nuogo-red);
+  transform: scale(1.22);
+}
+
+.journey-map-stop.is-active text {
+  opacity: 1;
+}
+
+.journey-map-marker-core {
+  fill: var(--nuogo-red);
+  stroke: white;
+  stroke-width: 2;
+  filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.36));
+}
+
+.journey-map-marker-pulse {
+  fill: none;
+  stroke: var(--nuogo-red);
+  stroke-width: 2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: journey-marker-pulse 1.8s ease-out infinite;
+}
+
+.journey-map-marker foreignObject {
+  color: var(--nuogo-night);
+  overflow: visible;
+}
+
+.journey-map-marker svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 2.4;
+}
+
+.journey-map-progress {
+  position: absolute;
+  z-index: 3;
+  right: max(4vw, 28px);
+  bottom: max(5vh, 30px);
+  left: max(4vw, 28px);
+  display: grid;
+  align-items: center;
+  gap: 16px;
+  grid-template-columns: auto 1fr auto;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.journey-map-progress i {
+  position: relative;
+  overflow: hidden;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.journey-map-progress i b {
+  position: absolute;
+  inset: -1px 0;
+  background: var(--nuogo-red);
+  transform: scaleX(0);
+  transform-origin: left;
+  will-change: transform;
+}
+
+.journey-map-progress strong {
+  color: var(--nuogo-jade);
+}
+
+@keyframes journey-marker-pulse {
+  0% { opacity: 0.88; transform: scale(0.72); }
+  75%, 100% { opacity: 0; transform: scale(1.36); }
+}
+
+.strategy-stage {
+  height: 100svh;
+  min-height: 680px;
+  overflow: hidden;
+  background: var(--nuogo-paper);
+}
+
+.strategy-track {
+  display: flex;
+  width: 300%;
+  height: 100%;
+  will-change: transform;
+}
+
+.strategy-panel {
+  position: relative;
+  display: grid;
+  width: 33.3333%;
+  overflow: hidden;
+  padding: 96px max(6vw, 32px);
+  place-items: center start;
+  color: white;
+  background-image:
+    linear-gradient(90deg, rgba(5, 15, 13, 0.82) 0%, rgba(5, 15, 13, 0.56) 50%, rgba(5, 15, 13, 0.06) 100%),
+    url("/images/china-journey-hero.png");
+  background-position: center, var(--strategy-position);
+  background-size: cover;
+}
+
+.strategy-jade { --strategy-accent: var(--nuogo-jade); }
+.strategy-sky { --strategy-accent: var(--nuogo-sky); }
+.strategy-coral { --strategy-accent: var(--nuogo-red); }
+
+.strategy-panel-inner {
+  position: relative;
+  z-index: 1;
+  width: min(720px, 72%);
+}
+
+.strategy-heading {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.strategy-heading p {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.strategy-heading em {
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 11px;
+  font-style: normal;
+  text-transform: none;
+}
+
+.strategy-code {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--nuogo-night);
+  background: var(--strategy-accent);
+}
+
+.strategy-panel h2 {
+  margin: 54px 0 0;
+  font-family: "Aptos Display", "Segoe UI Variable Display", "Noto Sans SC", system-ui, sans-serif;
+  font-size: clamp(3.6rem, 7vw, 6rem);
+  line-height: 0.96;
+  letter-spacing: 0;
+}
+
+.strategy-promise {
+  max-width: 660px;
+  margin: 28px 0 0;
+  font-size: 20px;
+  line-height: 1.55;
+}
+
+.strategy-panel ul {
+  display: grid;
+  gap: 13px;
+  margin: 36px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.strategy-panel li {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-weight: 700;
+}
+
+.strategy-panel li svg {
+  width: 18px;
+  height: 18px;
+}
+
+.strategy-budget-rule {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 48px;
+  border-top: 1px solid currentColor;
+  padding-top: 18px;
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.strategy-budget-rule svg {
+  width: 28px;
+  height: 28px;
+}
+
+.strategy-budget-rule b,
+.strategy-budget-rule span {
+  display: block;
+}
+
+.strategy-budget-rule span {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.strategy-route-mark {
+  position: absolute;
+  right: 7vw;
+  bottom: 8vh;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  opacity: 0.16;
+}
+
+.strategy-route-mark span {
+  font-size: 18rem;
+  font-weight: 800;
+  line-height: 0.8;
+}
+
+.strategy-route-mark svg {
+  width: 110px;
+  height: 110px;
+}
+
+.source-boundary-section {
+  display: grid;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 140px 32px;
+  gap: 80px;
+  grid-template-columns: minmax(0, 0.85fr) minmax(520px, 1.15fr);
+}
+
+.source-boundary-intro {
+  align-self: start;
+  position: sticky;
+  top: 110px;
+}
+
+.source-boundary-intro .flight-kicker {
+  color: var(--nuogo-jade);
+}
+
+.source-boundary-intro h2 {
+  max-width: 680px;
+  margin: 18px 0 0;
+  font-family: "Aptos Display", "Segoe UI Variable Display", "Noto Sans SC", system-ui, sans-serif;
+  font-size: clamp(2.8rem, 5vw, 5rem);
+  line-height: 1.03;
+  letter-spacing: 0;
+}
+
+.source-boundary-intro > p:last-child {
+  max-width: 600px;
+  margin: 28px 0 0;
+  color: rgba(19, 34, 28, 0.66);
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+.source-boundary-list {
+  border-top: 1px solid var(--nuogo-border);
+}
+
+.source-boundary-row {
+  display: grid;
+  min-height: 150px;
+  align-items: center;
+  border-bottom: 1px solid var(--nuogo-border);
+  padding: 24px 0;
+  gap: 14px 20px;
+  grid-template-columns: 42px 1fr auto;
+  background: var(--nuogo-paper);
+}
+
+.source-boundary-row > svg {
+  width: 24px;
+  height: 24px;
+  color: var(--nuogo-lake);
+}
+
+.source-boundary-row > span {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.source-boundary-row > strong {
+  font-size: 15px;
+}
+
+.source-boundary-row > p {
+  grid-column: 2 / -1;
+  margin: 0;
+  color: rgba(19, 34, 28, 0.6);
+  line-height: 1.6;
+}
+
+.journey-close {
+  display: flex;
+  min-height: 440px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 60px;
+  padding: 80px max(4vw, 28px);
+  color: var(--nuogo-night);
+  background: var(--nuogo-gold);
+}
+
+.journey-close p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.journey-close h2 {
+  max-width: 920px;
+  margin: 20px 0 0;
+  font-family: "Aptos Display", "Segoe UI Variable Display", "Noto Sans SC", system-ui, sans-serif;
+  font-size: clamp(3rem, 5vw, 5rem);
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.journey-close-action {
+  flex: 0 0 auto;
+  color: white;
+  background: var(--nuogo-night);
+}
+
+@media (max-width: 899px) {
+  .flight-hero {
+    height: auto;
+    min-height: 820px;
+  }
+
+  .flight-hero::before {
+    background:
+      linear-gradient(180deg, rgba(5, 15, 13, 0.12) 0%, rgba(5, 15, 13, 0.48) 42%, rgba(5, 15, 13, 0.74) 100%);
+  }
+
+  .flight-hero-media img {
+    object-position: 58% center;
+  }
+
+  .flight-hero-inner {
+    min-height: 820px;
+    padding: 96px 20px 28px;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+  }
+
+  .flight-hero-copy {
+    align-self: end;
+    padding-bottom: 30px;
+  }
+
+  .flight-hero h1 {
+    font-size: clamp(3rem, 12vw, 4.8rem);
+  }
+
+  .flight-scroll-cue {
+    display: none;
+  }
+
+  .journey-map-section,
+  .journey-map-sticky {
+    min-height: 760px;
+  }
+
+  .journey-map-art {
+    object-position: 63% center;
+  }
+
+  .journey-map-shade {
+    background:
+      linear-gradient(180deg, rgba(4, 12, 10, 0.44) 0%, rgba(4, 12, 10, 0.02) 42%, rgba(4, 12, 10, 0.36) 100%);
+  }
+
+  .journey-map-heading {
+    top: 50px;
+    width: calc(100% - 40px);
+  }
+
+  .journey-map-heading h2 {
+    font-size: clamp(3rem, 12vw, 4.6rem);
+  }
+
+  .journey-map-heading > span {
+    max-width: 320px;
+    font-size: 14px;
+  }
+
+  .journey-map-canvas svg {
+    transform: translate(-8%, 13%) scale(0.44);
+    transform-origin: center;
+  }
+
+  .journey-map-progress {
+    right: 20px;
+    bottom: 24px;
+    left: 20px;
+  }
+
+  .route-constellation {
+    gap: 18px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .route-constellation::before {
+    display: none;
+  }
+
+  .strategy-stage {
+    height: auto;
+    min-height: 0;
+  }
+
+  .strategy-track {
+    display: block;
+    width: auto;
+    height: auto;
+    transform: none !important;
+  }
+
+  .strategy-panel {
+    width: auto;
+    min-height: 680px;
+    padding: 72px 24px;
+    background-position: center, var(--strategy-position);
+  }
+
+  .strategy-panel-inner {
+    width: 100%;
+  }
+
+  .strategy-route-mark {
+    right: 20px;
+    bottom: 34px;
+  }
+
+  .strategy-route-mark span {
+    font-size: 8rem;
+  }
+
+  .strategy-route-mark svg {
+    width: 58px;
+    height: 58px;
+  }
+
+  .source-boundary-section {
+    padding: 96px 20px;
+    gap: 48px;
+    grid-template-columns: 1fr;
+  }
+
+  .source-boundary-intro {
+    position: static;
+  }
+
+  .journey-close {
+    min-height: 500px;
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 70px 24px 36px;
+  }
+}
+
+@media (max-width: 520px) {
+  .flight-edition img {
+    width: 56px;
+    height: 56px;
+  }
+
+  .flight-kicker {
+    margin-top: 26px;
+  }
+
+  .flight-hero-lede {
+    font-size: 16px;
+  }
+
+  .flight-actions {
+    display: grid;
+  }
+
+  .flight-primary-action,
+  .flight-secondary-action {
+    width: 100%;
+  }
+
+  .flight-manifest-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .route-constellation-stop b {
+    white-space: normal;
+  }
+
+  .strategy-panel h2 {
+    font-size: 3.4rem;
+    overflow-wrap: anywhere;
+  }
+
+  .source-boundary-row {
+    grid-template-columns: 36px 1fr;
+  }
+
+  .source-boundary-row > strong {
+    grid-column: 2;
+  }
+
+  .source-boundary-row > p {
+    grid-column: 2;
+  }
 }
 
 button,

@@ -1,60 +1,77 @@
 # Nuogo Visual System
 
-## Direction: Scenic Wayfinding
+## Direction: Living Journey Atlas
 
-Nuogo combines contemporary Chinese travel editorial design with the functional language of scenic-area wayfinding. Photography establishes place; route lines, numbered stops, ticket metadata, and directional signs explain how a trip moves.
+Nuogo is a living journey atlas: cinematic China travel imagery introduces the experience, then a pinned topographic map draws the user's route as they scroll. Bright, precise travel instruments follow for planning and comparison. The route is described with generic stops until real itinerary data supplies place names.
 
-## Visual World
+## Direction Contract
 
-- **Ground:** warm white and pale mist, with deep ink used for navigation and focused work surfaces.
-- **Signals:** jade for confirmed paths, vermilion for decisions and active stops, gold for budget and highlights, lake blue for maps and supporting data.
-- **Type:** Bricolage Grotesque for expressive English display text, Manrope for interface text and numbers, and Noto Sans SC for Chinese.
-- **Shape:** mostly square or lightly rounded surfaces with precise 1px rules. Circular forms are reserved for map stops, statuses, and avatars.
-- **Imagery:** large, inspectable destination photographs. Do not blur or darken primary attraction imagery beyond the minimum overlay needed for readable text.
-- **Composition:** asymmetric editorial bands on public pages; compact, aligned grids in planning and workspace views.
+**THESIS:** Nuogo makes the complete journey visible, from origin to return. It refuses the standard travel homepage made from a search box over a stock photograph.
 
-## Signature Elements
+**OWN-WORLD:** Volcanic black and cloud white form the ground; signal coral plots the active route, jade confirms sourced data, and electric blue identifies system calculations. Surfaces use map contours, route ticks, and compact flight-status typography rather than decorative glass cards.
 
-1. A route rail that links numbered stops and animates in travel order.
-2. Ticket-like metadata rows for dates, budget, travellers, and pace.
-3. Bilingual destination captions that behave like physical wayfinding signs.
-4. A four-colour itinerary strategy system so the three generated plans are visibly distinct.
-5. A thin page progress signal at the top of the viewport.
+**STORY:** See the route, define constraints, compare three budget-safe approaches, then shape one validated trip.
+
+**FIRST VIEWPORT:** A full-bleed China journey photograph owns the background. The left carries one clear promise and primary action; a compact generic route manifest anchors the lower edge. The next section remains visible below the fold.
+
+**FORM:** A photographic travel editorial joined to a route observatory. Scrolling pins the topographic map, draws a coral journey line, moves the travel marker, activates stops, and then transitions into three itinerary approaches. Concept seed `4b42ee56`.
+
+## Palette
+
+- `night`: `#07130f`, the 3D observation ground and focused status surfaces.
+- `cloud`: `#f7f8f4`, the operational workspace ground.
+- `ink`: `#13221c`, primary text.
+- `jade`: `#1da77a`, sourced and accepted states.
+- `coral`: `#ff6b4a`, active route and primary action.
+- `sky`: `#2e88ff`, system estimates and map data.
+- `sun`: `#f4bf4f`, budget and limited highlights.
+- `line-light`: `rgba(255,255,255,.14)` and `line-dark`: `rgba(19,34,28,.12)`.
+
+The palette is full but role-bound. Purple, beige, and dark-blue monochrome are not used as the dominant visual world.
+
+## Typography
+
+- Display: platform-native `Aptos Display` or `Segoe UI Variable Display`, with `Noto Sans SC` and system fallbacks; large, direct, maximum 6rem.
+- Interface: `Manrope`, `Noto Sans SC`, and system sans.
+- Data: tabular numerals in the interface family. Monospace is reserved for coordinates and machine identifiers.
+- Letter spacing remains `0`; hierarchy comes from size, weight, and position.
+
+## Composition
+
+- Public surfaces use cinematic horizontal fields, exposed route lines, and one decisive focal action.
+- Product surfaces are bright, compact operating views. Maps, timelines, costs, and provenance remain scan-first.
+- Cards are used only for repeated plans, activities, and framed tools. Page sections are unframed bands.
+- Cards use 12px radius and either a border or shadow, never both.
+- Primary controls are at least 44px tall and use Lucide icons where available.
+
+## Journey Map
+
+- The topographic China artwork is full-bleed and unframed. It is decorative rather than an operational navigation map.
+- Route labels remain `Departure` and numbered stops until the planner supplies the user's real itinerary data.
+- Scroll draws the route, moves and rotates the plane marker, advances the progress rail, activates completed stops, and adds restrained terrain parallax.
+- Desktop and mobile use separately tuned route framing so the marker stays visible throughout the sequence.
+- Reduced-motion mode shows the completed route as a static, semantic journey preview.
 
 ## Motion
 
-- Use anime.js for route drawing, staggered stop arrival, section reveals, comparison-card entrance, and pipeline progress.
-- Keep one primary motion sequence per surface.
-- Hover motion is limited to 2-4px travel and icon translation.
-- Scroll reveals run once and preserve reading order.
-- `prefers-reduced-motion` renders every element directly in its final state.
+- GSAP owns page entrance, route drawing, pinned scroll transitions, and state changes.
+- One authored sequence dominates each surface. Repeated elements may stagger only when order matters.
+- Scroll motion uses scrubbed spatial continuity, not a chain of identical fade-ups.
+- Hover movement stays within 4px. Loading and repair states communicate progress without pretending to be live server telemetry.
+- Under `prefers-reduced-motion`, all content and the completed route are immediately visible, and scroll pinning is disabled.
 
-## Public Surfaces
+## Surface Rules
 
-- The landing hero remains a full-bleed destination photograph with the product name as the dominant first-viewport signal.
-- The first viewport includes a live itinerary specimen so the product is understood immediately.
-- Following bands show the three-plan comparison, a connected plan-to-map workflow, and grounded Anhui destination imagery.
-- Authentication uses a photographic journey panel and a compact form surface.
+- Landing: photographic cover, route manifest, animated journey map, three spending strategies, information provenance, then a direct planning close.
+- Planner: progressive travel brief with a persistent whole-trip budget summary and visible privacy consent.
+- Comparison: three equal strategy tracks with identical information architecture and distinct allocation signals.
+- Workspace: a compact route console showing start point, trip leg, activity, next leg, and end point without excessive scrolling.
+- Archive/admin/auth: quiet operational layouts using the same status and provenance language.
 
-## Product Surfaces
+## Accessibility and Performance
 
-- Planner: a destination brief with a strong progress spine and a sticky trip summary.
-- Comparison: three equal strategy columns with unique signal colours, budget bars, and day previews.
-- Workspace: dense operational layout; timeline, map, budget, and guide recommendations remain visible and scannable.
-- Archive: a practical trip index with clear status, destination, date, and action columns.
-
-## Interaction Rules
-
-- Use icon buttons for familiar utilities and icon-plus-text for clear commands.
-- Preserve visible labels for destinations, budgets, dates, and destructive actions.
-- Never hide essential controls behind hover.
-- Keep all primary targets at least 44px tall.
-- Language switching must maintain legible contrast in every header and menu state.
-
-## Responsive Rules
-
-- Public editorial grids collapse into a single reading path.
-- Comparison columns become horizontally snap-scrollable before stacking into a very long page.
-- Workspace side panels move below the map/timeline at tablet widths.
-- Hero content leaves a visible hint of the next band on common mobile and desktop viewports.
-
+- WCAG 2.1 AA contrast for text and controls.
+- Complete keyboard navigation, visible focus, semantic headings, and non-color status labels.
+- Text remains valid in English and Simplified Chinese, but English is the default presentation.
+- Mobile keeps the route marker within the viewport, avoids horizontal overflow, and retains the reduced-motion fallback.
+- Generated visual assets are presentation-only; operational places, prices, and routes continue to use provider and system data.

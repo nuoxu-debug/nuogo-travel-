@@ -33,24 +33,23 @@ function AuthRaceProbe() {
 }
 
 describe("Nuogo language and authentication UI", () => {
-  it("uses the supplied Nuogo logo artwork in the header and landing hero", () => {
+  it("uses the supplied Nuogo logo artwork without repeating it in the hero", () => {
     render(<App initialPath="/" />);
 
     const logos = screen.getAllByRole("img", { name: "Nuogo logo" });
-    expect(logos).toHaveLength(3);
+    expect(logos).toHaveLength(2);
     expect(logos.every((logo) => logo.getAttribute("src") === "/nuogo-logo.png")).toBe(true);
     expect(screen.getByTestId("scroll-progress")).toBeInTheDocument();
-    expect(screen.getByLabelText("Sample Anhui itinerary route")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Animated journey across China" })).toBeInTheDocument();
   });
 
-  it("defaults to Chinese and persists English when selected", async () => {
+  it("defaults to English and persists Chinese when selected", async () => {
     localStorage.removeItem("nuogo-language");
     localStorage.removeItem("nuogo-language-default");
     render(<App initialPath="/" />);
-    expect(screen.getByRole("button", { name: "中文" })).toHaveAttribute("aria-pressed", "true");
-    await userEvent.click(screen.getByRole("button", { name: "EN" }));
-    expect(localStorage.getItem("nuogo-language")).toBe("en");
-    expect(screen.getByText("Plan China, your way.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "EN" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(screen.getByRole("button", { name: "中文" }));
+    expect(localStorage.getItem("nuogo-language")).toBe("zh");
   });
 
   it("validates login before calling the API", async () => {
@@ -135,8 +134,8 @@ describe("Nuogo language and authentication UI", () => {
   });
 
   it("shows a localized Chinese invalid-credentials error", async () => {
-    localStorage.removeItem("nuogo-language");
-    localStorage.removeItem("nuogo-language-default");
+    localStorage.setItem("nuogo-language", "zh");
+    localStorage.setItem("nuogo-language-default", "en-v3");
     fetch.mockResolvedValueOnce(response({
       error: { code: "INVALID_CREDENTIALS", message: "Email or password is incorrect." }
     }, { ok: false, status: 401 }));
@@ -152,8 +151,8 @@ describe("Nuogo language and authentication UI", () => {
   });
 
   it("shows a localized Chinese existing-account error", async () => {
-    localStorage.removeItem("nuogo-language");
-    localStorage.removeItem("nuogo-language-default");
+    localStorage.setItem("nuogo-language", "zh");
+    localStorage.setItem("nuogo-language-default", "en-v3");
     fetch.mockResolvedValueOnce(response({
       error: { code: "EMAIL_EXISTS", message: "An account already exists for this email." }
     }, { ok: false, status: 409 }));
