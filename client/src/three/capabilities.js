@@ -1,6 +1,9 @@
-export function canUseWebGL(canvasFactory = () => document.createElement("canvas")) {
+export function canUseWebGL(canvasFactory) {
+  if (!canvasFactory && typeof navigator !== "undefined" && navigator.userAgent?.includes("jsdom")) {
+    return false;
+  }
   try {
-    const canvas = canvasFactory();
+    const canvas = (canvasFactory ?? (() => document.createElement("canvas")))();
     return Boolean(canvas?.getContext?.("webgl2") || canvas?.getContext?.("webgl"));
   } catch {
     return false;

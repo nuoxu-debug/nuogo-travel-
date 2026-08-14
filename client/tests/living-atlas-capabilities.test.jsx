@@ -31,6 +31,12 @@ describe("Living Atlas capability boundaries", () => {
     expect(canUseWebGL(() => { throw new Error("context denied"); })).toBe(false);
   });
 
+  it("does not probe the default canvas context under jsdom", () => {
+    const contextSpy = vi.spyOn(HTMLCanvasElement.prototype, "getContext");
+    expect(canUseWebGL()).toBe(false);
+    expect(contextSpy).not.toHaveBeenCalled();
+  });
+
   it("caps pixel density for desktop and compact viewports", () => {
     expect(getRendererPixelRatio(3, false)).toBe(1.5);
     expect(getRendererPixelRatio(2, true)).toBe(1);
