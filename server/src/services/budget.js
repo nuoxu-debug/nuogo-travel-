@@ -1,3 +1,5 @@
+// Legacy DTO calculator retained for existing trip mutation routes until the
+// objective-aligned orchestration replaces their production payload shape.
 const categoryGroups = {
   natural_scenery: "scenicTickets",
   historical_relics: "scenicTickets",

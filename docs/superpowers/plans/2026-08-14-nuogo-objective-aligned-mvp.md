@@ -146,11 +146,11 @@
 - `calculateItineraryBudget({ preferences, itinerary, references, profile }) -> BudgetSummary`
 - `validateHardBudget(summary, totalBudgetCny) -> ValidationResult`
 
-- [ ] **Step 1: Write failing tests** for eight trip-level categories, per-person values, fixed outbound/return costs, nights, meals, fuel/tolls, missing-reference errors, all three allocations, and impossible budgets.
-- [ ] **Step 2: Verify red.**
-- [ ] **Step 3: Implement integer-fen calculations** using only user-provided, provider-sourced, or active reference values with explicit provenance.
-- [ ] **Step 4: Verify green and add boundary/property-style cases for rounding.**
-- [ ] **Step 5: Commit** with `feat(budget): enforce deterministic hard trip budget`.
+- [x] **Step 1: Write failing tests** for eight trip-level categories, per-person values, fixed outbound/return costs, nights, meals, fuel/tolls, missing-reference errors, all three allocations, and impossible budgets.
+- [x] **Step 2: Verify red.**
+- [x] **Step 3: Implement integer-fen calculations** using only user-provided, provider-sourced, or active reference values with explicit provenance.
+- [x] **Step 4: Verify green and add boundary/property-style cases for rounding.**
+- [x] **Step 5: Commit** with `feat(budget): enforce deterministic hard trip budget`.
 
 ### Task 7: Fixed LLM Harness and Structured Draft
 
