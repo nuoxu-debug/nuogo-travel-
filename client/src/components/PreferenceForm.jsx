@@ -1,5 +1,5 @@
 import { CalendarDays, ChevronRight, Coins, Users } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   accommodationTypes,
   chinaCities,
@@ -69,21 +69,26 @@ function formatCurrency(value) {
   return new Intl.NumberFormat("en-US").format(Math.round(value));
 }
 
-export default function PreferenceForm({ onSubmit, busy = false }) {
+export const initialPreferenceValues = {
+  destination: "huangshan",
+  departureCity: "shanghai",
+  days: 4,
+  totalBudget: 4800,
+  interests: ["local_street_food", "historical_relics", "city_landmarks"],
+  groupType: "student_group",
+  accommodation: "budget_hotel",
+  startDate: "2026-08-10"
+};
+
+export default function PreferenceForm({
+  onSubmit,
+  values,
+  onValuesChange,
+  busy = false
+}) {
   const { language } = useLanguage();
   const copy = labels[language];
   const animate = useAnime();
-  const [values, setValues] = useState({
-    destination: "huangshan",
-    departureCity: "shanghai",
-    days: 4,
-    totalBudget: 4800,
-    interests: ["local_street_food", "historical_relics", "city_landmarks"],
-    groupType: "student_group",
-    accommodation: "budget_hotel",
-    startDate: "2026-08-10"
-  });
-
   const dailyBudget = useMemo(
     () => (Number(values.totalBudget) || 0) / Math.max(1, Number(values.days) || 1),
     [values.days, values.totalBudget]
@@ -91,11 +96,11 @@ export default function PreferenceForm({ onSubmit, busy = false }) {
   const conflict = dailyBudget < 450 && ["boutique_homestay", "family_resort"].includes(values.accommodation);
 
   function update(key, value) {
-    setValues((current) => ({ ...current, [key]: value }));
+    onValuesChange((current) => ({ ...current, [key]: value }));
   }
 
   function toggleInterest(category, element) {
-    setValues((current) => {
+    onValuesChange((current) => {
       const selected = current.interests.includes(category);
       if (selected && current.interests.length === 1) return current;
       return {

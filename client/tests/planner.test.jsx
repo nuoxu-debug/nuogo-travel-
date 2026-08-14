@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import App from "../src/App.jsx";
@@ -14,6 +14,19 @@ describe("structured China preference planner", () => {
     expect(screen.queryByRole("textbox", { name: /chat/i })).not.toBeInTheDocument();
   });
 
+  it("summarises the whole trip brief from the live form values", async () => {
+    render(<App initialPath="/planner" />);
+    const horizon = screen.getByRole("region", { name: "Trip brief progress" });
+
+    ["Origin", "Destination", "Dates", "Travel party", "Interests", "Budget"]
+      .forEach((label) => expect(within(horizon).getByText(label)).toBeInTheDocument());
+    expect(within(horizon).getByText("Shanghai → Huangshan, Anhui")).toBeInTheDocument();
+    expect(within(horizon).getByText("¥4,800 total")).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Departure city" }), "beijing");
+    expect(within(horizon).getByText("Beijing → Huangshan, Anhui")).toBeInTheDocument();
+  });
+
   it("offers Huangshan in both supported interface languages", () => {
     const { unmount } = render(<App initialPath="/planner" />);
     expect(screen.getAllByRole("option", { name: "Huangshan, Anhui" })).toHaveLength(2);
@@ -22,6 +35,7 @@ describe("structured China preference planner", () => {
     localStorage.setItem("nuogo-language", "zh");
     render(<App initialPath="/planner" />);
     expect(screen.getAllByRole("option", { name: "安徽黄山" })).toHaveLength(2);
+    expect(screen.getByRole("region", { name: "行程概览" })).toBeInTheDocument();
   });
 
   it("cycles the six-stage pipeline while generating", async () => {

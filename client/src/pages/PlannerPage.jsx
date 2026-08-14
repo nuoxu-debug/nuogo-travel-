@@ -3,7 +3,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiRequest } from "../api/client.js";
 import PipelineOverlay, { pipelineDuration } from "../components/PipelineOverlay.jsx";
-import PreferenceForm from "../components/PreferenceForm.jsx";
+import PlannerJourneyHorizon from "../components/PlannerJourneyHorizon.jsx";
+import PreferenceForm, { initialPreferenceValues } from "../components/PreferenceForm.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import AppShell from "../layout/AppShell.jsx";
 
@@ -16,6 +17,7 @@ export default function PlannerPage() {
   const navigate = useNavigate();
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+  const [preferences, setPreferences] = useState(initialPreferenceValues);
 
   async function generate(preferences) {
     setError("");
@@ -76,7 +78,13 @@ export default function PlannerPage() {
               </div>
               <span className="text-xs font-bold text-ink/40">{language === "zh" ? "约 2 分钟" : "About 2 minutes"}</span>
             </div>
-            <PreferenceForm onSubmit={generate} busy={generating} />
+            <PlannerJourneyHorizon values={preferences} language={language} />
+            <PreferenceForm
+              onSubmit={generate}
+              values={preferences}
+              onValuesChange={setPreferences}
+              busy={generating}
+            />
             {error && (
               <div role="alert" className="mt-5 border border-red-200 bg-red-50 p-4 text-sm text-red-800">
                 <strong>{language === "zh" ? "暂时无法生成行程。" : "The plans could not be generated."}</strong>

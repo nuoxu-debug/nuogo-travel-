@@ -545,6 +545,100 @@ body {
   text-align: right;
 }
 
+.planner-horizon {
+  margin: 0 0 34px;
+  padding: 20px 0 22px;
+  border-top: 1px solid rgba(19, 34, 28, 0.12);
+  border-bottom: 1px solid rgba(19, 34, 28, 0.12);
+}
+
+.planner-horizon-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.planner-horizon-head span {
+  color: var(--nuogo-jade);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.planner-horizon-head strong {
+  overflow-wrap: anywhere;
+  font-family: "Aptos Display", "Segoe UI Variable Display", "Noto Sans SC", system-ui, sans-serif;
+  font-size: 18px;
+  text-align: right;
+}
+
+.planner-horizon-route {
+  position: relative;
+  height: 2px;
+  margin: 16px 0 19px;
+  background: rgba(19, 34, 28, 0.1);
+}
+
+.planner-horizon-route::before,
+.planner-horizon-route::after {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: var(--nuogo-jade);
+  box-shadow: 0 0 0 1px var(--nuogo-jade);
+  content: "";
+  transform: translateY(-50%);
+}
+
+.planner-horizon-route::before { left: 0; }
+.planner-horizon-route::after { right: 0; background: var(--nuogo-red); box-shadow: 0 0 0 1px var(--nuogo-red); }
+
+.planner-horizon-route b {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background: var(--nuogo-red);
+}
+
+.planner-horizon-grid {
+  display: grid;
+  gap: 14px 18px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.planner-horizon-item {
+  display: grid;
+  min-width: 0;
+  gap: 2px 8px;
+  grid-template-columns: 17px minmax(0, 1fr);
+}
+
+.planner-horizon-item svg {
+  width: 15px;
+  height: 15px;
+  color: var(--nuogo-jade);
+  grid-row: 1 / span 2;
+}
+
+.planner-horizon-item span {
+  color: rgba(19, 34, 28, 0.48);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.planner-horizon-item strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .strategy-stage {
   height: 100svh;
   min-height: 680px;
@@ -887,6 +981,20 @@ body {
     right: 20px;
     bottom: 24px;
     left: 20px;
+  }
+
+  .planner-horizon-head {
+    display: grid;
+    gap: 6px;
+  }
+
+  .planner-horizon-head strong {
+    font-size: 16px;
+    text-align: left;
+  }
+
+  .planner-horizon-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .route-constellation {
