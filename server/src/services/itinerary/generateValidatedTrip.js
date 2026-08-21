@@ -4,12 +4,14 @@ import { matchPois } from "../poi/matchPois.js";
 import { normalizeAmapPoi } from "../poi/normalizeAmapPoi.js";
 import { normalizeOpenTripMapPoi } from "../poi/normalizeOpenTripMapPoi.js";
 import { calculateItineraryBudget } from "../budget/budgetEngine.js";
-import { spendingProfileIds } from "../budget/spendingProfiles.js";
+import { getSpendingProfile, spendingProfileIds } from "../budget/spendingProfiles.js";
 import { planDraft } from "../llm/itineraryHarness.js";
 import { targetedLlmRepair } from "../repair/targetedLlmRepair.js";
 import { repairUntilValid } from "../repair/repairLoop.js";
 import { validateItinerary } from "../validation/validationEngine.js";
+import { validateSpendingProfiles } from "../validation/validators/spendingProfileValidator.js";
 import { buildTripLegs } from "./buildTripLegs.js";
+import { buildVariantMetrics } from "./buildVariantMetrics.js";
 import { propagateSchedule } from "./propagateSchedule.js";
 
 function issueFor(error) {
@@ -91,6 +93,32 @@ function activityEstimateFen(activityType, references, travellerCount) {
   return 0;
 }
 
+function directDistanceMeters(from, to) {
+  const radians = (value) => value * Math.PI / 180;
+  const latitudeDelta = radians(to.latitude - from.latitude);
+  const longitudeDelta = radians(to.longitude - from.longitude);
+  const leftLatitude = radians(from.latitude);
+  const rightLatitude = radians(to.latitude);
+  const value = Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(leftLatitude) * Math.cos(rightLatitude) * Math.sin(longitudeDelta / 2) ** 2;
+  return 6371000 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+}
+
+function routeModeFor(profile, preferences) {
+  const strategy = getSpendingProfile(profile);
+  if (["DRIVE", "WALK"].includes(preferences.localTransportPreference)) {
+    return () => preferences.localTransportPreference;
+  }
+  return ({ day, legIndex, from, to }) => {
+    const preferred = strategy.routeModes[
+      (day.dayNumber + legIndex - 1) % strategy.routeModes.length
+    ];
+    return preferred === "WALK" && directDistanceMeters(from, to) > 1500
+      ? "PUBLIC_TRANSIT"
+      : preferred;
+  };
+}
+
 function attachPoiFacts(itinerary, candidatePool, { anchors, references, preferences }) {
   const byId = new Map(candidatePool.candidates.map((candidate) => [candidate.candidateId, candidate]));
   const attachAnchor = (point) => ({
@@ -132,7 +160,7 @@ async function evaluateDraft(draft, { preferences, candidatePool, dependencies, 
   const routed = await buildTripLegs(draft, {
     locations,
     routeProvider: dependencies.routeProvider ?? dependencies.travelProvider,
-    mode: preferences.localTransportPreference,
+    mode: routeModeFor(draft.variant, preferences),
     routeCostResolver: routeCost
   });
   const scheduled = {
@@ -175,9 +203,17 @@ async function generateVariant(profile, context) {
         provider: context.dependencies.llmProvider
       })
     });
-    return result.state === "FINAL_VALIDATED"
-      ? { ...result, itinerary: attachPoiFacts(result.itinerary, context.candidatePool, context) }
-      : result;
+    if (result.state !== "FINAL_VALIDATED") return result;
+    const itinerary = attachPoiFacts(result.itinerary, context.candidatePool, context);
+    return {
+      ...result,
+      itinerary,
+      variantMetrics: buildVariantMetrics(
+        itinerary,
+        result.summary,
+        getSpendingProfile(profile)
+      )
+    };
   } catch (error) {
     return {
       state: "FAILED",
@@ -210,12 +246,17 @@ export async function generateValidatedTrip(preferences, dependencies) {
     ]);
     const context = { preferences, dependencies, candidatePool, references, anchors, driving };
     const variants = await Promise.all(spendingProfileIds.map((profile) => generateVariant(profile, context)));
-    const state = variants.every(({ state: variantState }) => variantState === "FINAL_VALIDATED")
+    const differentiationIssues = validateSpendingProfiles(variants);
+    const state = variants.every(({ state: variantState }) => variantState === "FINAL_VALIDATED") &&
+      differentiationIssues.length === 0
       ? "FINAL_VALIDATED"
       : "FAILED";
     const validation = {
       valid: state === "FINAL_VALIDATED",
-      issues: variants.flatMap(({ validation: result }) => result.issues)
+      issues: [
+        ...variants.flatMap(({ validation: result }) => result.issues),
+        ...differentiationIssues
+      ]
     };
     const run = {
       id: runId,

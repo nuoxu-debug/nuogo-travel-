@@ -57,7 +57,7 @@ describe("comparison and editable workspace", () => {
     expect(await screen.findAllByRole("heading", { level: 2, name: /4 day itinerary/i }))
       .toHaveLength(3);
     const overview = screen.getByRole("region", { name: "Plan comparison overview" });
-    expect(within(overview).getByText("¥4,800 hard budget")).toBeInTheDocument();
+    expect(within(overview).getByText("CNY 4,800 hard budget")).toBeInTheDocument();
     ["Accommodation", "Transport", "Food", "Attractions", "Entertainment", "Other"]
       .forEach((category) => expect(within(overview).getByText(category)).toBeInTheDocument());
 
@@ -263,7 +263,7 @@ describe("comparison and editable workspace", () => {
 
   it("uses Chinese workspace labels and opens activity details with ticket tiers", async () => {
     localStorage.setItem("nuogo-language", "zh");
-    localStorage.setItem("nuogo-language-default", "en-v3");
+    localStorage.setItem("nuogo-language-default", "zh-v4");
     const trip = demoTrip();
     Object.assign(trip.variants[0].days[0].activities[0], {
       visitDetails: {

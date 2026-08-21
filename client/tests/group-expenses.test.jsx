@@ -42,7 +42,7 @@ function renderExpenseWorkspace({
 } = {}) {
   const currentMember = members.find((member) => member.role === role);
   localStorage.setItem("nuogo-language", language);
-  localStorage.setItem("nuogo-language-default", "en-v3");
+  localStorage.setItem("nuogo-language-default", "zh-v4");
   localStorage.setItem("nuogo-token", `${role}-token`);
 
   fetch.mockImplementation(async (url, options = {}) => {

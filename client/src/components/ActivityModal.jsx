@@ -31,7 +31,7 @@ export default function ActivityModal({ activity, open, onClose, onSave }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[90] grid place-items-center bg-ink/70 p-4" role="dialog" aria-modal="true" aria-label={isNew ? "Add activity" : "Edit activity"}>
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-ink/70 p-4" role="dialog" aria-modal="true" aria-label={isNew ? (language === "zh" ? "添加行程点" : "Add activity") : (language === "zh" ? "编辑行程点" : "Edit activity")}>
       <form
         ref={panel}
         onSubmit={(event) => { event.preventDefault(); onSave({ ...values, estimatedCost: Number(values.estimatedCost) }); }}
@@ -39,10 +39,10 @@ export default function ActivityModal({ activity, open, onClose, onSave }) {
       >
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs font-bold uppercase text-jade">Nuogo timeline</p>
+            <p className="text-xs font-bold uppercase text-jade">{language === "zh" ? "Nuogo 行程时间线" : "Nuogo timeline"}</p>
             <h2 className="mt-2 font-display text-2xl font-bold">{isNew ? (language === "zh" ? "添加行程点" : "Add activity") : (language === "zh" ? "编辑行程点" : "Edit activity")}</h2>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close activity editor" className="grid h-10 w-10 place-items-center"><X /></button>
+          <button type="button" onClick={onClose} aria-label={language === "zh" ? "关闭活动编辑器" : "Close activity editor"} className="grid h-10 w-10 place-items-center"><X /></button>
         </div>
         {values.imageUrl && (
           <div className="mt-5">
@@ -69,7 +69,7 @@ export default function ActivityModal({ activity, open, onClose, onSave }) {
           </div>
           <label>
             <span className="text-sm font-bold">{language === "zh" ? "预计花费" : "Estimated cost"}</span>
-            <input aria-label="Estimated cost" type="number" min="0" value={values.estimatedCost} onChange={(event) => update("estimatedCost", event.target.value)} className="mt-2 min-h-11 w-full border border-ink/15 px-3" />
+            <input aria-label={language === "zh" ? "预计花费" : "Estimated cost"} type="number" min="0" value={values.estimatedCost} onChange={(event) => update("estimatedCost", event.target.value)} className="mt-2 min-h-11 w-full border border-ink/15 px-3" />
           </label>
           <label>
             <span className="text-sm font-bold">{language === "zh" ? "活动说明" : "Description"}</span>
@@ -89,7 +89,7 @@ export default function ActivityModal({ activity, open, onClose, onSave }) {
                 href={values.sourceUrl}
                 target="_blank"
                 rel="noreferrer"
-                aria-label={`View ${values.sourceProvider} source`}
+                aria-label={language === "zh" ? `查看 ${values.sourceProvider} 资料来源` : `View ${values.sourceProvider} source`}
                 className="mt-1 inline-flex items-center gap-2 text-sm font-bold text-jade underline"
               >
                 {values.sourceProvider}

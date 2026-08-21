@@ -6,6 +6,14 @@ export const spendingProfileIds = Object.freeze([
 
 const profiles = Object.freeze({
   BUDGET_SAVING: {
+    accommodationTier: "BUDGET",
+    foodTier: "ECONOMY",
+    accommodationFactorPercent: 70,
+    foodFactorPercent: 70,
+    routeModes: ["PUBLIC_TRANSIT", "WALK"],
+    fullDayActivityTarget: 3,
+    activityDurationMinutes: 75,
+    pace: "ACTIVE",
     allocationsPercent: {
       outboundTransport: 12,
       returnTransport: 12,
@@ -18,6 +26,14 @@ const profiles = Object.freeze({
     }
   },
   BALANCED: {
+    accommodationTier: "MID_RANGE",
+    foodTier: "BALANCED",
+    accommodationFactorPercent: 100,
+    foodFactorPercent: 100,
+    routeModes: ["PUBLIC_TRANSIT", "TAXI", "PUBLIC_TRANSIT"],
+    fullDayActivityTarget: 3,
+    activityDurationMinutes: 90,
+    pace: "MODERATE",
     allocationsPercent: {
       outboundTransport: 12,
       returnTransport: 12,
@@ -30,6 +46,14 @@ const profiles = Object.freeze({
     }
   },
   COMFORT_FOCUSED: {
+    accommodationTier: "COMFORT",
+    foodTier: "COMFORT",
+    accommodationFactorPercent: 135,
+    foodFactorPercent: 135,
+    routeModes: ["TAXI"],
+    fullDayActivityTarget: 3,
+    activityDurationMinutes: 105,
+    pace: "RELAXED",
     allocationsPercent: {
       outboundTransport: 12,
       returnTransport: 12,

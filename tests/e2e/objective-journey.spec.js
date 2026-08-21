@@ -115,3 +115,46 @@ test("validated workspace respects reduced motion", async ({ page }) => {
   await expect(page.getByText(/Validated trip workspace/)).toBeVisible();
   await expect(page.locator(".animate-spin")).toHaveCount(0);
 });
+
+test("five-day comparison exposes dense and genuinely different spending profiles", async ({ page }, testInfo) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Continue as guest" }).click();
+
+  await page.getByLabel("Start date").fill("2026-10-10");
+  await page.getByLabel("End date").fill("2026-10-14");
+  await page.getByLabel("Arrival date and time").fill("2026-10-10T08:00");
+  await page.getByLabel("Departure date and time").fill("2026-10-14T20:00");
+  await page.getByRole("slider", { name: "Total budget" }).fill("20000");
+  await expect(page.getByRole("status", { name: "Total budget" })).toHaveText("CNY 20,000");
+  await page.getByLabel("Preferred sights (optional, comma separated)").fill("Forbidden City");
+  await page.getByRole("button", { name: "Generate 3 validated plans" }).click();
+
+  await expect(page.getByRole("heading", { name: "Three travel profiles. One hard budget." })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("region", { name: "Plan comparison overview" })).toBeVisible();
+  await expect(page.getByText("Budget stay", { exact: true })).toBeVisible();
+  await expect(page.getByText("Comfort stay", { exact: true })).toBeVisible();
+
+  const cards = page.locator("article.plan-column");
+  await expect(cards).toHaveCount(3);
+  const totals = await page.locator('[data-testid^="plan-total-"]').evaluateAll((nodes) =>
+    nodes.map((node) => Number(node.textContent.replace(/[^0-9.]/g, "")))
+  );
+  expect(new Set(totals).size).toBe(3);
+  expect(totals.every((total) => total > 0 && total <= 20_000)).toBeTruthy();
+
+  for (const card of await cards.all()) {
+    await expect(card.getByText(/15 events/)).toBeVisible();
+    const dayTabs = card.getByRole("tab");
+    await expect(dayTabs).toHaveCount(5);
+    for (let index = 0; index < 5; index += 1) {
+      await dayTabs.nth(index).click();
+      await expect(card.getByText(/2 activities/)).toBeVisible();
+      await expect(card.getByText(/1 meals/)).toBeVisible();
+    }
+  }
+
+  await page.screenshot({
+    path: `.artifacts/${testInfo.project.name}-five-day-comparison.png`,
+    fullPage: true
+  });
+});

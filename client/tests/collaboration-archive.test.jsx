@@ -45,7 +45,7 @@ function renderCollaborativeWorkspace({
 } = {}) {
   localStorage.setItem("nuogo-token", `${role}-token`);
   localStorage.setItem("nuogo-language", language);
-  localStorage.setItem("nuogo-language-default", "en-v3");
+  localStorage.setItem("nuogo-language-default", "zh-v4");
   const trip = demoTrip();
 
   fetch.mockImplementation(async (url, options = {}) => {

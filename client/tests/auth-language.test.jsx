@@ -43,13 +43,19 @@ describe("Nuogo language and authentication UI", () => {
     expect(screen.getByRole("img", { name: "Animated journey across China" })).toBeInTheDocument();
   });
 
-  it("defaults to English and persists Chinese when selected", async () => {
+  it("defaults to Chinese and persists English when selected", async () => {
     localStorage.removeItem("nuogo-language");
     localStorage.removeItem("nuogo-language-default");
     render(<App initialPath="/" />);
-    expect(screen.getByRole("button", { name: "EN" })).toHaveAttribute("aria-pressed", "true");
-    await userEvent.click(screen.getByRole("button", { name: "中文" }));
-    expect(localStorage.getItem("nuogo-language")).toBe("zh");
+    expect(screen.getByRole("button", { name: "中文" })).toHaveAttribute("aria-pressed", "true");
+    expect(document.documentElement.lang).toBe("zh-CN");
+    expect(screen.getByRole("heading", { name: /规划完整旅程/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "开始规划" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "EN" }));
+
+    expect(localStorage.getItem("nuogo-language")).toBe("en");
+    expect(document.documentElement.lang).toBe("en");
   });
 
   it("validates login before calling the API", async () => {
@@ -135,7 +141,7 @@ describe("Nuogo language and authentication UI", () => {
 
   it("shows a localized Chinese invalid-credentials error", async () => {
     localStorage.setItem("nuogo-language", "zh");
-    localStorage.setItem("nuogo-language-default", "en-v3");
+    localStorage.setItem("nuogo-language-default", "zh-v4");
     fetch.mockResolvedValueOnce(response({
       error: { code: "INVALID_CREDENTIALS", message: "Email or password is incorrect." }
     }, { ok: false, status: 401 }));
@@ -152,7 +158,7 @@ describe("Nuogo language and authentication UI", () => {
 
   it("shows a localized Chinese existing-account error", async () => {
     localStorage.setItem("nuogo-language", "zh");
-    localStorage.setItem("nuogo-language-default", "en-v3");
+    localStorage.setItem("nuogo-language-default", "zh-v4");
     fetch.mockResolvedValueOnce(response({
       error: { code: "EMAIL_EXISTS", message: "An account already exists for this email." }
     }, { ok: false, status: 409 }));

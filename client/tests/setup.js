@@ -5,7 +5,7 @@ import { cleanup } from "@testing-library/react";
 beforeEach(() => {
   localStorage.clear();
   localStorage.setItem("nuogo-language", "en");
-  localStorage.setItem("nuogo-language-default", "zh-v2");
+  localStorage.setItem("nuogo-language-default", "zh-v4");
   sessionStorage.clear();
   vi.stubGlobal("fetch", vi.fn(async () => ({
     ok: true,

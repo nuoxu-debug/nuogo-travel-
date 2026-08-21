@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { buildTripLegs } from "../src/services/itinerary/buildTripLegs.js";
 import { propagateSchedule } from "../src/services/itinerary/propagateSchedule.js";
 import { validateItinerary } from "../src/services/validation/validationEngine.js";
+import { validateSpendingProfiles } from "../src/services/validation/validators/spendingProfileValidator.js";
 
 const preferences = {
   origin: "Beijing Capital Airport",
@@ -210,5 +211,31 @@ describe("validation engine", () => {
       "DAILY_DURATION_EXCEEDED",
       "BUDGET_EXCEEDED"
     ]));
+  });
+});
+
+describe("spending profile differentiation", () => {
+  it("rejects duplicated profile strategies instead of presenting simulated choice", () => {
+    const metrics = {
+      accommodationTier: "MID_RANGE",
+      foodTier: "BALANCED",
+      transportDistribution: { PUBLIC_TRANSIT: 4 },
+      estimatedTotalFen: 200_000
+    };
+    const variants = ["BUDGET_SAVING", "BALANCED", "COMFORT_FOCUSED"].map((variant) => ({
+      state: "FINAL_VALIDATED",
+      itinerary: {
+        variant,
+        days: [{ activities: [{ poiId: "same-1" }, { poiId: "same-2" }] }]
+      },
+      variantMetrics: metrics
+    }));
+
+    expect(validateSpendingProfiles(variants)).toEqual([
+      expect.objectContaining({
+        code: "INSUFFICIENT_VARIANT_DIFFERENTIATION",
+        severity: "ERROR"
+      })
+    ]);
   });
 });

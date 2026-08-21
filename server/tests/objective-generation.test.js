@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app.js";
+import { DemoPlanProvider } from "../src/providers/demoProvider.js";
+import { DemoTravelProvider } from "../src/providers/travel/demoTravelProvider.js";
 import { MemoryRepository } from "../src/repositories/memory.js";
 import { spendingProfileIds } from "../src/services/budget/spendingProfiles.js";
 import { generateValidatedTrip } from "../src/services/itinerary/generateValidatedTrip.js";
@@ -40,11 +42,11 @@ function preferences(destination = "beijing", overrides = {}) {
 
 function rawPois(city) {
   const { longitude, latitude } = centres[city];
-  return Array.from({ length: 12 }, (_, index) => ({
+  return Array.from({ length: 18 }, (_, index) => ({
     id: `${city}-poi-${index + 1}`,
     name: city === "beijing" && index === 0 ? "Forbidden City" : `${city} place ${index + 1}`,
-    category: index === 3 ? "RESTAURANT" : "ATTRACTION",
-    typecode: index === 3 ? "050000" : "110000",
+    category: index % 3 === 2 ? "RESTAURANT" : "ATTRACTION",
+    typecode: index % 3 === 2 ? "050000" : "110000",
     address: city,
     cityname: city,
     location: `${longitude + index * 0.006},${latitude + index * 0.004}`,
@@ -178,6 +180,57 @@ describe("objective-aligned trip generation", () => {
         if (index > 0) expect(day.startPoint.locationId).toBe(variant.itinerary.days[index - 1].endPoint.locationId);
       }
     }
+  });
+
+  it("creates dense, connected, and meaningfully different demo profiles", async () => {
+    const input = preferences("beijing", {
+      startDate: "2026-10-10",
+      endDate: "2026-10-14",
+      arrivalDateTime: "2026-10-10T10:00:00+08:00",
+      departureDateTime: "2026-10-14T20:00:00+08:00",
+      totalBudgetCny: 10_000,
+      preferredSights: ["Forbidden City"]
+    });
+    const result = await generateValidatedTrip(input, dependencies({
+      llmProvider: new DemoPlanProvider()
+    }));
+
+    expect(result.state).toBe("FINAL_VALIDATED");
+    expect(result.variants).toHaveLength(3);
+    expect(result.variants.map(({ summary }) => summary.totalFen))
+      .toEqual([...result.variants.map(({ summary }) => summary.totalFen)].sort((a, b) => a - b));
+    expect(new Set(result.variants.map(({ variantMetrics }) =>
+      JSON.stringify(variantMetrics.transportDistribution))).size).toBe(3);
+
+    for (const variant of result.variants) {
+      const allIds = variant.itinerary.days.flatMap((day) => day.activities.map(({ poiId }) => poiId));
+      expect(new Set(allIds).size).toBe(allIds.length);
+      expect(variant.itinerary.days[2].activities.length).toBeGreaterThanOrEqual(3);
+      expect(variant.itinerary.days[0].activities.some(({ poi }) => poi.name === "Forbidden City")).toBe(true);
+      expect(variant.variantMetrics.activityCount).toBe(allIds.length);
+      expect(variant.variantMetrics.daySummaries).toHaveLength(5);
+      expect(variant.summary.totalFen).toBeLessThanOrEqual(variant.summary.budgetFen);
+    }
+  });
+
+  it("validates a dense five-day plan against the real demo travel catalogue", async () => {
+    const travelProvider = new DemoTravelProvider({ now: () => "2026-08-14T00:00:00.000Z" });
+    const input = preferences("beijing", {
+      startDate: "2026-10-10",
+      endDate: "2026-10-14",
+      arrivalDateTime: "2026-10-10T08:00:00+08:00",
+      departureDateTime: "2026-10-14T20:00:00+08:00",
+      totalBudgetCny: 20_000,
+      preferredSights: ["Forbidden City"]
+    });
+    const result = await generateValidatedTrip(input, dependencies({
+      travelProvider,
+      llmProvider: new DemoPlanProvider()
+    }));
+
+    expect(result.state).toBe("FINAL_VALIDATED");
+    expect(new Set(result.variants.map(({ summary }) => summary.totalFen)).size).toBe(3);
+    expect(result.variants.every(({ variantMetrics }) => variantMetrics.activityCount === 15)).toBe(true);
   });
 
   for (const city of ["beijing", "shanghai", "xian"]) {

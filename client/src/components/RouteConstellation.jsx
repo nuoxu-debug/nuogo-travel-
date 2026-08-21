@@ -6,9 +6,9 @@ const iconByType = {
   connection: TrainFront
 };
 
-export default function RouteConstellation({ stops, className = "" }) {
+export default function RouteConstellation({ stops, className = "", ariaLabel = "Journey route" }) {
   return (
-    <ol className={`route-constellation ${className}`} aria-label="Journey route">
+    <ol className={`route-constellation ${className}`} aria-label={ariaLabel}>
       {stops.map((stop, index) => {
         const Icon = iconByType[stop.type] || MapPin;
         return (

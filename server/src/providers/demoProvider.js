@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getCity } from "@nuogo/shared/constants";
 import { calculateBudget } from "../services/budget.js";
+import { getSpendingProfile } from "../services/budget/spendingProfiles.js";
 import { getDemoPois } from "../data/demoCatalog.js";
 
 const styleMeta = {
@@ -533,12 +534,51 @@ export class DemoPlanProvider {
     const data = payload.UNTRUSTED_USER_DATA ?? payload.UNTRUSTED_REPAIR_DATA;
     const source = data.preferences ? data.preferences : data.draft.trip;
     const profile = data.profile ?? data.draft.variant;
-    const candidateIds = data.allowedCandidateIds;
+    const candidates = (data.allowedCandidates ?? data.allowedCandidateIds.map((candidateId) => ({ candidateId })))
+      .filter(({ candidateId }) => data.allowedCandidateIds.includes(candidateId));
+    const candidateIds = candidates.map(({ candidateId }) => candidateId);
     const profileOffset = ["BUDGET_SAVING", "BALANCED", "COMFORT_FOCUSED"].indexOf(profile);
+    const strategy = getSpendingProfile(profile);
     const dayCount = Math.round(
       (new Date(`${source.endDate}T00:00:00Z`) - new Date(`${source.startDate}T00:00:00Z`)) / 86_400_000
     ) + 1;
     if (candidateIds.length < dayCount) throw new Error("The demo candidate pool is too small for this trip duration.");
+    const preferredNames = new Set((data.preferences?.preferredSights ?? []).map((name) => name.toLowerCase()));
+    const preferred = candidates.filter(({ name }) => preferredNames.has(String(name).toLowerCase()));
+    const restaurants = candidates.filter(({ category }) => category === "RESTAURANT");
+    const attractions = candidates.filter(({ category }) => category !== "RESTAURANT");
+    const rotate = (items, offset) => items.length
+      ? [...items.slice(offset % items.length), ...items.slice(0, offset % items.length)]
+      : [];
+    const attractionQueue = [
+      ...preferred,
+      ...rotate(attractions.filter((item) => !preferred.includes(item)), profileOffset * 3)
+    ];
+    const restaurantQueue = rotate(restaurants, profileOffset);
+    const used = new Set();
+    const distance = (left, right) => {
+      if (!left?.coordinates || !right?.coordinates) return Number.MAX_SAFE_INTEGER;
+      const longitude = left.coordinates.longitude - right.coordinates.longitude;
+      const latitude = left.coordinates.latitude - right.coordinates.latitude;
+      return longitude * longitude + latitude * latitude;
+    };
+    const take = (queue, near) => {
+      const available = queue.filter(({ candidateId }) => !used.has(candidateId));
+      const item = near
+        ? available.sort((left, right) => distance(left, near) - distance(right, near))[0]
+        : available[0];
+      if (item) used.add(item.candidateId);
+      return item;
+    };
+    const timeValue = (iso, fallback) => iso?.slice(11, 16) ?? fallback;
+    const toMinutes = (value) => {
+      const [hours, minutes] = value.split(":").map(Number);
+      return hours * 60 + minutes;
+    };
+    const toTime = (value) => `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
+    const activityType = (candidate, index) => candidate.category === "RESTAURANT"
+      ? "FOOD"
+      : ["HISTORY", "CULTURE", "NATURE"][index % 3];
     return JSON.stringify({
       variant: profile,
       trip: {
@@ -549,24 +589,45 @@ export class DemoPlanProvider {
         travellerCount: source.travellerCount,
         totalBudgetCny: source.totalBudgetCny
       },
-      days: Array.from({ length: dayCount }, (_, index) => ({
-        dayNumber: index + 1,
-        date: addDays(source.startDate, index),
-        startPoint: index === 0
-          ? { locationId: "origin", locationType: "ORIGIN" }
-          : { locationId: "hotel", locationType: "HOTEL" },
-        activities: [{
-          sequence: 1,
-          poiId: candidateIds[(profileOffset + index) % candidateIds.length],
-          activityType: index % 2 ? "FOOD" : "HISTORY",
-          plannedStartTime: "10:00",
-          plannedDurationMinutes: profile === "COMFORT_FOCUSED" ? 75 : 90,
-          reason: "Grounded demo stop selected for this spending profile."
-        }],
-        endPoint: index === dayCount - 1
-          ? { locationId: "destination", locationType: "DESTINATION" }
-          : { locationId: "hotel", locationType: "HOTEL" }
-      }))
+      days: Array.from({ length: dayCount }, (_, index) => {
+        const dayStart = toMinutes(index === 0 ? timeValue(data.preferences?.arrivalDateTime, "08:00") : "08:00");
+        const dayEnd = toMinutes(index === dayCount - 1 ? timeValue(data.preferences?.departureDateTime, "20:00") : "20:00");
+        const availableTarget = Math.max(1, Math.floor((dayEnd - dayStart - 120) / 180) + 1);
+        const target = Math.min(strategy.fullDayActivityTarget, availableTarget);
+        const selected = [];
+        while (selected.length < Math.max(1, target - 1)) {
+          const attraction = take(attractionQueue, selected.at(-1));
+          if (!attraction) break;
+          selected.push(attraction);
+        }
+        if (selected.length < target) {
+          const restaurant = take(restaurantQueue, selected[0]);
+          if (restaurant) selected.splice(Math.min(1, selected.length), 0, restaurant);
+        }
+        while (selected.length < target) {
+          const fallback = take(attractionQueue, selected.at(-1)) ?? take(restaurantQueue, selected.at(-1));
+          if (!fallback) break;
+          selected.push(fallback);
+        }
+        return {
+          dayNumber: index + 1,
+          date: addDays(source.startDate, index),
+          startPoint: index === 0
+            ? { locationId: "origin", locationType: "ORIGIN" }
+            : { locationId: "hotel", locationType: "HOTEL" },
+          activities: selected.map((candidate, activityIndex) => ({
+            sequence: activityIndex + 1,
+            poiId: candidate.candidateId,
+            activityType: activityType(candidate, activityIndex),
+            plannedStartTime: toTime(Math.min(21 * 60, dayStart + 90 + activityIndex * 180)),
+            plannedDurationMinutes: strategy.activityDurationMinutes,
+            reason: `${profile} strategy selected this verified ${candidate.category?.toLowerCase() ?? "travel"} candidate.`
+          })),
+          endPoint: index === dayCount - 1
+            ? { locationId: "destination", locationType: "DESTINATION" }
+            : { locationId: "hotel", locationType: "HOTEL" }
+        };
+      })
     });
   }
 

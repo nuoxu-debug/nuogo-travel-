@@ -31,10 +31,11 @@ export function buildItineraryPrompt(preferences, profile, candidatePool) {
     `Variant: ${profile}.`,
     profileRules[profile]
   ].join(" ");
-  const allowedCandidates = candidatePool.candidates.map(({ candidateId, name, category }) => ({
+  const allowedCandidates = candidatePool.candidates.map(({ candidateId, name, category, coordinates }) => ({
     candidateId,
     name,
-    category
+    category,
+    coordinates
   }));
   return {
     system,

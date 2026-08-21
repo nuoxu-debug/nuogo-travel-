@@ -1,12 +1,14 @@
 import { Navigation } from "lucide-react";
 import { useRef, useState } from "react";
 import { useReducedMotion } from "../hooks/useReducedMotion.js";
+import { useLanguage } from "../context/LanguageContext.jsx";
 import { useGsapContext } from "../motion/useGsapContext.js";
 import LivingAtlasScene from "./LivingAtlasScene.jsx";
 
-const stops = ["Departure", "Stop 01", "Stop 02", "Stop 03"];
-
 export default function ScrollJourneyMap() {
+  const { language } = useLanguage();
+  const zh = language === "zh";
+  const stops = zh ? ["出发", "停留点 01", "停留点 02", "停留点 03"] : ["Departure", "Stop 01", "Stop 02", "Stop 03"];
   const reducedMotion = useReducedMotion();
   const [journeyProgress, setJourneyProgress] = useState(reducedMotion ? 1 : 0);
   const lastPercentageRef = useRef(reducedMotion ? 100 : 0);
@@ -45,15 +47,15 @@ export default function ScrollJourneyMap() {
       <section id="journey-map" className="journey-map-section">
         <div className="journey-map-sticky">
           <div className="journey-map-heading">
-            <p><Navigation aria-hidden="true" /> Route preview</p>
-            <h2>Your journey,<br />drawn as you move.</h2>
-            <span>The route adapts when your dates, pace, or budget change.</span>
+            <p><Navigation aria-hidden="true" /> {zh ? "路线预览" : "Route preview"}</p>
+            <h2>{zh ? "随着前行，" : "Your journey,"}<br />{zh ? "旅程逐步展开。" : "drawn as you move."}</h2>
+            <span>{zh ? "日期、节奏或预算改变时，路线也会随之调整。" : "The route adapts when your dates, pace, or budget change."}</span>
           </div>
 
           <div
             className="journey-map-canvas"
             role="img"
-            aria-label="Animated journey across China"
+            aria-label={zh ? "中国旅行路线动画" : "Animated journey across China"}
             data-motion={reducedMotion ? "reduced" : "full"}
           >
             <LivingAtlasScene progress={journeyProgress} stops={stops} />

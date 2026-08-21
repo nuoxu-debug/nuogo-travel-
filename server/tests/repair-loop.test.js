@@ -93,6 +93,22 @@ describe("deterministic itinerary repair", () => {
     expect(result.itinerary.days[0].activities.map(({ poiId }) => poiId))
       .toEqual(["candidate:beijing:B001"]);
   });
+
+  it("resynchronizes every activity in a day after a travel-time shift", () => {
+    const input = itinerary();
+    input.days[0].activities = [
+      { ...activity("candidate:beijing:B001", 1), plannedStartTime: "09:00", scheduledStartTime: "09:00" },
+      { ...activity("candidate:beijing:B002", 2), plannedStartTime: "11:00", scheduledStartTime: "11:45" },
+      { ...activity("candidate:beijing:B003", 3), plannedStartTime: "14:00", scheduledStartTime: "14:20" }
+    ];
+
+    const result = deterministicRepair(input, [
+      issue("TRAVEL_TIME_CONFLICT", ["days", 0, "activities", 1, "plannedStartTime"])
+    ], { candidatePool });
+
+    expect(result.itinerary.days[0].activities.map(({ plannedStartTime }) => plannedStartTime))
+      .toEqual(["09:00", "11:45", "14:20"]);
+  });
 });
 
 describe("bounded repair loop", () => {

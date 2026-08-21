@@ -1,26 +1,40 @@
 import { Bot, Database, Route, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiRequest } from "../api/client.js";
 import PipelineOverlay from "../components/PipelineOverlay.jsx";
 import PlannerJourneyHorizon from "../components/PlannerJourneyHorizon.jsx";
 import PreferenceForm, { initialPreferenceValues } from "../components/PreferenceForm.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import AppShell from "../layout/AppShell.jsx";
 
 export default function PlannerPage() {
   const { language } = useLanguage();
+  const { loginAsGuest, ready: authReady, user } = useAuth();
   const navigate = useNavigate();
   const [generating, setGenerating] = useState(false);
   const [generationState, setGenerationState] = useState("RETRIEVING");
   const [error, setError] = useState("");
-  const [preferences, setPreferences] = useState(initialPreferenceValues);
+  const [preferences, setPreferences] = useState(() => ({
+    ...initialPreferenceValues,
+    origin: language === "zh" ? "上海" : "Shanghai"
+  }));
+
+  useEffect(() => {
+    setPreferences((current) => {
+      if (language === "zh" && current.origin === "Shanghai") return { ...current, origin: "上海" };
+      if (language === "en" && current.origin === "上海") return { ...current, origin: "Shanghai" };
+      return current;
+    });
+  }, [language]);
 
   async function generate(preferences) {
     setError("");
     setGenerating(true);
     setGenerationState("RETRIEVING");
     try {
+      if (!user) await loginAsGuest();
       const result = await apiRequest("/trips/generate", {
         method: "POST",
         body: JSON.stringify(preferences)
@@ -50,7 +64,7 @@ export default function PlannerPage() {
         <div className="absolute right-0 top-0 hidden h-full w-[42%] border-l border-ink/10 bg-lake/5 lg:block" />
         <div className="relative mx-auto grid max-w-[1440px] gap-10 lg:grid-cols-[1.15fr_.85fr] lg:items-end">
           <div>
-            <p className="text-xs font-extrabold uppercase text-lake">Route brief · step 01</p>
+            <p className="text-xs font-extrabold uppercase text-lake">{language === "zh" ? "行程需求 · 第 01 步" : "Route brief · step 01"}</p>
             <h1 className="mt-4 max-w-4xl font-display text-4xl font-extrabold leading-tight sm:text-6xl">
               {language === "zh" ? "清晰的偏好，换来真正好用的行程。" : "Clear preferences. Plans you can actually use."}
             </h1>
@@ -86,7 +100,7 @@ export default function PlannerPage() {
               onSubmit={generate}
               values={preferences}
               onValuesChange={setPreferences}
-              busy={generating}
+              busy={generating || !authReady}
             />
             {error && (
               <div role="alert" className="mt-5 border border-red-200 bg-red-50 p-4 text-sm text-red-800">
@@ -100,11 +114,11 @@ export default function PlannerPage() {
             <img
               className="absolute inset-0 h-full w-full object-cover opacity-68"
               src="https://images.unsplash.com/photo-1545893835-abaa50cbe628?auto=format&fit=crop&w=1000&q=84"
-              alt="Chengdu teahouse atmosphere"
+              alt={language === "zh" ? "成都茶馆氛围" : "Chengdu teahouse atmosphere"}
             />
             <div className="absolute inset-0 bg-ink/35" />
             <div className="absolute left-5 top-5 rounded-lg border border-white/25 bg-ink/70 px-3 py-2 text-xs font-bold backdrop-blur-lg">
-              CN · LOCAL DATA
+              {language === "zh" ? "中国 · 本地资料" : "CN · LOCAL DATA"}
             </div>
             <div className="absolute inset-x-0 bottom-0 bg-ink/90 p-7">
               <ShieldCheck className="h-7 w-7 text-lake" />
@@ -117,14 +131,14 @@ export default function PlannerPage() {
                   : "Destinations, interests, and stays use fixed categories. System prompts never reach the frontend."}
               </p>
               <div className="mt-6 grid grid-cols-2 border-t border-white/15 pt-5 text-xs">
-                <span><b className="block text-lg text-white">3</b><i className="not-italic text-white/45">validated profiles</i></span>
-                <span><b className="block text-lg text-white">8</b><i className="not-italic text-white/45">cost categories</i></span>
+                <span><b className="block text-lg text-white">3</b><i className="not-italic text-white/45">{language === "zh" ? "套已验证方案" : "validated profiles"}</i></span>
+                <span><b className="block text-lg text-white">8</b><i className="not-italic text-white/45">{language === "zh" ? "类费用" : "cost categories"}</i></span>
               </div>
             </div>
           </aside>
         </div>
       </section>
-      <PipelineOverlay open={generating} state={generationState} />
+      <PipelineOverlay open={generating} state={generationState} language={language} />
     </AppShell>
   );
 }

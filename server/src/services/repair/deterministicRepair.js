@@ -57,13 +57,18 @@ function repairContinuity(itinerary, issues) {
 }
 
 function repairScheduleConflicts(itinerary, issues) {
+  const affectedDays = new Set(issues
+    .filter(({ code }) => code === "TRAVEL_TIME_CONFLICT" || code === "TIME_OVERLAP")
+    .map(activityLocation)
+    .filter(Boolean)
+    .map(({ dayIndex }) => dayIndex));
   let changed = false;
-  for (const issue of issues.filter(({ code }) => code === "TRAVEL_TIME_CONFLICT" || code === "TIME_OVERLAP")) {
-    const location = activityLocation(issue);
-    const activity = location && itinerary.days[location.dayIndex]?.activities[location.activityIndex];
-    if (!activity?.scheduledStartTime || activity.plannedStartTime === activity.scheduledStartTime) continue;
-    activity.plannedStartTime = activity.scheduledStartTime;
-    changed = true;
+  for (const dayIndex of affectedDays) {
+    for (const activity of itinerary.days[dayIndex]?.activities ?? []) {
+      if (!activity.scheduledStartTime || activity.plannedStartTime === activity.scheduledStartTime) continue;
+      activity.plannedStartTime = activity.scheduledStartTime;
+      changed = true;
+    }
   }
   return changed;
 }

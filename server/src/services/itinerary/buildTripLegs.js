@@ -26,19 +26,26 @@ export async function buildTripLegs(itinerary, {
         const from = locations[fromLocationId];
         const to = locations[toLocationId];
         if (!from || !to) throw Object.assign(new Error("Route coordinates are unavailable."), { code: "ROUTE_UNAVAILABLE" });
+        const resolvedMode = typeof mode === "function"
+          ? mode({ day, legIndex: index, fromLocationId, toLocationId, from, to })
+          : mode;
         const route = await routeProvider.getRoute({
           from,
           to,
-          mode,
+          mode: resolvedMode,
           city: itinerary.trip.destination
         });
         const durationMinutes = Math.ceil(Number(route.durationSeconds) / 60);
-        const estimatedCostFen = routeCostResolver(route, { mode, fromLocationId, toLocationId });
+        const estimatedCostFen = routeCostResolver(route, {
+          mode: resolvedMode,
+          fromLocationId,
+          toLocationId
+        });
         const leg = tripLegSchema.parse({
           id: `${itinerary.variant}:${day.dayNumber}:leg:${index + 1}`,
           fromLocationId,
           toLocationId,
-          mode,
+          mode: resolvedMode,
           distanceMeters: Math.round(Number(route.distanceMeters)),
           durationMinutes,
           estimatedCostFen,

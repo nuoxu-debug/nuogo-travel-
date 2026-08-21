@@ -85,6 +85,24 @@ describe("validated itinerary workspace", () => {
     expect(screen.getByRole("button", { name: "Open itinerary" })).toBeInTheDocument();
   });
 
+  it("renders saved trip actions in Chinese", async () => {
+    localStorage.setItem("nuogo-language", "zh");
+    localStorage.setItem("nuogo-language-default", "zh-v4");
+    localStorage.setItem("nuogo-token", "test-token");
+    fetch.mockImplementation(async (url) => {
+      if (url.endsWith("/auth/me")) return { ok: true, json: async () => ({ user: { id: "user-1", name: "Student", email: "student@nuogo.test" } }) };
+      if (url.endsWith("/trips")) return { ok: true, json: async () => ({ trips: [{ ...objectiveTrip(), status: "draft" }] }) };
+      if (url.endsWith("/favorites")) return { ok: true, json: async () => ({ favorites: [] }) };
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(<App initialPath="/archive" />);
+
+    expect(await screen.findByRole("button", { name: "打开行程" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复用偏好" })).toBeInTheDocument();
+    expect(screen.getByText("已验证")).toBeInTheDocument();
+  });
+
   it("deletes an owned objective trip through the API", async () => {
     await renderWorkspace();
     fetch.mockResolvedValueOnce({ ok: true, status: 204, json: async () => ({}) });
@@ -163,5 +181,18 @@ describe("validated itinerary workspace", () => {
     expect(screen.getByRole("button", { name: "Revalidate itinerary" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Privacy and AI" }));
     expect(screen.getByRole("dialog", { name: "Privacy and AI settings" })).toHaveTextContent("travel preferences");
+  });
+
+  it("renders the validated workspace controls and budget in Chinese", async () => {
+    localStorage.setItem("nuogo-language", "zh");
+    localStorage.setItem("nuogo-language-default", "zh-v4");
+    await renderWorkspace();
+
+    expect(screen.getByRole("button", { name: "重命名行程" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "第 1 天连续行程" })).toHaveTextContent("起点 · 出发地");
+    const budget = screen.getByRole("region", { name: "系统计算的行程预算" });
+    expect(within(budget).getByText("景点门票")).toBeInTheDocument();
+    expect(within(budget).getByText("剩余 CNY 2,200")).toBeInTheDocument();
+    expect(within(budget).getByText("每人 CNY 1,400")).toBeInTheDocument();
   });
 });

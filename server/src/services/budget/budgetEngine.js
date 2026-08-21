@@ -43,6 +43,10 @@ function countActivities(itinerary, types) {
     (day.activities ?? []).filter(({ activityType }) => types.has(activityType)).length, 0);
 }
 
+function applyFactor(amountFen, factorPercent) {
+  return Math.round(amountFen * factorPercent / 100);
+}
+
 function tripTransportFen(direction, preferences, itinerary, references) {
   const fixedCost = preferences[`${direction}TransportCostCny`];
   if (fixedCost !== undefined) return cnyToFen(fixedCost, `${direction}TransportCostCny`);
@@ -99,9 +103,15 @@ export function calculateItineraryBudget({ preferences, itinerary, references, p
   const categoriesFen = {
     outboundTransport: tripTransportFen("outbound", preferences, itinerary, references),
     returnTransport: tripTransportFen("return", preferences, itinerary, references),
-    accommodation: references.accommodationRoomNightFen * rooms * nights,
+    accommodation: applyFactor(
+      references.accommodationRoomNightFen * rooms * nights,
+      getSpendingProfile(profile).accommodationFactorPercent
+    ),
     localTransportation: legsFen + localDriving,
-    foodAndBeverages: references.foodPersonMealFen * mealCount * travellerCount,
+    foodAndBeverages: applyFactor(
+      references.foodPersonMealFen * mealCount * travellerCount,
+      getSpendingProfile(profile).foodFactorPercent
+    ),
     attractionTickets: references.attractionPersonEntryFen * attractionCount * travellerCount,
     entertainmentActivities: references.entertainmentPersonEntryFen * entertainmentCount * travellerCount,
     other: references.otherTripFen
@@ -112,6 +122,8 @@ export function calculateItineraryBudget({ preferences, itinerary, references, p
   const profileDefinition = getSpendingProfile(profile);
   return {
     profile,
+    accommodationTier: profileDefinition.accommodationTier,
+    foodTier: profileDefinition.foodTier,
     categoriesFen,
     targetAllocationsFen: allocateBudget(budgetFen, profileDefinition.allocationsPercent),
     totalFen,

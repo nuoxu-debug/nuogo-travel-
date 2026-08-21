@@ -44,8 +44,8 @@ function CompareContent() {
     }
   }
 
-  if (loading) return <div className="grid min-h-[60vh] place-items-center">Loading plans...</div>;
-  if (error || !trip) return <div className="grid min-h-[60vh] place-items-center text-vermilion">{error || "Trip unavailable"}</div>;
+  if (loading) return <div className="grid min-h-[60vh] place-items-center">{language === "zh" ? "正在加载方案..." : "Loading plans..."}</div>;
+  if (error || !trip) return <div className="grid min-h-[60vh] place-items-center text-vermilion">{error || (language === "zh" ? "行程暂不可用" : "Trip unavailable")}</div>;
 
   return (
     <>
@@ -53,17 +53,17 @@ function CompareContent() {
         <div className="absolute right-0 top-0 hidden h-full w-[33.333%] border-l border-ink/10 bg-gold/8 lg:block" />
         <div className="relative mx-auto grid max-w-[1440px] gap-8 lg:grid-cols-[1fr_410px] lg:items-end">
           <div>
-            <span className="flex items-center gap-2 text-xs font-extrabold uppercase text-lake"><ArrowLeftRight className="h-4 w-4" /> Nuogo compare · step 02</span>
+            <span className="flex items-center gap-2 text-xs font-extrabold uppercase text-lake"><ArrowLeftRight className="h-4 w-4" /> {language === "zh" ? "Nuogo 方案比较 · 第 02 步" : "Nuogo compare · step 02"}</span>
             <h1 className="mt-4 max-w-4xl font-display text-4xl font-extrabold leading-tight sm:text-6xl">
               {trip.objectiveAligned
-                ? "Three travel profiles. One hard budget."
+                ? (language === "zh" ? "三套旅行方案，共用一个总预算。" : "Three travel profiles. One hard budget.")
                 : (language === "zh" ? "三种旅行风格，一眼做出选择。" : "Three travel styles. One clear choice.")}
             </h1>
           </div>
           <div className="rounded-lg border border-ink/10 bg-white/72 p-5 shadow-panel backdrop-blur-2xl">
             <p className="text-xs font-bold uppercase text-ink/38">{language === "zh" ? "比较标准" : "Compared on equal terms"}</p>
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              {["Budget", "Pace", "Route", "Highlights"].map((item) => (
+              {(language === "zh" ? ["预算", "节奏", "路线", "亮点"] : ["Budget", "Pace", "Route", "Highlights"]).map((item) => (
                 <span key={item} className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-lake" /> {item}</span>
               ))}
             </div>
@@ -79,7 +79,7 @@ function CompareContent() {
                 {language === "zh" ? "每套方案使用不同的景点组合、预算重点与每日路线。" : "Each option uses a different attraction mix, budget emphasis, and day-by-day route."}
               </p>
             </div>
-            <span className="hidden text-xs font-bold text-ink/35 sm:block">03 OPTIONS · 01 SELECTION</span>
+            <span className="hidden text-xs font-bold text-ink/35 sm:block">{language === "zh" ? "03 套方案 · 选择 01 套" : "03 OPTIONS · 01 SELECTION"}</span>
           </div>
           {selectionError && (
             <div role="alert" className="mb-6 flex flex-col justify-between gap-4 border border-red-200 bg-red-50 p-4 text-sm text-red-900 sm:flex-row sm:items-center">

@@ -112,6 +112,21 @@ describe("deterministic budget engine", () => {
     }
   });
 
+  it("prices named accommodation and food tiers from the same reference baseline", () => {
+    const summaries = spendingProfileIds.map((profile) => calculateItineraryBudget({
+      preferences, itinerary, references, profile
+    }));
+
+    expect(summaries.map(({ accommodationTier }) => accommodationTier))
+      .toEqual(["BUDGET", "MID_RANGE", "COMFORT"]);
+    expect(summaries.map(({ foodTier }) => foodTier))
+      .toEqual(["ECONOMY", "BALANCED", "COMFORT"]);
+    expect(summaries.map(({ categoriesFen }) => categoriesFen.accommodation))
+      .toEqual([84_000, 120_000, 162_000]);
+    expect(summaries.map(({ categoriesFen }) => categoriesFen.foodAndBeverages))
+      .toEqual([50_400, 72_000, 97_200]);
+  });
+
   it("reports impossible budgets without relaxing the ceiling", () => {
     const summary = calculateItineraryBudget({
       preferences: { ...preferences, totalBudgetCny: 300 },
@@ -122,10 +137,10 @@ describe("deterministic budget engine", () => {
     expect(validateHardBudget(summary, 300)).toEqual({
       valid: false,
       code: "BUDGET_EXCEEDED",
-      totalFen: 379_400,
+      totalFen: 446_600,
       budgetFen: 30_000,
-      exceededByFen: 349_400,
-      remainingFen: -349_400
+      exceededByFen: 416_600,
+      remainingFen: -416_600
     });
   });
 
