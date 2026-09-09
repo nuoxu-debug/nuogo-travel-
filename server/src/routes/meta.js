@@ -1,60 +1,65 @@
 import { Router } from "express";
 import {
-  accommodationTypes,
-  chinaCities,
-  groupTypes,
-  poiCategories,
-  tripStyles
+  localTransportModes,
+  spendingProfiles,
+  supportedDestinationIds,
+  supportedDestinations
 } from "@nuogo/shared/constants";
-import { validatePreferences } from "../services/validation.js";
+import { getDestinationDiscoveryContent } from "@nuogo/shared/destination-discovery";
 
-function sendChinaMetadata(res, { demoMode, aiProvider }) {
+function sendSingaporeMetadata(res, { demoMode, aiProvider }) {
   res.json({
     product: "Nuogo",
     demoMode,
     aiProvider,
-    cities: chinaCities,
-    poiCategories,
-    groupTypes,
-    accommodationTypes,
-    tripStyles
+    destinations: supportedDestinations,
+    spendingProfiles,
+    localTransportModes
   });
 }
 
-function sendPreferenceValidation(req, res, next) {
-  try {
-    res.json(validatePreferences(req.body));
-  } catch (error) {
-    next(error);
-  }
-}
-
-export function createMetaRouter({ authenticate, demoMode, aiProvider }) {
+export function createMetaRouter({ demoMode, aiProvider, travelDataProvider, discoverAttractions }) {
   const router = Router();
 
-  router.get("/china", (_req, res) => {
-    sendChinaMetadata(res, { demoMode, aiProvider });
+  router.get("/singapore", (_req, res) => {
+    sendSingaporeMetadata(res, { demoMode, aiProvider });
   });
 
-  router.post("/preferences/validate", authenticate, sendPreferenceValidation);
-
-  return router;
-}
-
-export function createLegacyMetaRouter({ authenticate, demoMode, aiProvider }) {
-  const router = Router();
-
-  router.use((_req, res, next) => {
-    res.set("Deprecation", "true");
-    res.set("Link", "</api/meta>; rel=\"successor-version\"");
-    next();
+  router.get("/destinations/:destination/attractions", async (req, res, next) => {
+    const { destination } = req.params;
+    if (!supportedDestinationIds.includes(destination)) {
+      const error = new Error("This destination is not supported.");
+      error.code = "UNSUPPORTED_DESTINATION";
+      error.status = 400;
+      return next(error);
+    }
+    if (!discoverAttractions) {
+      const error = new Error("Attraction discovery is unavailable.");
+      error.code = "ATTRACTION_DISCOVERY_UNAVAILABLE";
+      error.status = 503;
+      return next(error);
+    }
+    try {
+      const attractions = await discoverAttractions({
+        destination,
+        signal: new AbortController().signal
+      });
+      const content = getDestinationDiscoveryContent(destination);
+      return res.json({
+        destination,
+        introduction: content.introduction,
+        themes: content.themes,
+        attractions,
+        candidateCount: attractions.length,
+        providerMode: travelDataProvider ?? (demoMode ? "demo" : "live")
+      });
+    } catch {
+      const error = new Error("Attraction discovery is temporarily unavailable.");
+      error.code = "ATTRACTION_DISCOVERY_UNAVAILABLE";
+      error.status = 503;
+      return next(error);
+    }
   });
-
-  router.get("/china", (_req, res) => {
-    sendChinaMetadata(res, { demoMode, aiProvider });
-  });
-
-  router.post("/preferences/validate", authenticate, sendPreferenceValidation);
 
   return router;
 }

@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./constants": "./constants.js",
+    "./destination-discovery": "./destinationDiscovery.js",
     "./schemas": "./schemas.js",
     "./itinerary-draft-schema": "./itineraryDraftSchema.js"
   },

@@ -30,7 +30,7 @@ export default function PrivacyDialog({ open, onClose }) {
         </div>
         <div className="mt-6 border-y border-ink/10 py-5 text-sm leading-6 text-ink/70">
           <p>{zh ? "只有在你请求生成或重新验证行程时，Nuogo 才会把你提交的旅行偏好发送给已配置的 AI 服务商。" : "Nuogo sends the travel preferences you submit to the configured AI provider only when you request generation or revalidation."}</p>
-          <p className="mt-3">{zh ? "账户凭据、协作邀请和已保存的费用结算不会包含在行程提示词中。" : "Account credentials, collaboration invitations, and saved expense settlements are excluded from itinerary prompts."}</p>
+          <p className="mt-3">{zh ? "账户凭据和私人资料不会包含在行程提示词中。" : "Account credentials and private profile data are excluded from itinerary prompts."}</p>
         </div>
         <button type="button" onClick={onClose} className="mt-5 min-h-11 w-full rounded-lg bg-ink px-4 text-sm font-bold text-white">{zh ? "完成" : "Done"}</button>
       </section>

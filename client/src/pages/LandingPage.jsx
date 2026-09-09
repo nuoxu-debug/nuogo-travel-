@@ -1,235 +1,71 @@
-import {
-  ArrowDown,
-  ArrowRight,
-  Check,
-  Database,
-  MapPinned,
-  Route,
-  ShieldCheck,
-  Sparkles,
-  WalletCards
-} from "lucide-react";
-import { Link } from "react-router-dom";
-import RouteConstellation from "../components/RouteConstellation.jsx";
-import ScrollJourneyMap from "../components/ScrollJourneyMap.jsx";
+import AppShell from "../layout/AppShell";
 import { useLanguage } from "../context/LanguageContext.jsx";
-import AppShell from "../layout/AppShell.jsx";
-import { useGsapContext } from "../motion/useGsapContext.js";
+import { useGsapContext } from "../motion/useGsapContext";
+import HeroSection from "../components/landing/HeroSection";
+import AttractionStorySection from "../components/landing/AttractionStorySection";
+import JourneyMapSection from "../components/landing/JourneyMapSection";
+import WorkflowSection from "../components/landing/WorkflowSection";
+import FinalCTASection from "../components/landing/FinalCTASection";
 
-const journeyStops = [
-  { label: ["Departure", "出发"], meta: ["Your starting point", "你的起点"], type: "origin" },
-  { label: ["Stop 01", "停留点 01"], meta: ["First stay", "第一站"], type: "city" },
-  { label: ["Stop 02", "停留点 02"], meta: ["Connected route", "衔接路线"], type: "connection" },
-  { label: ["Stop 03", "停留点 03"], meta: ["Final stay", "最后一站"], type: "city" }
-];
-
-const strategies = [
-  {
-    name: ["Budget-Saving", "省钱优先"],
-    code: "BS",
-    tone: "jade",
-    location: ["Lower-cost route", "更实惠的路线"],
-    position: "18% center",
-    promise: ["Protect more of your budget without dropping the sights that matter.", "保留更多预算，同时不错过真正重要的景点。"],
-    choices: [["Lower reference tiers", "采用较低参考价位"], ["Public transport first", "优先公共交通"], ["Free and high-value POIs", "优先免费与高性价比景点"]]
-  },
-  {
-    name: ["Balanced", "均衡方案"],
-    code: "BA",
-    tone: "sky",
-    location: ["Flexible route", "灵活路线"],
-    position: "54% center",
-    promise: ["Distribute spending across comfort, food, movement, and attractions.", "在住宿、餐饮、交通与景点之间合理分配支出。"],
-    choices: [["Mid-range stays", "中档住宿"], ["Mixed local transport", "组合使用市内交通"], ["Paid and free experiences", "付费与免费体验搭配"]]
-  },
-  {
-    name: ["Comfort-Focused", "舒适优先"],
-    code: "CF",
-    tone: "coral",
-    location: ["Easier route", "更轻松的路线"],
-    position: "88% center",
-    promise: ["Use the same hard budget for easier movement and more comfortable choices.", "在相同总预算内，获得更轻松的移动与更舒适的选择。"],
-    choices: [["Comfort tiers when feasible", "预算允许时选择舒适档次"], ["More taxi flexibility", "更灵活地使用出租车"], ["Budget-safe fallback choices", "保留符合预算的替代方案"]]
-  }
-];
-
-const sourceBoundaries = [
-  {
-    icon: MapPinned,
-    label: ["Place and route data", "地点与路线资料"],
-    value: ["AMap primary", "高德地图为主要来源"],
-    note: ["Operational POIs, coordinates, and route information for China.", "提供中国境内可用的地点、坐标与路线信息。"]
-  },
-  {
-    icon: Database,
-    label: ["Tourism context", "旅游背景资料"],
-    value: ["OpenTripMap support", "OpenTripMap 辅助"],
-    note: ["Supporting attraction details and source identity where available.", "在资料可用时补充景点详情与来源标识。"]
-  },
-  {
-    icon: Sparkles,
-    label: ["Schedule", "行程安排"],
-    value: ["AI-assisted", "AI 辅助"],
-    note: ["The model proposes POI order, duration, and personalised reasons.", "模型提出景点顺序、停留时长与个性化推荐理由。"]
-  },
-  {
-    icon: WalletCards,
-    label: ["Trip cost", "旅行费用"],
-    value: ["System estimate", "系统估算"],
-    note: ["Nuogo calculates costs from user, provider, and reference values.", "Nuogo 根据用户输入、数据来源与参考价格计算费用。"]
-  }
-];
+function content(language) {
+  const zh = language === "zh";
+  return {
+    zh,
+    hero: {
+      eyebrow: zh ? "\u65b0\u52a0\u5761\u667a\u80fd\u65c5\u884c\u89c4\u5212" : "Singapore intelligent travel planning",
+      title: zh ? "\u628a\u65b0\u52a0\u5761\uff0c\u8d70\u6210\u5c5e\u4e8e\u4f60\u7684\u8282\u594f\u3002" : "Let Singapore unfold at your pace.",
+      body: zh ? "Nuogo \u662f\u7531 LLM \u8f85\u52a9\u7684\u65c5\u884c\u884c\u7a0b\u4e0e\u9884\u7b97\u89c4\u5212\u7cfb\u7edf\u3002\u53d1\u73b0\u53d7\u652f\u6301\u7684\u666f\u70b9\uff0c\u586b\u5199\u504f\u597d\uff0c\u9009\u62e9\u4e00\u79cd\u65c5\u884c\u98ce\u683c\uff0c\u518d\u751f\u6210\u4e00\u4efd\u7ecf\u8fc7\u9884\u7b97\u9a8c\u8bc1\u7684\u4e2a\u4eba\u884c\u7a0b\u3002" : "Nuogo is an LLM-assisted itinerary and budget planning system. Discover supported attractions, share your preferences, choose one Travel Style, and generate one budget-validated itinerary.",
+      start: zh ? "\u5f00\u59cb\u89c4\u5212" : "Start Planning",
+      guest: zh ? "\u4ee5\u8bbf\u5ba2\u8eab\u4efd\u7ee7\u7eed" : "Continue as Guest",
+      guestAria: zh ? "\u4ee5\u8bbf\u5ba2\u8eab\u4efd\u7ee7\u7eed - \u8fdb\u5165\u8bbf\u5ba2\u6a21\u5f0f" : "Continue as Guest - enter Guest Mode",
+      scroll: zh ? "\u5411\u4e0b\u63a2\u7d22\u65b0\u52a0\u5761" : "Explore Singapore below",
+      manifestLabel: zh ? "Nuogo \u65c5\u884c\u65b9\u5f0f" : "The Nuogo travel method",
+      manifestKicker: zh ? "\u65b0\u52a0\u5761\uff0c\u6162\u6162\u5c55\u5f00" : "Singapore, unfolding",
+      manifest: zh ? "\u666f\u70b9\u3001\u504f\u597d\u3001\u8def\u7ebf\u4e0e\u9884\u7b97\uff0c\u7ec8\u4e8e\u5728\u540c\u4e00\u6bb5\u65c5\u7a0b\u91cc\u76f8\u9047\u3002" : "Places, preferences, route and budget, held in one calm journey.",
+    },
+    stories: {
+      eyebrow: zh ? "\u5728\u57ce\u5e02\u7684\u4e0d\u540c\u7ae0\u8282\u505c\u7559" : "Pause in the city's many chapters",
+      title: zh ? "\u4e00\u5ea7\u57ce\u5e02\uff0c\u4e0d\u6b62\u4e00\u79cd\u62b5\u8fbe\u65b9\u5f0f\u3002" : "One city, more than one way to arrive.",
+      body: zh ? "\u4ece\u6d77\u6e7e\u7684\u5efa\u7b51\u8f6e\u5ed3\uff0c\u5230\u8857\u533a\u91cc\u7684\u9999\u6c14\u4e0e\u8272\u5f69\u3002\u5148\u53d1\u73b0\u5438\u5f15\u4f60\u7684\u5730\u65b9\uff0c\u518d\u628a\u5b83\u4eec\u6574\u7406\u6210\u5408\u7406\u7684\u65c5\u884c\u8282\u594f\u3002" : "From the bay's architecture to the colour and flavour of its neighbourhoods. Begin with the places that draw you in, then shape them into a considered rhythm.",
+      action: zh ? "\u63a2\u7d22\u65b0\u52a0\u5761\u666f\u70b9" : "Explore Singapore attractions",
+    },
+    journey: {
+      eyebrow: zh ? "\u4e00\u6bb5\u65c5\u7a0b\uff0c\u6e05\u695a\u53ef\u89c1" : "A journey, made visible",
+      title: zh ? "\u4ece\u7075\u611f\u51fa\u53d1\uff0c\u8ba9\u8def\u7ebf\u6162\u6162\u6210\u5f62\u3002" : "From a spark of interest to a route with shape.",
+      body: zh ? "\u6eda\u52a8\u6d4f\u89c8\u8fd9\u6761\u793a\u610f\u8def\u7ebf\uff0c\u611f\u53d7 Nuogo \u5982\u4f55\u628a\u4f60\u7684\u504f\u597d\u3001\u666f\u70b9\u4e0e\u9884\u7b97\u7ea6\u675f\u8fde\u63a5\u4e3a\u4e00\u4efd\u53ef\u5ba1\u9605\u7684\u884c\u7a0b\u3002" : "Follow this illustrated route to see how Nuogo connects preferences, places and budget constraints into an itinerary you can review.",
+      legend: zh ? "\u65b0\u52a0\u5761\u57ce\u5e02\u6f2b\u6e38\u8def\u7ebf" : "Singapore city journey",
+    },
+    workflow: {
+      eyebrow: zh ? "Nuogo \u5982\u4f55\u5de5\u4f5c" : "How Nuogo works",
+      title: zh ? "\u5c11\u4e00\u70b9\u5206\u6563\uff0c\u591a\u4e00\u70b9\u7b03\u5b9a\u3002" : "Less scattered planning. More confident travel.",
+      body: zh ? "\u6bcf\u4e00\u6b65\u90fd\u670d\u52a1\u4e8e\u4e00\u4efd\u884c\u7a0b\uff1a\u4fdd\u7559\u4f60\u7684\u9009\u62e9\uff0c\u4e5f\u8ba4\u771f\u68c0\u67e5\u65f6\u95f4\u3001\u8def\u7ebf\u4e0e\u603b\u9884\u7b97\u3002" : "Each step serves one itinerary: your choices are respected while time, route and total budget are checked with care.",
+    },
+    final: {
+      eyebrow: zh ? "\u5f00\u59cb\u4f60\u7684\u65b0\u52a0\u5761\u884c\u7a0b" : "Begin your Singapore itinerary",
+      title: zh ? "\u4e0b\u4e00\u6bb5\u57ce\u5e02\u8bb0\u5fc6\uff0c\u4ece\u4e00\u4e2a\u9009\u62e9\u5f00\u59cb\u3002" : "Your next city memory starts with one choice.",
+      body: zh ? "\u8fdb\u5165\u771f\u5b9e\u7684\u666f\u70b9\u53d1\u73b0\u4e0e\u65c5\u884c\u504f\u597d\u6d41\u7a0b\uff0c\u751f\u6210\u5c5e\u4e8e\u4f60\u7684\u65b0\u52a0\u5761\u884c\u7a0b\u3002" : "Enter the live discovery and preference flow to create your Singapore itinerary.",
+      action: zh ? "\u5f00\u59cb\u89c4\u5212" : "Start Planning",
+    },
+  };
+}
 
 export default function LandingPage() {
   const { language } = useLanguage();
-  const zh = language === "zh";
-  const index = zh ? 1 : 0;
-  const localizedStops = journeyStops.map((stop) => ({ ...stop, label: stop.label[index], meta: stop.meta[index] }));
-  const { scope } = useGsapContext(({ gsap, ScrollTrigger }) => {
-    gsap.fromTo("[data-flight-intro]", {
-      y: 32,
-      opacity: 0,
-      clipPath: "inset(0 0 22% 0)"
-    }, {
-      y: 0,
-      opacity: 1,
-      clipPath: "inset(0 0 0% 0)",
-      duration: 1,
-      stagger: 0.09,
-      ease: "expo.out"
-    });
-
-    const media = gsap.matchMedia();
-    if (ScrollTrigger) {
-      media.add("(min-width: 900px)", () => {
-        gsap.to(".strategy-track", {
-          xPercent: -66.666,
-          ease: "none",
-          scrollTrigger: {
-            trigger: ".strategy-stage",
-            start: "top top",
-            end: "+=2200",
-            pin: true,
-            scrub: 0.85,
-            anticipatePin: 1
-          }
-        });
-      });
-    }
-
-    return () => media.revert();
+  const t = content(language);
+  const { scope: rootRef } = useGsapContext(({ gsap, ScrollTrigger }) => {
+    if (!ScrollTrigger) return undefined;
+    const context = gsap.context(() => {
+      gsap.from(".atlas-hero__content > *, .atlas-hero__manifest", { y: 20, opacity: 0, duration: 0.72, stagger: 0.09, ease: "power3.out" });
+      gsap.to(".atlas-hero__photo", { yPercent: 8, ease: "none", scrollTrigger: { trigger: ".atlas-hero", start: "top top", end: "bottom top", scrub: true } });
+    }, rootRef);
+    return () => context.revert();
   }, []);
 
-  return (
-    <AppShell dark>
-      <div ref={scope} className="flight-atlas">
-        <section className="flight-hero">
-          <div className="flight-hero-media" aria-hidden="true">
-            <img src="/images/china-journey-hero.png" alt="" />
-          </div>
-
-          <div className="flight-hero-inner">
-            <div className="flight-hero-copy">
-              <div data-flight-intro className="flight-edition">
-                <span>{zh ? "中国旅程图谱" : "China journey atlas"}</span>
-                <span>{zh ? "一条连贯路线" : "One connected route"}</span>
-              </div>
-              <p data-flight-intro className="flight-kicker">{zh ? "AI 辅助 · 来源可追溯 · 预算有约束" : "AI-assisted. Source-aware. Budget-bound."}</p>
-              <h1 data-flight-intro>{zh ? "规划完整旅程，" : "Plan the whole journey,"}<br /><span>{zh ? "而不只是目的地。" : "not just the destination."}</span></h1>
-              <p data-flight-intro className="flight-hero-lede">
-                {zh ? "Nuogo 将一份旅行需求转化为三套有资料依据的中国旅行方案，从出发一直规划到返程。" : "Nuogo turns one travel brief into three grounded ways to move through China, from your origin to your return."}
-              </p>
-              <div data-flight-intro className="flight-actions">
-                <Link to="/planner" className="flight-primary-action">
-                  {zh ? "开始规划" : "Start planning"} <ArrowRight aria-hidden="true" />
-                </Link>
-                <a href="#journey-map" className="flight-secondary-action">
-                  {zh ? "查看路线" : "Follow the route"} <ArrowDown aria-hidden="true" />
-                </a>
-              </div>
-            </div>
-
-            <div data-flight-intro className="flight-manifest">
-              <div className="flight-manifest-head">
-                <span>{zh ? "路线预览" : "Route preview"}</span>
-                <span className="flight-status"><i /> {zh ? "规划模型" : "Planning model"}</span>
-              </div>
-              <RouteConstellation stops={localizedStops} ariaLabel={zh ? "旅程路线" : "Journey route"} />
-            </div>
-          </div>
-
-          <a href="#journey-map" className="flight-scroll-cue" aria-label={zh ? "滚动查看行程地图" : "Scroll to journey map"}>
-            <span>{zh ? "向下滚动，沿路线前行" : "Scroll to trace the journey"}</span>
-            <ArrowDown aria-hidden="true" />
-          </a>
-        </section>
-
-        <ScrollJourneyMap />
-
-        <section id="approaches" className="strategy-stage">
-          <div className="strategy-track">
-            {strategies.map((strategy, index) => (
-              <article
-                key={strategy.name}
-                className={`strategy-panel strategy-${strategy.tone}`}
-                style={{ "--strategy-position": strategy.position }}
-              >
-                <div className="strategy-panel-inner">
-                  <div className="strategy-heading">
-                    <span className="strategy-code">{strategy.code}</span>
-                    <p>{zh ? `方案 ${index + 1} / 3` : `Approach ${index + 1} of 3`} <em>{strategy.location[zh ? 1 : 0]}</em></p>
-                  </div>
-                  <h2>{strategy.name[zh ? 1 : 0]}</h2>
-                  <p className="strategy-promise">{strategy.promise[zh ? 1 : 0]}</p>
-                  <ul>
-                    {strategy.choices.map((choice) => (
-                      <li key={choice[0]}><Check aria-hidden="true" /> {choice[zh ? 1 : 0]}</li>
-                    ))}
-                  </ul>
-                  <div className="strategy-budget-rule">
-                    <ShieldCheck aria-hidden="true" />
-                    <span><b>{zh ? "相同总预算" : "Same total budget"}</b>{zh ? "每套方案都必须遵守的硬约束" : "Hard constraint for every approach"}</span>
-                  </div>
-                </div>
-                <div className="strategy-route-mark" aria-hidden="true">
-                  <span>{index + 1}</span>
-                  <Route />
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="source-boundary-section">
-          <div className="source-boundary-intro">
-            <p className="flight-kicker">{zh ? "了解每条信息的来源" : "Know where every answer comes from"}</p>
-            <h2>{zh ? "旅行信息应该附带来源，而不是看似自信的猜测。" : "Travel information should arrive with a source, not a confident guess."}</h2>
-            <p>
-              {zh ? "Nuogo 将事实、建议与估算清楚区分，让你知道系统掌握了什么，又计算了什么。" : "Nuogo separates facts, suggestions, and estimates so you can understand what the system knows and what it has calculated."}
-            </p>
-          </div>
-          <div className="source-boundary-list">
-            {sourceBoundaries.map(({ icon: Icon, label, value, note }) => (
-              <article key={label[0]} className="source-boundary-row">
-                <Icon aria-hidden="true" />
-                <span>{label[zh ? 1 : 0]}</span>
-                <strong>{value[zh ? 1 : 0]}</strong>
-                <p>{note[zh ? 1 : 0]}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="journey-close">
-          <div>
-            <p>{zh ? "准备好你的条件，就可以开始。" : "Ready when your constraints are."}</p>
-            <h2>{zh ? "选择日期，设定预算，查看三种旅行方式。" : "Choose the dates. Set the budget. See three ways forward."}</h2>
-          </div>
-          <Link to="/planner" className="journey-close-action">
-            {zh ? "创建我的行程" : "Build my trip"} <ArrowRight aria-hidden="true" />
-          </Link>
-        </section>
-      </div>
-    </AppShell>
-  );
+  return <AppShell dark><main className="nuogo-landing nuogo-landing--atlas" ref={rootRef}>
+    <HeroSection copy={t.hero} />
+    <div className="landing-story-reveal"><AttractionStorySection copy={t.stories} zh={t.zh} /></div>
+    <div className="landing-story-reveal"><JourneyMapSection copy={t.journey} /></div>
+    <div className="landing-story-reveal"><WorkflowSection copy={t.workflow} zh={t.zh} /></div>
+    <div className="landing-story-reveal"><FinalCTASection copy={t.final} /></div>
+  </main></AppShell>;
 }

@@ -1,136 +1,39 @@
 import { CostReferenceError } from "./costReferenceService.js";
-import { calculateDrivingCost } from "./fuelCalculator.js";
 import { getSpendingProfile } from "./spendingProfiles.js";
+import { buildProfileBudgetContext, summarizeProfileSpend } from "./profileBudget.js";
 
-const requiredReferences = [
-  "accommodationRoomNightFen",
-  "foodPersonMealFen",
-  "attractionPersonEntryFen",
-  "entertainmentPersonEntryFen",
-  "otherTripFen",
-  "fuelLitreFen",
-  "parkingDayFen"
-];
+const ref = (references, category, tier = null) => {
+  const value = references.find((item) => item.category === category && (item.tier ?? null) === tier);
+  if (!value) throw new CostReferenceError("Budget calculation is missing a selected cost reference.", { reference: `${category}:${tier ?? "GENERIC"}` });
+  return value;
+};
+const activityCount = (itinerary, types) => (itinerary.days ?? []).flatMap((day) => day.activities ?? []).filter((activity) => types.has(activity.activityType)).length;
 
-function cnyToFen(value, label) {
-  const number = Number(value);
-  if (!Number.isFinite(number) || number < 0) throw new TypeError(`${label} must be a nonnegative CNY amount.`);
-  return Math.round(number * 100);
-}
-
-function integer(value, label) {
-  const number = Number(value);
-  if (!Number.isInteger(number) || number < 0) throw new TypeError(`${label} must be a nonnegative integer.`);
-  return number;
-}
-
-function ensureReferences(references) {
-  const missing = requiredReferences.filter((key) => !Number.isInteger(references?.[key]) || references[key] < 0);
-  if (missing.length) throw new CostReferenceError("Budget calculation is missing cost references.", { keys: missing });
-}
-
-function allocateBudget(budgetFen, percentages) {
-  const allocations = Object.fromEntries(
-    Object.entries(percentages).map(([category, percent]) => [category, Math.floor(budgetFen * percent / 100)])
-  );
-  const allocated = Object.values(allocations).reduce((sum, value) => sum + value, 0);
-  allocations.other += budgetFen - allocated;
-  return allocations;
-}
-
-function countActivities(itinerary, types) {
-  return (itinerary.days ?? []).reduce((count, day) => count +
-    (day.activities ?? []).filter(({ activityType }) => types.has(activityType)).length, 0);
-}
-
-function applyFactor(amountFen, factorPercent) {
-  return Math.round(amountFen * factorPercent / 100);
-}
-
-function tripTransportFen(direction, preferences, itinerary, references) {
-  const fixedCost = preferences[`${direction}TransportCostCny`];
-  if (fixedCost !== undefined) return cnyToFen(fixedCost, `${direction}TransportCostCny`);
-  if (preferences[`${direction}TransportMode`] !== "DRIVING" || !itinerary[`${direction}Driving`]) {
-    throw new TypeError(`${direction} transport requires a user cost or driving details.`);
-  }
-  const driving = itinerary[`${direction}Driving`];
-  return calculateDrivingCost({
-    distanceKm: driving.distanceKm,
-    fuelConsumptionLitresPer100Km: preferences.fuelConsumptionLitresPer100Km,
-    fuelPricePerLitre: references.fuelLitreFen / 100,
-    tollCny: driving.tollCny,
-    parkingCny: driving.parkingCny
-  }).totalFen;
-}
-
-export function validateHardBudget(summary, totalBudgetCny) {
-  const budgetFen = cnyToFen(totalBudgetCny, "totalBudgetCny");
-  const remainingFen = budgetFen - summary.totalFen;
-  if (remainingFen >= 0) {
-    return { valid: true, code: null, totalFen: summary.totalFen, budgetFen, exceededByFen: 0, remainingFen };
-  }
-  return {
-    valid: false,
-    code: "BUDGET_EXCEEDED",
-    totalFen: summary.totalFen,
-    budgetFen,
-    exceededByFen: Math.abs(remainingFen),
-    remainingFen
-  };
+export function validateHardBudget(summary, budgetMinor) {
+  const remainingMinor = Number(budgetMinor) - summary.totalMinor;
+  return { valid: remainingMinor >= 0, code: remainingMinor >= 0 ? null : "BUDGET_EXCEEDED", totalMinor: summary.totalMinor, budgetMinor: Number(budgetMinor), exceededByMinor: Math.max(0, -remainingMinor), remainingMinor };
 }
 
 export function calculateItineraryBudget({ preferences, itinerary, references, profile }) {
-  ensureReferences(references);
-  const travellerCount = integer(preferences.travellerCount, "travellerCount");
-  if (travellerCount < 1) throw new TypeError("travellerCount must be at least one.");
-  const nights = integer(itinerary.nights, "nights");
-  const rooms = integer(itinerary.rooms, "rooms");
-  const mealCount = integer(itinerary.mealCount, "mealCount");
-  const legsFen = (itinerary.days ?? []).flatMap((day) => day.legs ?? [])
-    .reduce((sum, leg) => sum + integer(leg.estimatedCostFen, "leg estimatedCostFen"), 0);
-  const attractionCount = countActivities(itinerary, new Set(["CULTURE", "HISTORY", "NATURE", "FAMILY"]));
-  const entertainmentCount = countActivities(itinerary, new Set(["ENTERTAINMENT"]));
-  const localDriving = itinerary.localDriving
-    ? calculateDrivingCost({
-      distanceKm: itinerary.localDriving.distanceKm,
-      fuelConsumptionLitresPer100Km: preferences.fuelConsumptionLitresPer100Km,
-      fuelPricePerLitre: references.fuelLitreFen / 100,
-      tollCny: itinerary.localDriving.tollCny,
-      parkingCny: references.parkingDayFen / 100 * integer(itinerary.localDriving.parkingDays, "parkingDays")
-    }).totalFen
-    : 0;
-
-  const categoriesFen = {
-    outboundTransport: tripTransportFen("outbound", preferences, itinerary, references),
-    returnTransport: tripTransportFen("return", preferences, itinerary, references),
-    accommodation: applyFactor(
-      references.accommodationRoomNightFen * rooms * nights,
-      getSpendingProfile(profile).accommodationFactorPercent
-    ),
-    localTransportation: legsFen + localDriving,
-    foodAndBeverages: applyFactor(
-      references.foodPersonMealFen * mealCount * travellerCount,
-      getSpendingProfile(profile).foodFactorPercent
-    ),
-    attractionTickets: references.attractionPersonEntryFen * attractionCount * travellerCount,
-    entertainmentActivities: references.entertainmentPersonEntryFen * entertainmentCount * travellerCount,
-    other: references.otherTripFen
+  const style = getSpendingProfile(profile);
+  const context = buildProfileBudgetContext(preferences, references);
+  const { travellers, days, nights, rooms } = context.dimensions;
+  const selected = {
+    accommodation: ref(references, "ACCOMMODATION_ROOM_NIGHT", style.accommodationTier),
+    localTransportation: ref(references, "LOCAL_TRANSPORT_PERSON_DAY", style.localTransportationTier),
+    foodAndBeverages: ref(references, "FOOD_PERSON_DAY", style.foodTier),
+    attractionTickets: ref(references, "ATTRACTION_PERSON_ENTRY"),
+    entertainmentActivities: ref(references, "ENTERTAINMENT_PERSON_ENTRY"),
+    other: ref(references, "MISCELLANEOUS_PERSON_DAY", style.miscellaneousTier)
   };
-  const totalFen = Object.values(categoriesFen).reduce((sum, value) => sum + value, 0);
-  const budgetFen = cnyToFen(preferences.totalBudgetCny, "totalBudgetCny");
-  const remainingFen = budgetFen - totalFen;
-  const profileDefinition = getSpendingProfile(profile);
-  return {
-    profile,
-    accommodationTier: profileDefinition.accommodationTier,
-    foodTier: profileDefinition.foodTier,
-    categoriesFen,
-    targetAllocationsFen: allocateBudget(budgetFen, profileDefinition.allocationsPercent),
-    totalFen,
-    budgetFen,
-    remainingFen,
-    perPersonFen: Math.round(totalFen / travellerCount),
-    withinBudget: remainingFen >= 0,
-    provenance: references.provenance ?? {}
+  const categoriesMinor = {
+    accommodation: selected.accommodation.representativeMinor * rooms * nights,
+    localTransportation: selected.localTransportation.representativeMinor * travellers * days,
+    foodAndBeverages: selected.foodAndBeverages.representativeMinor * travellers * days,
+    attractionTickets: selected.attractionTickets.representativeMinor * activityCount(itinerary, new Set(["CULTURE", "HISTORY", "NATURE", "FAMILY"])) * travellers,
+    entertainmentActivities: selected.entertainmentActivities.representativeMinor * activityCount(itinerary, new Set(["ENTERTAINMENT"])) * travellers,
+    other: selected.other.representativeMinor * travellers * days
   };
+  const summary = summarizeProfileSpend({ budgetContext: context, categoriesMinor });
+  return { profile, accommodationTier: style.accommodationTier, localTransportationTier: style.localTransportationTier, foodTier: style.foodTier, miscellaneousTier: style.miscellaneousTier, ...summary, budgetMinor: context.userBudgetMinor, perPersonMinor: Math.round(summary.totalMinor / travellers), provenance: selected };
 }

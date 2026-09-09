@@ -1,5 +1,6 @@
 import { itineraryDraftSchema } from "@nuogo/shared/schemas";
 import { AppError } from "../../errors.js";
+import { validateDraftStructure } from "./validateDraftStructure.js";
 
 function jsonCandidate(raw) {
   const trimmed = raw.trim();
@@ -17,6 +18,34 @@ export class DraftBoundaryError extends AppError {
   }
 }
 
+const attractionTypes = new Set([
+  "CULTURE", "HISTORY", "NATURE", "SHOPPING", "ENTERTAINMENT", "FAMILY"
+]);
+
+function validateAttractionXids(draft, allowedCandidateIds) {
+  const activities = Array.isArray(draft?.days)
+    ? draft.days.flatMap((day) => Array.isArray(day?.activities) ? day.activities : [])
+    : [];
+  const missing = activities.find((activity) =>
+    attractionTypes.has(activity?.activityType) && !activity?.xid);
+  if (missing) {
+    throw new DraftBoundaryError("AI itinerary attraction is missing an xid.", {
+      code: "MISSING_ATTRACTION_XID"
+    });
+  }
+  const allowed = new Set(allowedCandidateIds);
+  const unknown = [...new Set(activities
+    .filter((activity) => attractionTypes.has(activity?.activityType))
+    .map(({ xid }) => xid)
+    .filter((xid) => !allowed.has(xid)))];
+  if (unknown.length) {
+    throw new DraftBoundaryError("AI itinerary draft contains unknown attraction xids.", {
+      code: "UNKNOWN_ATTRACTION_XID",
+      details: { xids: unknown }
+    });
+  }
+}
+
 export function parseDraft(raw, allowedCandidateIds) {
   if (typeof raw !== "string" || !raw.trim()) throw new DraftBoundaryError("AI itinerary draft is empty.");
   let parsedJson;
@@ -25,22 +54,28 @@ export function parseDraft(raw, allowedCandidateIds) {
   } catch (cause) {
     throw new DraftBoundaryError("AI itinerary draft is not valid JSON.", { details: cause.message });
   }
+  validateAttractionXids(parsedJson, allowedCandidateIds);
+  const structure = validateDraftStructure(parsedJson);
+  if (!structure.valid) {
+    throw new DraftBoundaryError("AI itinerary draft does not match the required JSON Schema.", {
+      details: structure.errors
+    });
+  }
   const parsed = itineraryDraftSchema.safeParse(parsedJson);
   if (!parsed.success) {
     throw new DraftBoundaryError("AI itinerary draft does not match the required schema.", {
       details: parsed.error.issues
     });
   }
-  const allowed = new Set(allowedCandidateIds);
   const referencedIds = parsed.data.days.flatMap((day) => [
-    ...day.activities.map(({ poiId }) => poiId),
     ...(day.startPoint.locationType === "POI" ? [day.startPoint.locationId] : []),
     ...(day.endPoint.locationType === "POI" ? [day.endPoint.locationId] : [])
   ]);
+  const allowed = new Set(allowedCandidateIds);
   const unknown = [...new Set(referencedIds.filter((id) => !allowed.has(id)))];
   if (unknown.length) {
     throw new DraftBoundaryError("AI itinerary draft contains unknown POI IDs.", {
-      code: "UNKNOWN_POI",
+      code: "UNKNOWN_ATTRACTION_XID",
       details: { ids: unknown }
     });
   }

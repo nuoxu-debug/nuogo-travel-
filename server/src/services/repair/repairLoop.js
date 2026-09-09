@@ -1,11 +1,20 @@
 import { deterministicRepair } from "./deterministicRepair.js";
 
-export async function repairUntilValid(context, { maxAttempts = 3 } = {}) {
-  const attemptLimit = Math.max(1, Math.min(3, Math.trunc(maxAttempts) || 3));
+export async function repairUntilValid(context, { maxAttempts = 2 } = {}) {
+  const attemptLimit = Math.max(1, Math.min(2, Math.trunc(maxAttempts) || 2));
   let itinerary = context.itinerary;
   let validation = { valid: false, issues: [] };
   let summary;
   let attempts = 0;
+  const repairs = [];
+  const finish = (state) => ({
+    state,
+    itinerary,
+    summary,
+    validation,
+    attempts,
+    repairs: repairs.map((repair) => ({ ...repair, finalState: state }))
+  });
 
   while (attempts < attemptLimit) {
     attempts += 1;
@@ -14,19 +23,28 @@ export async function repairUntilValid(context, { maxAttempts = 3 } = {}) {
     validation = evaluated.validation;
     summary = evaluated.summary ?? itinerary.budgetSummary;
     if (validation.valid) {
-      return { state: "FINAL_VALIDATED", itinerary, summary, validation, attempts };
+      return finish("FINAL_VALIDATED");
     }
-    if (attempts >= attemptLimit) break;
+    const issueCodes = [...new Set(validation.issues.map(({ code }) => code))];
+    if (attempts >= attemptLimit) {
+      repairs.push({ attempt: attempts, issueCodes, action: "ATTEMPT_LIMIT_REACHED" });
+      break;
+    }
 
     const repaired = deterministicRepair(itinerary, validation.issues, {
       candidatePool: context.candidatePool,
       preferences: context.preferences
     });
     if (repaired.changed) {
+      repairs.push({ attempt: attempts, issueCodes, action: "DETERMINISTIC_REPAIR" });
       itinerary = repaired.itinerary;
       continue;
     }
-    if (!context.semanticRepair) break;
+    if (!context.semanticRepair) {
+      repairs.push({ attempt: attempts, issueCodes, action: "NO_REPAIR_AVAILABLE" });
+      break;
+    }
+    repairs.push({ attempt: attempts, issueCodes, action: "AI_REPAIR" });
     itinerary = await context.semanticRepair({
       itinerary,
       issues: validation.issues,
@@ -35,5 +53,5 @@ export async function repairUntilValid(context, { maxAttempts = 3 } = {}) {
     });
   }
 
-  return { state: "FAILED", itinerary, summary, validation, attempts };
+  return finish("FAILED");
 }

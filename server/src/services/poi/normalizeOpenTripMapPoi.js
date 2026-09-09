@@ -23,7 +23,7 @@ export function normalizeOpenTripMapPoi(raw, { city, retrievedAt }) {
     name: String(raw.name ?? "").trim(),
     city,
     category: categoryFor(raw.kinds),
-    coordinates: { longitude: raw.point.lon, latitude: raw.point.lat },
+    coordinates: { longitude: raw.point.lon, latitude: raw.point.lat, coordinateSystem: "WGS84" },
     verificationStatus: "SUPPORTING_ONLY"
   };
 }

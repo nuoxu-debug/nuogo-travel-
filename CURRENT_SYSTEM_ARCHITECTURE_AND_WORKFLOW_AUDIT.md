@@ -1,5 +1,7 @@
 # Nuogo Current System Architecture and Workflow Audit
 
+> **SUPERSEDED HISTORICAL SNAPSHOT.** This pre-FINAL_UNIFIED audit no longer describes the active product workflow. Use `CURRENT_ARCHITECTURE.md` and the current implementation as repository authority.
+
 **Audit date:** 2026-08-21  
 **Audit type:** Read-only repository and runtime audit  
 **Evidence basis:** Current working tree, not only committed files or prior architecture documents

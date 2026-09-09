@@ -8,17 +8,12 @@ function accessError(message, code) {
 export async function getTripAccess(repository, tripId, userId) {
   const trip = await repository.getTrip(tripId);
   if (!trip) return undefined;
-
-  const candidate = await repository.getMember(tripId, userId);
-  const member = candidate?.userId === userId ? candidate : undefined;
   const isOwner = trip.ownerId === userId;
-  const role = isOwner ? "owner" : member?.status === "active" ? member.role : undefined;
 
   return {
     trip,
-    member,
-    role,
-    canEdit: role === "owner" || role === "editor",
+    role: isOwner ? "owner" : undefined,
+    canEdit: isOwner,
     isOwner
   };
 }
@@ -26,13 +21,12 @@ export async function getTripAccess(repository, tripId, userId) {
 export function requireTripRole(access, roles) {
   const role = access?.role;
   if (!role) {
-    throw accessError("An active trip membership is required.", "TRIP_MEMBER_REQUIRED");
+    throw accessError("Trip owner access is required.", "TRIP_OWNER_REQUIRED");
   }
 
   const allowedRoles = new Set(roles);
   const hasAccess = allowedRoles.has(role)
-    || (role === "owner" && (allowedRoles.has("editor") || allowedRoles.has("viewer")))
-    || (role === "editor" && allowedRoles.has("viewer"));
+    || (role === "owner" && (allowedRoles.has("editor") || allowedRoles.has("viewer")));
   if (hasAccess) return access;
 
   if (allowedRoles.has("editor")) {
@@ -41,5 +35,22 @@ export function requireTripRole(access, roles) {
   if (allowedRoles.has("owner")) {
     throw accessError("Trip owner access is required.", "TRIP_OWNER_REQUIRED");
   }
-  throw accessError("An active trip membership is required.", "TRIP_MEMBER_REQUIRED");
+  throw accessError("Trip owner access is required.", "TRIP_OWNER_REQUIRED");
 }
+
+export function createGuestClaim() {
+  const token = randomBytes(32).toString("base64url");
+  return { token, tokenHash: hashGuestClaimToken(token) };
+}
+
+export function hashGuestClaimToken(token) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+export function guestClaimMatches(expectedHash, token) {
+  if (typeof expectedHash !== "string" || typeof token !== "string") return false;
+  const actual = Buffer.from(hashGuestClaimToken(token), "hex");
+  const expected = Buffer.from(expectedHash, "hex");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";

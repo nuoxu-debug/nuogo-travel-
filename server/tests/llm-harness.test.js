@@ -7,13 +7,15 @@ import { parseDraft } from "../src/services/llm/parseDraft.js";
 
 const preferences = {
   origin: "Kuala Lumpur",
-  destination: "beijing",
+  destination: "singapore",
   startDate: "2026-10-10",
   endDate: "2026-10-10",
   travellerCount: 2,
-  totalBudgetCny: 8000,
+  budgetMinor: 8000,
   interests: ["history"],
   preferredSights: ["palaces"],
+  travelStyle: "BALANCED",
+  rainyDayBackupEnabled: false,
   accommodationPreference: "MID_RANGE",
   foodPreference: "LOCAL",
   localTransportPreference: "PUBLIC_TRANSIT",
@@ -32,38 +34,43 @@ const preferences = {
 };
 
 const candidatePool = {
-  city: "beijing",
-  candidateIds: ["candidate:beijing:B001", "candidate:beijing:B002"],
+  city: "singapore",
+  candidateIds: ["Q-B001", "Q-B002"],
   candidates: [
-    { candidateId: "candidate:beijing:B001", name: "Forbidden City", category: "ATTRACTION" },
-    { candidateId: "candidate:beijing:B002", name: "Temple of Heaven", category: "ATTRACTION" }
+    { candidateId: "Q-B001", xid: "Q-B001", name: "Forbidden City", category: "ATTRACTION" },
+    { candidateId: "Q-B002", xid: "Q-B002", name: "Temple of Heaven", category: "ATTRACTION" }
   ]
+};
+const profilePlan = {
+  allowedCandidateIds: ["Q-B002"],
+  selectedCandidateIds: ["Q-B002"],
+  profileGuidance: "Balance grounded sights and rest within the hard budget."
 };
 
 function draft(overrides = {}) {
   return {
-    variant: "BALANCED",
+    travelStyle: "BALANCED",
     trip: {
-      origin: "Kuala Lumpur",
-      destination: "beijing",
+      destination: "singapore",
       startDate: "2026-10-10",
       endDate: "2026-10-10",
       travellerCount: 2,
-      totalBudgetCny: 8000
+      budgetMinor: 8000,
+      currency: "SGD"
     },
     days: [{
       dayNumber: 1,
       date: "2026-10-10",
-      startPoint: { locationId: "origin", locationType: "ORIGIN" },
+      startPoint: { locationId: "hotel", locationType: "HOTEL" },
       activities: [{
         sequence: 1,
-        poiId: "candidate:beijing:B001",
+        xid: "Q-B001",
         activityType: "HISTORY",
         plannedStartTime: "09:00",
         plannedDurationMinutes: 120,
         reason: "A strong fit for the requested history interest."
       }],
-      endPoint: { locationId: "candidate:beijing:B001", locationType: "POI" }
+      endPoint: { locationId: "Q-B001", locationType: "POI" }
     }],
     ...overrides
   };
@@ -71,7 +78,7 @@ function draft(overrides = {}) {
 
 describe("fixed itinerary LLM boundary", () => {
   it("keeps malicious user text and personal account fields out of system instructions", () => {
-    const prompt = buildItineraryPrompt(preferences, "BALANCED", candidatePool);
+    const prompt = buildItineraryPrompt(preferences, candidatePool);
     const body = JSON.parse(prompt.user);
 
     expect(prompt.system).toContain("BALANCED");
@@ -83,7 +90,7 @@ describe("fixed itinerary LLM boundary", () => {
   });
 
   it("sends only ID-addressable candidate facts and no model-authored cost fields", () => {
-    const prompt = buildItineraryPrompt(preferences, "BUDGET_SAVING", candidatePool);
+    const prompt = buildItineraryPrompt({ ...preferences, travelStyle: "BUDGET_SAVING" }, candidatePool);
     const data = JSON.parse(prompt.user).UNTRUSTED_USER_DATA;
 
     expect(data.allowedCandidates).toEqual(candidatePool.candidates);
@@ -97,9 +104,9 @@ describe("fixed itinerary LLM boundary", () => {
       generateStructured: vi.fn().mockResolvedValue(JSON.stringify(draft()))
     };
 
-    const result = await planDraft({ preferences, profile: "BALANCED", candidatePool }, { provider });
+    const result = await planDraft({ preferences, candidatePool }, { provider });
 
-    expect(result.variant).toBe("BALANCED");
+    expect(result.travelStyle).toBe("BALANCED");
     expect(provider.generateStructured).toHaveBeenCalledWith(expect.objectContaining({
       jsonSchema: itineraryDraftJsonSchema,
       temperature: 0.2
@@ -108,9 +115,63 @@ describe("fixed itinerary LLM boundary", () => {
 
   it("rejects unknown candidate IDs even when the JSON matches the draft schema", () => {
     const unknown = draft();
-    unknown.days[0].activities[0].poiId = "candidate:beijing:UNKNOWN";
+    unknown.days[0].activities[0].xid = "Q-UNKNOWN";
     expect(() => parseDraft(JSON.stringify(unknown), candidatePool.candidateIds))
-      .toThrow(expect.objectContaining({ code: "UNKNOWN_POI" }));
+      .toThrow(expect.objectContaining({ code: "UNKNOWN_ATTRACTION_XID" }));
+  });
+
+  it("constrains drafting to the profile plan without exposing internal scoring", () => {
+    const data = JSON.parse(buildItineraryPrompt(preferences, profilePlan, candidatePool).user).UNTRUSTED_USER_DATA;
+    expect(data.allowedCandidateIds).toEqual(["Q-B002"]);
+    expect(data.allowedCandidates.map(({ candidateId }) => candidateId)).toEqual(["Q-B002"]);
+    expect(data.selectedCandidateIds).toEqual(["Q-B002"]);
+    expect(data.profileGuidance).toContain("hard budget");
+    expect(data).not.toHaveProperty("candidateScores");
+    expect(JSON.stringify(data)).not.toContain("profileWeights");
+  });
+
+  it("rejects a draft whose style differs from the selected travel style", async () => {
+    const provider = {
+      generateStructured: vi.fn().mockResolvedValue(JSON.stringify(draft({ travelStyle: "BUDGET_SAVING" })))
+    };
+
+    await expect(planDraft({ preferences, candidatePool }, { provider }))
+      .rejects.toMatchObject({ code: "DRAFT_CONTEXT_MISMATCH" });
+  });
+
+  it("rejects a named attraction without an xid", () => {
+    const missing = draft();
+    delete missing.days[0].activities[0].xid;
+    expect(() => parseDraft(JSON.stringify(missing), candidatePool.candidateIds))
+      .toThrow(expect.objectContaining({ code: "MISSING_ATTRACTION_XID" }));
+  });
+
+  it("accepts explicitly ungrounded generic entries without provider identity", () => {
+    const generic = draft();
+    generic.days[0].activities.push({
+      sequence: 2,
+      activityType: "MEAL",
+      sourceType: "AI_GENERATED",
+      plannedStartTime: "12:00",
+      plannedDurationMinutes: 60,
+      reason: "Meal break near the preceding attraction."
+    });
+
+    expect(parseDraft(JSON.stringify(generic), candidatePool.candidateIds).days[0].activities[1])
+      .toEqual(expect.objectContaining({ activityType: "MEAL", sourceType: "AI_GENERATED" }));
+  });
+
+  it("rejects structural draft errors through the Ajv boundary", () => {
+    const malformed = draft({ unexpected: true });
+    try {
+      parseDraft(JSON.stringify(malformed), candidatePool.candidateIds);
+      throw new Error("Expected parseDraft to reject malformed output.");
+    } catch (error) {
+      expect(error).toMatchObject({ code: "INVALID_ITINERARY_DRAFT" });
+      expect(error.details).toEqual(expect.arrayContaining([
+        expect.objectContaining({ keyword: "additionalProperties" })
+      ]));
+    }
   });
 
   it("gates strict OpenRouter response format by model capability", async () => {

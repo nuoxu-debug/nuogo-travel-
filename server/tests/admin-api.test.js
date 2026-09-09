@@ -21,11 +21,11 @@ async function register(app, repository, suffix, role = "user") {
 }
 
 const poi = {
-  id: "poi-beijing-palace",
-  destinationId: "beijing",
+  id: "poi-singapore-palace",
+  destinationId: "singapore",
   name: { en: "Palace Museum", zh: "故宫博物院" },
   category: "ATTRACTION",
-  coordinates: { latitude: 39.9163, longitude: 116.3972 },
+  coordinates: { latitude: 1.2903, longitude: 103.8514 },
   address: { en: "4 Jingshan Front Street", zh: "景山前街4号" },
   status: "ACTIVE",
   sources: [{
@@ -37,18 +37,18 @@ const poi = {
 };
 
 const costReference = {
-  id: "cost-beijing-food",
-  destinationId: "beijing",
-  category: "FOOD_PERSON_MEAL",
-  unit: "PERSON_MEAL",
-  amountFen: 3500,
-  source: {
-    provider: "ADMIN_RESEARCH",
-    sourceUrl: "https://example.edu/travel-costs",
-    retrievedAt: "2026-08-14T00:00:00.000Z"
-  },
-  effectiveFrom: "2026-08-01",
-  effectiveTo: "2026-12-31",
+  id: "cost-singapore-food",
+  city: "singapore",
+  category: "FOOD_PERSON_DAY",
+  tier: "BALANCED",
+  minMinor: 3000,
+  maxMinor: 4000,
+  representativeMinor: 3500,
+  currency: "SGD",
+  sourceName: "University travel survey",
+  sourceUrl: "https://example.edu/travel-costs",
+  collectedOn: "2026-08-14",
+  updatedAt: "2026-08-14T12:00:00.000Z",
   status: "ACTIVE"
 };
 
@@ -81,13 +81,13 @@ describe("administration API", () => {
     const listed = await request(app).get("/api/admin/destinations")
       .set("Authorization", `Bearer ${adminToken}`)
       .expect(200);
-    expect(listed.body.destinations.map(({ id }) => id)).toEqual(["beijing", "shanghai", "xian"]);
+    expect(listed.body.destinations.map(({ id }) => id)).toEqual(["singapore"]);
 
-    await request(app).patch("/api/admin/destinations/beijing")
+    await request(app).patch("/api/admin/destinations/singapore")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ status: "OUTDATED" })
-      .expect(200, { destination: { id: "beijing", status: "OUTDATED" } });
-    await request(app).patch("/api/admin/destinations/beijing")
+      .expect(200, { destination: { id: "singapore", status: "OUTDATED" } });
+    await request(app).patch("/api/admin/destinations/singapore")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ status: "deleted" })
       .expect(400);
@@ -98,7 +98,7 @@ describe("administration API", () => {
       .set("Authorization", `Bearer ${adminToken}`)
       .send(poi)
       .expect(200);
-    const listed = await request(app).get("/api/admin/pois?destinationId=beijing")
+    const listed = await request(app).get("/api/admin/pois?destinationId=singapore")
       .set("Authorization", `Bearer ${adminToken}`)
       .expect(200);
     expect(listed.body.pois).toEqual([poi]);
@@ -124,19 +124,19 @@ describe("administration API", () => {
       .expect(400);
   });
 
-  it("creates, lists, updates, and retires dated cost references", async () => {
+  it("creates, lists, updates, and retires evidenced cost references", async () => {
     await request(app).put(`/api/admin/cost-references/${costReference.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send(costReference)
       .expect(200);
-    const listed = await request(app).get("/api/admin/cost-references?destinationId=beijing")
+    const listed = await request(app).get("/api/admin/cost-references?city=singapore")
       .set("Authorization", `Bearer ${adminToken}`)
       .expect(200);
     expect(listed.body.costReferences).toEqual([costReference]);
 
     await request(app).put(`/api/admin/cost-references/${costReference.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
-      .send({ ...costReference, amountFen: 4200 })
+      .send({ ...costReference, maxMinor: 4500, representativeMinor: 4200 })
       .expect(200);
     const retired = await request(app).delete(`/api/admin/cost-references/${costReference.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
@@ -144,18 +144,58 @@ describe("administration API", () => {
     expect(retired.body.costReference.status).toBe("UNAVAILABLE");
   });
 
-  it("rejects invalid effective dates, statuses, and missing cost provenance", async () => {
+  it("accepts and returns null tiers for untiered cost references", async () => {
+    const untiered = {
+      ...costReference,
+      id: "cost-singapore-entry",
+      category: "ATTRACTION_PERSON_ENTRY",
+      tier: null,
+      sourceName: "  University entry survey  "
+    };
+    const persisted = { ...untiered, sourceName: "University entry survey" };
+    await request(app).put(`/api/admin/cost-references/${untiered.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(untiered)
+      .expect(200, { costReference: persisted });
+
+    const listed = await request(app).get("/api/admin/cost-references?city=singapore")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+    expect(listed.body.costReferences).toEqual([persisted]);
+  });
+
+  it("rejects incoherent ranges, tiers, statuses, and missing evidence", async () => {
     await request(app).put(`/api/admin/cost-references/${costReference.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
-      .send({ ...costReference, effectiveFrom: "2027-01-01", effectiveTo: "2026-01-01" })
+      .send({ ...costReference, representativeMinor: 5000 })
       .expect(400);
     await request(app).put(`/api/admin/cost-references/${costReference.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
-      .send({ ...costReference, source: undefined })
+      .send({ ...costReference, sourceUrl: undefined })
       .expect(400);
     await request(app).put(`/api/admin/cost-references/${costReference.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ ...costReference, status: "DRAFT" })
       .expect(400);
+    await request(app).put(`/api/admin/cost-references/${costReference.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ ...costReference, tier: "LUXURY" })
+      .expect(400);
+    await request(app).put(`/api/admin/cost-references/${costReference.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ ...costReference, amountFen: 3500 })
+      .expect(400);
+    await request(app).put(`/api/admin/cost-references/${costReference.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ ...costReference, sourceName: "   " })
+      .expect(400);
+  });
+
+  it("does not expose user, system-record, or separate provider-cache maintenance", async () => {
+    for (const path of ["/api/admin/users", "/api/admin/system-records", "/api/admin/provider-records?destinationId=singapore"]) {
+      await request(app).get(path)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .expect(404);
+    }
   });
 });

@@ -2,7 +2,7 @@
 
 ## Direction: Living Journey Atlas
 
-Nuogo is a living journey atlas: cinematic China travel imagery introduces the experience, then a pinned Three.js terrain draws the user's route as they scroll. Bright, precise travel instruments follow for planning and comparison. The route is described with generic stops until real itinerary data supplies place names.
+Nuogo is a living journey atlas: bright Singapore travel imagery introduces the experience, then a pinned Three.js terrain draws the user's route as they scroll. Precise travel instruments follow for planning and the generated itinerary workspace. The route is described with generic stops until real itinerary data supplies place names.
 
 ## Direction Contract
 
@@ -10,11 +10,11 @@ Nuogo is a living journey atlas: cinematic China travel imagery introduces the e
 
 **OWN-WORLD:** Volcanic black and cloud white form the ground; signal coral plots the active route, jade confirms sourced data, and electric blue identifies system calculations. Surfaces use map contours, route ticks, and compact flight-status typography rather than decorative glass cards.
 
-**STORY:** See the route, define constraints, compare three budget-safe approaches, then shape one validated trip.
+**STORY:** See the route, define constraints, choose one Travel Style, then shape one validated trip.
 
-**FIRST VIEWPORT:** A full-bleed China journey photograph owns the background. The left carries one clear promise and primary action; a compact generic route manifest anchors the lower edge. The next section remains visible below the fold.
+**FIRST VIEWPORT:** A full-bleed Singapore waterfront photograph owns the background. The left carries one clear promise and primary action; a compact generic route manifest anchors the lower edge. The next section remains visible below the fold.
 
-**FORM:** A photographic travel editorial joined to a route observatory. Scrolling pins the topographic map, draws a coral journey line, moves the travel marker, activates stops, and then transitions into three itinerary approaches. Concept seed `4b42ee56`.
+**FORM:** A photographic travel editorial joined to a route observatory. Scrolling pins the topographic map, draws a coral journey line, moves the travel marker, activates stops, and then transitions into the planning flow. Concept seed `4b42ee56`.
 
 ## Palette
 
@@ -63,9 +63,9 @@ The palette is full but role-bound. Purple, beige, and dark-blue monochrome are 
 
 ## Surface Rules
 
-- Landing: photographic cover, route manifest, animated journey map, three spending strategies, information provenance, then a direct planning close.
+- Landing: photographic cover, route manifest, animated Singapore journey map, three pre-generation Travel Style descriptions, information provenance, then a direct planning close.
 - Planner: progressive travel brief with a persistent whole-trip budget summary and visible privacy consent.
-- Comparison: three equal strategy tracks with identical information architecture and distinct allocation signals.
+- Workspace: one validated itinerary with route, budget, provenance, selected-attraction outcomes, and optional inactive rainy-day contingencies.
 - Workspace: a compact route console showing start point, trip leg, activity, next leg, and end point without excessive scrolling.
 - Archive/admin/auth: quiet operational layouts using the same status and provenance language.
 
@@ -73,13 +73,13 @@ The palette is full but role-bound. Purple, beige, and dark-blue monochrome are 
 
 - WCAG 2.1 AA contrast for text and controls.
 - Complete keyboard navigation, visible focus, semantic headings, and non-color status labels.
-- Text remains valid in English and Simplified Chinese, but English is the default presentation.
+- Text remains valid in Simplified Chinese and English; Chinese is the default presentation.
 - Mobile keeps the route marker within the viewport, avoids horizontal overflow, and retains the reduced-motion fallback.
 - Generated visual assets are presentation-only; operational places, prices, and routes continue to use provider and system data.
 
 ## Verification Record
 
-Verified on 2026-08-14 against desktop Chromium at `1440x900` and mobile Chromium using the Pixel 7 profile.
+The original visual checks were recorded on 2026-08-14. The Singapore migration was freshly verified on 2026-09-04 at desktop Chromium `1440x900` and the Pixel 7 profile.
 
 - WebGL pixel sampling confirmed a nonblank, varied scene and a changed frame after scroll progress.
 - The renderer reports a capped device pixel ratio, uses one canvas, and removes it on route navigation.
@@ -87,7 +87,7 @@ Verified on 2026-08-14 against desktop Chromium at `1440x900` and mobile Chromiu
 - The landing and planner routes produced no browser console errors during the final Playwright run.
 - Screenshots: `.artifacts/desktop-chromium-living-atlas-midpoint.png` and `.artifacts/mobile-chromium-living-atlas-midpoint.png`.
 - Impeccable detector: zero reported findings for `client/src`.
-- Regression evidence: 404 repository tests passed; Playwright reported 17 passed and one intentional mobile skip.
-- Production output: main JavaScript `723.04 kB` (`231.69 kB` gzip), lazy Living Atlas chunk `529.46 kB` (`134.64 kB` gzip), and CSS `76.43 kB` (`19.37 kB` gzip).
+- Current automated regression evidence: 346 shared/server/client tests passed; Playwright passed 14 checks with four intentional project-scoped skips. Screenshots are in `.artifacts/desktop-chromium-singapore-landing.png`, `.artifacts/desktop-chromium-singapore-workspace.png`, `.artifacts/mobile-chromium-singapore-landing.png`, and `.artifacts/mobile-chromium-singapore-workspace.png`.
+- Production output verified 2026-09-04: main JavaScript `670.79 kB` (`216.72 kB` gzip), lazy Living Atlas chunk `529.46 kB` (`134.64 kB` gzip), and CSS `77.53 kB` (`19.72 kB` gzip).
 
 The Vite 500 kB chunk warning remains accepted for this visual checkpoint. Bundle optimization is intentionally deferred to the dedicated performance phase so this design pass does not alter application boundaries.

@@ -31,3 +31,13 @@ export function screenPromptInput(preferences) {
     fields
   };
 }
+
+export function screenTravelPreferences(preferences) {
+  return screenPromptInput({
+    interests: preferences.interests,
+    preferredSights: preferences.preferredSights,
+    selectedAttractions: preferences.selectedAttractions,
+    activityPreferences: preferences.activityPreferences,
+    otherPreferences: preferences.otherPreferences
+  });
+}

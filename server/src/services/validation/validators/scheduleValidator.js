@@ -4,13 +4,62 @@ function minutes(value) {
   return hours * 60 + mins;
 }
 
-export function validateSchedule(preferences, itinerary) {
+function requestedDates(preferences) {
+  const start = new Date(`${preferences.startDate}T00:00:00.000Z`);
+  const end = new Date(`${preferences.endDate}T00:00:00.000Z`);
+  const dates = [];
+  for (const cursor = start; cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+    dates.push(cursor.toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
+function validateDateCoverage(preferences, itinerary) {
+  const expectedDates = requestedDates(preferences);
+  const actualDates = itinerary.days.map(({ date }) => date);
   const issues = [];
+  const firstIndexByDate = new Map();
+  actualDates.forEach((date, dayIndex) => {
+    if (firstIndexByDate.has(date)) {
+      issues.push({
+        code: "SCHEDULE_DATE_DUPLICATE",
+        path: ["days", dayIndex, "date"],
+        severity: "ERROR",
+        metadata: { date, firstDayIndex: firstIndexByDate.get(date) }
+      });
+    } else {
+      firstIndexByDate.set(date, dayIndex);
+    }
+    if (date !== expectedDates[dayIndex]) {
+      issues.push({
+        code: "SCHEDULE_DATE_ORDER_ERROR",
+        path: ["days", dayIndex, "date"],
+        severity: "ERROR",
+        metadata: { expectedDate: expectedDates[dayIndex], actualDate: date }
+      });
+    }
+  });
+  expectedDates.forEach((date) => {
+    if (!firstIndexByDate.has(date)) {
+      issues.push({
+        code: "SCHEDULE_DATE_MISSING",
+        path: ["days"],
+        severity: "ERROR",
+        metadata: { date }
+      });
+    }
+  });
+  return issues;
+}
+
+export function validateSchedule(preferences, itinerary) {
+  const issues = validateDateCoverage(preferences, itinerary);
   itinerary.days.forEach((day, dayIndex) => {
     if (day.date < preferences.startDate || day.date > preferences.endDate) {
       issues.push({ code: "DATE_RANGE_ERROR", path: ["days", dayIndex, "date"], severity: "ERROR", metadata: { date: day.date } });
     }
-    if (day.routeUnavailable || day.legs?.length !== day.activities.length + 1) {
+    const attractionCount = day.activities.filter(({ xid }) => xid).length;
+    if (day.routeUnavailable || day.legs?.length !== attractionCount + 1) {
       issues.push({ code: "ROUTE_UNAVAILABLE", path: ["days", dayIndex, "legs"], severity: "ERROR", metadata: day.routeUnavailable ?? {} });
     }
     day.activities.forEach((activity, activityIndex) => {
@@ -37,14 +86,5 @@ export function validateSchedule(preferences, itinerary) {
     }
   });
 
-  const first = itinerary.days[0]?.activities[0];
-  if (first && minutes(first.scheduledStartTime ?? first.plannedStartTime) < minutes(preferences.arrivalDateTime.slice(11, 16))) {
-    issues.push({ code: "ARRIVAL_CONSTRAINT_VIOLATION", path: ["days", 0, "activities", 0], severity: "ERROR", metadata: {} });
-  }
-  const lastDay = itinerary.days.at(-1);
-  const lastTime = minutes(lastDay?.endTime ?? lastDay?.activities.at(-1)?.scheduledEndTime);
-  if (lastTime !== undefined && lastTime > minutes(preferences.departureDateTime.slice(11, 16))) {
-    issues.push({ code: "DEPARTURE_CONSTRAINT_VIOLATION", path: ["days", itinerary.days.length - 1], severity: "ERROR", metadata: {} });
-  }
   return issues;
 }

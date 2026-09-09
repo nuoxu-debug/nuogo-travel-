@@ -2,43 +2,43 @@
 
 ## Product
 
-Nuogo is an LLM-assisted travel planner for a bounded China MVP covering Beijing, Shanghai, and Xi'an. It generates three grounded, constraint-aware itinerary alternatives and keeps each final estimate inside one user-supplied hard budget.
+Nuogo is an LLM-assisted travel planner for a bounded Singapore MVP. The traveller selects one Travel Style before generation, and Nuogo produces one grounded, constraint-aware itinerary inside the user-supplied hard SGD budget.
 
 ## Current Objectives
 
 1. Protect profile and travel data through validation, authentication, authorization, server-side keys, consent, safe logging, deletion controls, and prompt-injection screening.
-2. Generate Budget-Saving, Balanced, and Comfort-Focused itineraries from the same mandatory preferences and hard total budget.
-3. Ground destination information in provider records, using AMap as the primary China POI/routing source and OpenTripMap as a supporting tourism source, with provenance shown to the user.
+2. Generate one Budget-Saving, Balanced, or Comfort-Focused itinerary from mandatory preferences and a hard total budget.
+3. Ground Singapore destination information in OpenTripMap provider records, with deterministic Singapore fixtures available for demonstrations and provenance shown to the user.
 
 ## Primary Workflow
 
 1. Sign in or continue as a guest and provide consent.
-2. Enter origin, one supported destination, dates and times, travellers, hard budget, sights, interests, and travel preferences.
-3. Retrieve and normalize destination candidates, then generate three strategy-specific structured drafts.
-4. Route, schedule, calculate deterministic costs, validate, and repair each draft.
-5. Present only `FINAL_VALIDATED` alternatives with source labels, category costs, total, remaining budget, and per-person cost.
-6. Select an alternative and inspect its continuous daily sequence, map, travel legs, POI details, and data provenance.
+2. Use the fixed Singapore destination and enter dates, travellers, hard SGD budget, attractions, interests, and travel preferences.
+3. Retrieve and normalize destination candidates, then select one Travel Style and optionally request a rainy-day backup.
+4. Generate one structured draft, then route, schedule, calculate deterministic costs, validate, and repair it.
+5. Open the `FINAL_VALIDATED` itinerary directly in its workspace with source labels, category costs, total, remaining budget, and per-person cost.
+6. Inspect its continuous daily sequence, map, travel legs, POI details, data provenance, and any inactive grounded rainy-day contingency.
 
 ## Information Boundary
 
-- **User-provided:** dates, budget, party size, origin, preferences, and consent.
+- **User-provided:** dates, budget, party size, preferences, and consent.
 - **API-sourced:** POI identifiers, names, categories, coordinates, addresses, and retrieval metadata.
 - **Database-backed:** accounts, privacy consent, supported destinations, POIs, and cost references.
 - **AI-generated:** activity selection/order, explanation, and recommendation reason.
-- **System-estimated:** route duration/cost and all eight budget totals.
+- **System-estimated:** route duration/cost and six budget-category totals.
 
-Demo provider records are always labelled `DEMO`; they are not represented as live current information.
+Demo provider records are labelled `DEMO_FIXTURE`; they are not represented as live OpenTripMap or currently verified information.
 
 ## Assessed MVP Boundary
 
-The assessed MVP excludes human tour guides, booking, payments, live fares, weather, traffic, navigation, social-media/public bearer-link sharing, nationwide coverage, and advanced route optimisation. Historical Anhui ingestion, `GuidePanel`, and public-share code remain isolated legacy evidence and are disabled unless `ENABLE_LEGACY_FEATURES=true` and `VITE_ENABLE_LEGACY_FEATURES=true` are set deliberately.
+The assessed MVP excludes human tour guides, booking, payments, live fares, weather, traffic, navigation, social-media/public bearer-link sharing, nationwide coverage, and advanced route optimisation. Historical China/Anhui materials remain only as dated project evidence and do not define the current Singapore runtime.
 
 Authenticated trip membership and equal/flexible group expense splitting remain reusable project capabilities, but they are not used as evidence for the three current objectives.
 
 ## Design Commitments
 
 - Product name: Nuogo.
-- English is the assessed UI language; Simplified Chinese remains optional legacy-compatible localization.
+- Simplified Chinese is the default UI language; English is fully selectable and persistent.
 - The interface is responsive, keyboard accessible, and usable with reduced motion.
 - GSAP communicates route progression and state; Leaflet/OpenStreetMap provides the operational map.
 - Sources and estimates are labelled honestly. Nuogo does not claim bookings, live prices, or live navigation.

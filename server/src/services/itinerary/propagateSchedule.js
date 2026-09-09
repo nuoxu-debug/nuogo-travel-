@@ -10,10 +10,13 @@ function toTime(value) {
 }
 
 export function propagateSchedule(day, { dayStartTime = "08:00" } = {}) {
-  if (day.legs?.length !== day.activities.length + 1) return { ...day };
+  const attractionCount = day.activities.filter(({ xid }) => xid).length;
+  if (day.legs?.length !== attractionCount + 1) return { ...day };
   let cursor = toMinutes(dayStartTime);
-  const activities = day.activities.map((activity, index) => {
-    const earliestStart = cursor + day.legs[index].durationMinutes;
+  let legIndex = 0;
+  const activities = day.activities.map((activity) => {
+    const travelMinutes = activity.xid ? day.legs[legIndex++].durationMinutes : 0;
+    const earliestStart = cursor + travelMinutes;
     const plannedStart = toMinutes(activity.plannedStartTime);
     const scheduledStart = Math.max(plannedStart, earliestStart);
     const scheduledEnd = scheduledStart + activity.plannedDurationMinutes;
@@ -29,6 +32,6 @@ export function propagateSchedule(day, { dayStartTime = "08:00" } = {}) {
     ...day,
     activities,
     startTime: dayStartTime,
-    endTime: toTime(cursor + day.legs.at(-1).durationMinutes)
+    endTime: toTime(cursor + day.legs[legIndex].durationMinutes)
   };
 }

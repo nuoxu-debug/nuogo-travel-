@@ -1,18 +1,17 @@
 import { tripLegSchema } from "@nuogo/shared/schemas";
+import { estimateTravelLeg } from "../travel/estimateTravelTime.js";
 
 function pointSequence(day) {
   return [
     day.startPoint.locationId,
-    ...day.activities.map(({ poiId }) => poiId),
+    ...day.activities.flatMap(({ xid }) => xid ? [xid] : []),
     day.endPoint.locationId
   ];
 }
 
 export async function buildTripLegs(itinerary, {
   locations,
-  routeProvider,
-  mode,
-  routeCostResolver
+  mode
 }) {
   const days = [];
   for (const day of itinerary.days) {
@@ -29,28 +28,17 @@ export async function buildTripLegs(itinerary, {
         const resolvedMode = typeof mode === "function"
           ? mode({ day, legIndex: index, fromLocationId, toLocationId, from, to })
           : mode;
-        const route = await routeProvider.getRoute({
-          from,
-          to,
-          mode: resolvedMode,
-          city: itinerary.trip.destination
-        });
-        const durationMinutes = Math.ceil(Number(route.durationSeconds) / 60);
-        const estimatedCostFen = routeCostResolver(route, {
-          mode: resolvedMode,
-          fromLocationId,
-          toLocationId
-        });
+        const estimate = estimateTravelLeg({ from, to, mode: resolvedMode });
         const leg = tripLegSchema.parse({
-          id: `${itinerary.variant}:${day.dayNumber}:leg:${index + 1}`,
+          id: `${itinerary.travelStyle}:${day.dayNumber}:leg:${index + 1}`,
           fromLocationId,
           toLocationId,
           mode: resolvedMode,
-          distanceMeters: Math.round(Number(route.distanceMeters)),
-          durationMinutes,
-          estimatedCostFen,
-          routeSource: route.provider,
-          routeRetrievedAt: route.retrievedAt
+          distanceMeters: estimate.distanceMeters,
+          durationMinutes: estimate.durationMinutes,
+          estimatedCostMinor: estimate.estimatedCostMinor,
+          routeSource: "ESTIMATED",
+          sourceType: estimate.sourceType
         });
         legs.push(leg);
       } catch (error) {

@@ -5,29 +5,21 @@ import helmet from "helmet";
 import { ZodError } from "zod";
 import { createAuthMiddleware } from "./middleware/auth.js";
 import { createAuthRouter } from "./routes/auth.js";
-import { createActivitiesRouter } from "./routes/activities.js";
 import { createAdminRouter } from "./routes/admin.js";
-import { createAttractionMediaRouter } from "./routes/attractionMedia.js";
-import { createCollaborationRouter } from "./routes/collaboration.js";
-import { createExpensesRouter } from "./routes/expenses.js";
-import { createFavoritesRouter } from "./routes/favorites.js";
-import { createLegacyMetaRouter, createMetaRouter } from "./routes/meta.js";
-import { createMembersRouter } from "./routes/members.js";
+import { createMetaRouter } from "./routes/meta.js";
 import { createPrivacyRouter } from "./routes/privacy.js";
+import { createProfileRouter } from "./routes/profile.js";
 import { createTripsRouter } from "./routes/trips.js";
 import { AuthService } from "./services/authService.js";
 
 export function createApp({
   repository,
-  planProvider,
   objectivePlanner,
-  attractionCatalogue,
-  attractionMediaService,
+  discoverAttractions,
   config,
   logger = { error() {} }
 }) {
   const app = express();
-  const enableLegacyFeatures = config.enableLegacyFeatures ?? process.env.NODE_ENV === "test";
   const authenticate = createAuthMiddleware(config.jwtSecret, repository);
   const authService = new AuthService(repository, config.jwtSecret);
 
@@ -49,9 +41,6 @@ export function createApp({
       aiProvider: config.aiProvider
     });
   });
-  if (attractionMediaService) {
-    app.use("/api", createAttractionMediaRouter({ attractionMediaService }));
-  }
   app.use("/api/auth", createAuthRouter({
     authService,
     authenticate,
@@ -59,46 +48,18 @@ export function createApp({
   }));
   app.use("/api/admin", createAdminRouter({ repository, authenticate }));
   app.use("/api/meta", createMetaRouter({
-    authenticate,
     demoMode: config.demoMode,
-    aiProvider: config.aiProvider
-  }));
-  app.use("/api", createLegacyMetaRouter({
-    authenticate,
-    demoMode: config.demoMode,
-    aiProvider: config.aiProvider
+    aiProvider: config.aiProvider,
+    travelDataProvider: config.travelDataProvider,
+    discoverAttractions
   }));
   app.use("/api/trips", createTripsRouter({
     repository,
-    planProvider,
     objectivePlanner,
-    attractionCatalogue,
     authenticate
   }));
-  app.use("/api", createActivitiesRouter({
-    repository,
-    planProvider,
-    attractionCatalogue,
-    authenticate
-  }));
-  if (enableLegacyFeatures) {
-    app.use("/api", createCollaborationRouter({
-      repository,
-      authenticate,
-      clientOrigin: config.clientOrigin
-    }));
-  }
-  app.use("/api", createMembersRouter({
-    repository,
-    authenticate,
-    clientOrigin: config.clientOrigin
-  }));
-  app.use("/api", createExpensesRouter({
-    repository,
-    authenticate
-  }));
-  app.use("/api/favorites", createFavoritesRouter({ repository, authenticate }));
-  app.use("/api/privacy", createPrivacyRouter({ repository, authenticate }));
+  app.use("/api/profile", createProfileRouter({ authService, authenticate }));
+  app.use("/api/privacy", createPrivacyRouter({ repository, authService, authenticate }));
 
   app.use((_req, _res, next) => {
     const error = new Error("Route was not found.");
@@ -126,9 +87,9 @@ export function createApp({
           : code === "INTERNAL_ERROR"
             ? "An unexpected error occurred."
             : error.message,
-        details: isValidation
+        details: error.details ?? (isValidation
           ? error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message }))
-          : undefined
+          : undefined)
       }
     });
   });

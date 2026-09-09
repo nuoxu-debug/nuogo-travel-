@@ -1,5 +1,20 @@
 # Nuogo Architecture Verification
 
+> **SUPERSEDED BASELINE.** This verification records the earlier pragmatic architecture pass. Use `CURRENT_ARCHITECTURE.md` for the FINAL_UNIFIED active architecture.
+
+## Singapore Acceptance Addendum (2026-09-04)
+
+| Command | Result | Current evidence |
+| --- | --- | --- |
+| `npm test` | Passed | Shared 10, server 242, client 94; 346 total. |
+| `npm run test:e2e` | Passed | 14 passed, 4 intentionally skipped across desktop Chromium and Pixel 7 projects. |
+| `npm run lint` | Passed with warnings | Zero errors; five existing React Hook dependency warnings. |
+| `npm run build` | Passed with warning | Main JavaScript 670.79 kB (216.72 kB gzip); Living Atlas 529.46 kB (134.64 kB gzip); CSS 77.53 kB (19.72 kB gzip). Vite retained its chunk-size warning. |
+| `npm run test:integration` | Not executed live | Four credential-gated tests skipped: two provider checks and two MySQL checks. |
+| Secret scan | Passed | `.env.example` contains placeholders only; no active credential pattern was found in tracked application/configuration content. |
+| Mermaid render | Passed | Both current architecture diagrams rendered through Mermaid CLI without syntax errors. |
+| Section 17 references | Passed | All 26 referenced paths exist. |
+
 Date: 2026-07-24
 
 ## Phase 1 Scope
@@ -11,7 +26,7 @@ This document verifies the current Nuogo architecture against the actual source 
 | Command | Result | Notes |
 | --- | --- | --- |
 | `npm test` | Passed | Shared: 4 tests passed. Server: 67 tests passed. Client: 26 tests passed. |
-| `npm run build` | Passed | Shared tests passed, server syntax check passed, client Vite build passed. Latest main JavaScript bundle: 724.56 kB (232.08 kB gzip). |
+| `npm run build` | Passed | Shared tests passed, server syntax check passed, client Vite build passed. Latest main JavaScript bundle: 670.79 kB (216.72 kB gzip). |
 | `npm run lint` | Not run | No root `lint` script exists in `package.json`. |
 | `npm run typecheck` | Not run | No root `typecheck` script exists in `package.json`. |
 
@@ -20,7 +35,7 @@ This document verifies the current Nuogo architecture against the actual source 
 | Command | Result | Notes |
 | --- | --- | --- |
 | `npm test` | Passed | Shared: 4 tests passed. Server: 76 tests passed. Client: 29 tests passed. |
-| `npm run build` | Passed | Shared tests passed, server syntax check passed, client Vite build passed. Latest main JavaScript bundle: 724.56 kB (232.08 kB gzip). |
+| `npm run build` | Passed | Shared tests passed, server syntax check passed, client Vite build passed. Latest main JavaScript bundle: 670.79 kB (216.72 kB gzip). |
 | `npm run lint` | Not run | No root `lint` script exists in `package.json`. |
 | `npm run typecheck` | Not run | No root `typecheck` script exists in `package.json`. |
 | Secret scan | Passed | No checked OpenRouter key or non-placeholder env secret pattern remained in scanned project text files. |

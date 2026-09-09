@@ -1,12 +1,12 @@
 export function validateBudget(itinerary) {
-  if (itinerary.budgetSummary?.withinBudget && itinerary.budgetSummary.totalFen <= itinerary.budgetSummary.budgetFen) return [];
+  if (itinerary.budgetSummary?.withinBudget && itinerary.budgetSummary.totalMinor <= itinerary.budgetSummary.budgetMinor) return [];
   return [{
     code: "BUDGET_EXCEEDED",
-    path: ["budgetSummary", "totalFen"],
+    path: ["budgetSummary", "totalMinor"],
     severity: "ERROR",
     metadata: {
-      totalFen: itinerary.budgetSummary?.totalFen,
-      budgetFen: itinerary.budgetSummary?.budgetFen
+      totalMinor: itinerary.budgetSummary?.totalMinor,
+      budgetMinor: itinerary.budgetSummary?.budgetMinor
     }
   }];
 }

@@ -1,18 +1,22 @@
 import { randomUUID } from "node:crypto";
+import { getDestinationDiscoveryContent } from "@nuogo/shared/destination-discovery";
 import { buildCandidatePool } from "../poi/buildCandidatePool.js";
-import { matchPois } from "../poi/matchPois.js";
-import { normalizeAmapPoi } from "../poi/normalizeAmapPoi.js";
-import { normalizeOpenTripMapPoi } from "../poi/normalizeOpenTripMapPoi.js";
+import { resolveAttractionPreferences } from "../poi/resolveAttractionPreferences.js";
 import { calculateItineraryBudget } from "../budget/budgetEngine.js";
-import { getSpendingProfile, spendingProfileIds } from "../budget/spendingProfiles.js";
+import { buildProfileBudgetContext, countAvailableMeals } from "../budget/profileBudget.js";
+import { getSpendingProfile } from "../budget/spendingProfiles.js";
 import { planDraft } from "../llm/itineraryHarness.js";
 import { targetedLlmRepair } from "../repair/targetedLlmRepair.js";
 import { repairUntilValid } from "../repair/repairLoop.js";
 import { validateItinerary } from "../validation/validationEngine.js";
-import { validateSpendingProfiles } from "../validation/validators/spendingProfileValidator.js";
 import { buildTripLegs } from "./buildTripLegs.js";
 import { buildVariantMetrics } from "./buildVariantMetrics.js";
 import { propagateSchedule } from "./propagateSchedule.js";
+import { buildProfilePlan } from "./profilePrePlanner.js";
+import { buildRainyDayBackups } from "./rainyDayBackup.js";
+import { reconcileSelectedAttractions } from "./reconcileSelectedAttractions.js";
+import { buildSelectedAttractionOutcome } from "./selectedAttractionOutcome.js";
+import { enrichItineraryPresentation } from "./enrichItineraryPresentation.js";
 
 function issueFor(error) {
   return {
@@ -23,74 +27,50 @@ function issueFor(error) {
   };
 }
 
-function routeCost(route, { mode }) {
-  if (mode === "TAXI") return Math.max(0, Math.round(Number(route.taxiCostCny ?? 0) * 100));
-  if (mode === "DRIVE") return Math.max(0, Math.round(Number(route.tollsCny ?? 0) * 100));
-  if (mode === "PUBLIC_TRANSIT" || mode === "MIXED") return 300;
-  return 0;
-}
-
 async function candidatePoolFor(preferences, dependencies) {
-  const primaryProvider = dependencies.primaryProvider ?? dependencies.travelProvider;
-  const tourismProvider = dependencies.tourismProvider ?? dependencies.travelProvider;
-  const retrievedAt = dependencies.now();
-  const rawPrimary = await primaryProvider.searchPois({
-    city: preferences.destination,
-    categories: ["ATTRACTION", "RESTAURANT", "HOTEL"]
+  if (!dependencies.retrieveAttractionCandidates || !dependencies.getDestinationSettings) {
+    throw new TypeError("OpenTripMap candidate retrieval is unavailable.");
+  }
+  const settings = await dependencies.getDestinationSettings({ destination: preferences.destination });
+  const candidates = await dependencies.retrieveAttractionCandidates({
+    destination: preferences.destination,
+    settings
   });
-  const primary = rawPrimary.map((raw) => normalizeAmapPoi(raw, {
-    city: preferences.destination,
-    retrievedAt: raw.retrievedAt ?? retrievedAt
-  }));
-  let supporting = [];
-  if (tourismProvider?.enrichTourism && primary[0]) {
-    const records = await tourismProvider.enrichTourism({
-      city: preferences.destination,
-      coordinates: primary[0].coordinates,
-      radiusMeters: 50_000
-    });
-    supporting = records.map((raw) => normalizeOpenTripMapPoi(raw, {
-      city: preferences.destination,
-      retrievedAt: raw.retrievedAt ?? retrievedAt
-    }));
-  }
-  return buildCandidatePool(preferences, matchPois(primary, supporting));
+  return buildCandidatePool(preferences, candidates);
 }
 
-async function drivingDetails(preferences, dependencies) {
-  const result = {};
-  for (const direction of ["outbound", "return"]) {
-    if (preferences[`${direction}TransportMode`] !== "DRIVING" ||
-      preferences[`${direction}TransportCostCny`] !== undefined) continue;
-    if (!dependencies.resolveDrivingLeg) {
-      throw Object.assign(new Error(`${direction} driving route is unavailable.`), { code: "ROUTE_UNAVAILABLE" });
-    }
-    result[`${direction}Driving`] = await dependencies.resolveDrivingLeg({ direction, preferences });
-  }
-  return result;
+function requestedDayCount(preferences) {
+  const start = Date.parse(`${preferences.startDate}T00:00:00.000Z`);
+  const end = Date.parse(`${preferences.endDate}T00:00:00.000Z`);
+  return Math.floor((end - start) / 86_400_000) + 1;
 }
 
-function enrichedDimensions(preferences, itinerary, driving) {
+function tripTitle(preferences) {
+  const destination = getDestinationDiscoveryContent(preferences.destination).name;
+  return preferences.language === "en" ? `${destination.en} journey` : `${destination.zh}行程`;
+}
+
+function enrichedDimensions(preferences, itinerary) {
+  const dayCount = requestedDayCount(preferences);
   return {
     ...itinerary,
-    nights: Math.max(0, itinerary.days.length - 1),
+    nights: Math.max(0, dayCount - 1),
     rooms: Math.ceil(preferences.travellerCount / 2),
-    mealCount: itinerary.days.length * 3,
-    ...driving
+    mealCount: countAvailableMeals(preferences, dayCount)
   };
 }
 
-function activityEstimateFen(activityType, references, travellerCount) {
-  if (["CULTURE", "HISTORY", "NATURE", "FAMILY"].includes(activityType)) {
-    return references.attractionPersonEntryFen * travellerCount;
-  }
-  if (activityType === "ENTERTAINMENT") {
-    return references.entertainmentPersonEntryFen * travellerCount;
-  }
-  if (activityType === "FOOD") {
-    return references.foodPersonMealFen * travellerCount;
-  }
-  return 0;
+function activityEstimateMinor(activityType, references, travellerCount) {
+  const category = ["CULTURE", "HISTORY", "NATURE", "FAMILY"].includes(activityType)
+    ? "ATTRACTION_PERSON_ENTRY"
+    : activityType === "ENTERTAINMENT"
+      ? "ENTERTAINMENT_PERSON_ENTRY"
+      : activityType === "MEAL"
+        ? "FOOD_PERSON_DAY"
+        : undefined;
+  return category
+    ? references.find((record) => record.category === category)?.representativeMinor * travellerCount
+    : 0;
 }
 
 function directDistanceMeters(from, to) {
@@ -106,7 +86,7 @@ function directDistanceMeters(from, to) {
 
 function routeModeFor(profile, preferences) {
   const strategy = getSpendingProfile(profile);
-  if (["DRIVE", "WALK"].includes(preferences.localTransportPreference)) {
+  if (preferences.localTransportPreference === "WALK") {
     return () => preferences.localTransportPreference;
   }
   return ({ day, legIndex, from, to }) => {
@@ -117,6 +97,92 @@ function routeModeFor(profile, preferences) {
       ? "PUBLIC_TRANSIT"
       : preferred;
   };
+}
+
+function costReferenceSource(reference) {
+  return {
+    sourceType: "DATABASE_BACKED",
+    referenceId: reference.id,
+    city: reference.city,
+    category: reference.category,
+    tier: reference.tier,
+    sourceName: reference.sourceName,
+    sourceUrl: reference.sourceUrl,
+    collectedOn: reference.collectedOn,
+    updatedAt: reference.updatedAt
+  };
+}
+
+export function buildVariantProvenance(itinerary, summary, rainyDayBackups = []) {
+  const provenance = [{
+    path: "trip.preferences",
+    source: { sourceType: "USER_PROVIDED" }
+  }];
+  for (const day of itinerary.days) {
+    for (const activity of day.activities) {
+      const path = `days.${day.dayNumber}.activities.${activity.sequence}`;
+      provenance.push(
+        { path: `${path}.sequence`, source: { sourceType: "AI_GENERATED" } },
+        { path: `${path}.reason`, source: { sourceType: "AI_GENERATED" } }
+      );
+      if (activity.estimatedActivityCostMinor !== undefined) {
+        provenance.push({
+          path: `${path}.estimatedActivityCostMinor`,
+          source: { sourceType: "ESTIMATED" }
+        });
+      }
+      if (activity.xid) {
+        const record = activity.poi?.sourceRecords?.[0];
+        provenance.push({
+          path: `${path}.poi`,
+          source: {
+            sourceType: record?.provider === "DEMO" ? "DEMO_FIXTURE" : "OPENTRIPMAP_API",
+            xid: activity.xid,
+            provider: record?.provider,
+            sourceUrl: record?.sourceUrl,
+            retrievedAt: record?.retrievedAt,
+            city: activity.poi?.city,
+            matchStatus: activity.poi?.matchStatus,
+            verificationStatus: activity.poi?.verificationStatus
+          }
+        });
+      }
+    }
+    for (const [index] of (day.legs ?? []).entries()) {
+      provenance.push({
+        path: `days.${day.dayNumber}.legs.${index}`,
+        source: { sourceType: "ESTIMATED" }
+      });
+    }
+  }
+  provenance.push({
+    path: "summary.categoriesMinor",
+    source: { sourceType: "ESTIMATED" }
+  });
+  for (const [category, reference] of Object.entries(summary.provenance ?? {})) {
+    provenance.push({
+      path: `summary.costReferences.${category}`,
+      source: costReferenceSource(reference)
+    });
+  }
+  rainyDayBackups.forEach((backup, index) => {
+    const candidate = backup.alternative;
+    const record = candidate.sourceRecords?.[0];
+    provenance.push({
+      path: `rainyDayBackups.${index}.alternative`,
+      source: {
+        sourceType: record?.provider === "DEMO" ? "DEMO_FIXTURE" : "OPENTRIPMAP_API",
+        xid: candidate.xid ?? candidate.candidateId,
+        provider: record?.provider,
+        sourceUrl: record?.sourceUrl,
+        retrievedAt: record?.retrievedAt,
+        city: candidate.city,
+        matchStatus: candidate.matchStatus,
+        verificationStatus: candidate.verificationStatus
+      }
+    });
+  });
+  return provenance;
 }
 
 function attachPoiFacts(itinerary, candidatePool, { anchors, references, preferences }) {
@@ -134,17 +200,25 @@ function attachPoiFacts(itinerary, candidatePool, { anchors, references, prefere
       startPoint: attachAnchor(day.startPoint),
       endPoint: attachAnchor(day.endPoint),
       activities: day.activities.map((activity) => {
-        const poi = byId.get(activity.poiId);
+        const poi = activity.xid ? byId.get(activity.xid) : undefined;
         return poi ? {
           ...activity,
-          estimatedActivityCostFen: activityEstimateFen(activity.activityType, references, preferences.travellerCount),
+          estimatedActivityCostMinor: activityEstimateMinor(activity.activityType, references, preferences.travellerCount),
           poi: {
             canonicalPoiId: poi.canonicalPoiId,
             name: poi.name,
+            displayName: poi.displayName,
+            description: poi.description,
+            descriptionSourceType: poi.descriptionSourceType,
+            suggestedVisitDurationMinutes: poi.suggestedVisitDurationMinutes,
+            durationSourceType: poi.durationSourceType,
+            city: poi.city,
             category: poi.category,
             coordinates: poi.coordinates,
             address: poi.address,
             primarySource: poi.primarySource,
+            matchStatus: poi.matchStatus,
+            verificationStatus: poi.verificationStatus,
             sourceRecords: poi.sourceRecords
           }
         } : activity;
@@ -153,28 +227,26 @@ function attachPoiFacts(itinerary, candidatePool, { anchors, references, prefere
   };
 }
 
-async function evaluateDraft(draft, { preferences, candidatePool, dependencies, anchors, references, driving }) {
+async function evaluateDraft(draft, { preferences, candidatePool, anchors, references }) {
   const locations = Object.fromEntries(candidatePool.candidates
-    .map(({ candidateId, coordinates }) => [candidateId, coordinates]));
+    .map(({ xid, coordinates }) => [xid, coordinates]));
   Object.assign(locations, anchors);
   const routed = await buildTripLegs(draft, {
     locations,
-    routeProvider: dependencies.routeProvider ?? dependencies.travelProvider,
-    mode: routeModeFor(draft.variant, preferences),
-    routeCostResolver: routeCost
+    mode: routeModeFor(draft.travelStyle, preferences)
   });
   const scheduled = {
     ...routed,
-    days: routed.days.map((day, index) => propagateSchedule(day, {
-      dayStartTime: index === 0 ? preferences.arrivalDateTime.slice(11, 16) : "08:00"
+    days: routed.days.map((day) => propagateSchedule(day, {
+      dayStartTime: "09:00"
     }))
   };
-  const measurable = enrichedDimensions(preferences, scheduled, driving);
+  const measurable = enrichedDimensions(preferences, scheduled);
   const budgetSummary = calculateItineraryBudget({
     preferences,
     itinerary: measurable,
     references,
-    profile: draft.variant
+    profile: draft.travelStyle
   });
   const itinerary = { ...measurable, budgetSummary };
   return {
@@ -186,16 +258,18 @@ async function evaluateDraft(draft, { preferences, candidatePool, dependencies, 
 
 async function generateVariant(profile, context) {
   try {
+    const candidatePool = poolForPlan(context.candidatePool, context.profilePlan);
+    const variantContext = { ...context, candidatePool };
     const draft = await planDraft({
       preferences: context.preferences,
-      profile,
-      candidatePool: context.candidatePool
+      profilePlan: context.profilePlan,
+      candidatePool
     }, { provider: context.dependencies.llmProvider });
     const result = await repairUntilValid({
       itinerary: draft,
       preferences: context.preferences,
-      candidatePool: context.candidatePool,
-      evaluate: (itinerary) => evaluateDraft(itinerary, context),
+      candidatePool,
+      evaluate: (itinerary) => evaluateDraft(itinerary, variantContext),
       semanticRepair: ({ itinerary, issues, allowedCandidateIds }) => targetedLlmRepair({
         itinerary,
         issues,
@@ -204,13 +278,47 @@ async function generateVariant(profile, context) {
       })
     });
     if (result.state !== "FINAL_VALIDATED") return result;
-    const itinerary = attachPoiFacts(result.itinerary, context.candidatePool, context);
-    return {
-      ...result,
+    const supportedIds = new Set(context.resolvedPreferences.supported.map(({ xid, candidateId }) => xid ?? candidateId));
+    const reconciliation = await reconcileSelectedAttractions({
+      evaluation: result,
+      requested: context.selectedRequests.filter(({ xid }) => supportedIds.has(xid)),
+      provisionallyDeferredSelected: context.profilePlan.provisionallyDeferredSelected,
+      candidatePool,
+      evaluate: (itinerary) => evaluateDraft(itinerary, variantContext)
+    });
+    const reconciled = reconciliation.evaluation === result ? result : { ...result, ...reconciliation.evaluation, state: "FINAL_VALIDATED" };
+    const factualItinerary = attachPoiFacts(reconciled.itinerary, candidatePool, variantContext);
+    const itinerary = enrichItineraryPresentation({
+      itinerary: factualItinerary,
+      preferences: context.preferences,
+      summary: reconciled.summary
+    });
+    const rainyDayBackups = buildRainyDayBackups({
+      enabled: context.preferences.rainyDayBackupEnabled,
       itinerary,
+      candidatePool: context.candidatePool,
+      remainingBudgetMinor: reconciled.summary.remainingMinor,
+      estimateCostMinor: (candidate) => activityEstimateMinor(
+        candidate.category,
+        context.references,
+        context.preferences.travellerCount
+      )
+    });
+    const selectedAttractionOutcome = buildSelectedAttractionOutcome({
+      requested: context.selectedRequests,
+      itinerary,
+      structurallyExcluded: context.structuralOutcomes,
+      finalEvaluationRejected: reconciliation.finalEvaluationRejected
+    });
+    return {
+      ...reconciled,
+      itinerary,
+      rainyDayBackups,
+      selectedAttractionOutcome,
+      provenance: buildVariantProvenance(itinerary, reconciled.summary, rainyDayBackups),
       variantMetrics: buildVariantMetrics(
         itinerary,
-        result.summary,
+        reconciled.summary,
         getSpendingProfile(profile)
       )
     };
@@ -225,8 +333,21 @@ async function generateVariant(profile, context) {
   }
 }
 
+function poolForPlan(candidatePool, profilePlan) {
+  const allowed = new Set(profilePlan.allowedCandidateIds);
+  return { ...candidatePool, candidateIds: [...profilePlan.allowedCandidateIds], candidates: candidatePool.candidates.filter(({ candidateId, xid }) => allowed.has(candidateId ?? xid)) };
+}
+
 async function save(dependencies, run) {
   if (dependencies.saveRun) await dependencies.saveRun(run);
+  return run;
+}
+
+function withLegacyVariants(run, variants) {
+  Object.defineProperty(run, "variants", {
+    value: variants,
+    enumerable: false
+  });
   return run;
 }
 
@@ -239,65 +360,72 @@ export async function generateValidatedTrip(preferences, dependencies) {
     if (!candidatePool.candidates.length) {
       throw Object.assign(new Error("No verified destination candidates are available."), { code: "CANDIDATE_POOL_EMPTY" });
     }
-    const [references, anchors, driving] = await Promise.all([
+    const [references, anchors] = await Promise.all([
       dependencies.getCostReferences(preferences),
-      dependencies.resolveAnchors(preferences),
-      drivingDetails(preferences, dependencies)
+      dependencies.resolveAnchors(preferences)
     ]);
-    const context = { preferences, dependencies, candidatePool, references, anchors, driving };
-    const variants = await Promise.all(spendingProfileIds.map((profile) => generateVariant(profile, context)));
-    const differentiationIssues = validateSpendingProfiles(variants);
-    const state = variants.every(({ state: variantState }) => variantState === "FINAL_VALIDATED") &&
-      differentiationIssues.length === 0
-      ? "FINAL_VALIDATED"
-      : "FAILED";
+    const resolvedPreferences = resolveAttractionPreferences(preferences, candidatePool);
+    const budgetContext = buildProfileBudgetContext(preferences, references);
+    const selectedRequests = resolvedPreferences.requested.map((request, index) => {
+      const candidate = candidatePool.candidates.find(({ xid, candidateId, name, displayName }) =>
+        request.xid ? (xid ?? candidateId) === request.xid : [name, displayName?.en, displayName?.zh].includes(request.displayName));
+      const xid = candidate?.xid ?? candidate?.candidateId ?? request.xid;
+      const fallback = request.displayName ?? xid;
+      return { requestId: `${resolvedPreferences.mode.toLowerCase()}:${xid ?? fallback}:${index}`, ...(xid ? { xid } : {}), displayName: candidate?.displayName ?? { en: candidate?.name ?? fallback, zh: candidate?.name ?? fallback } };
+    });
+    const structuralOutcomes = resolvedPreferences.unresolved.map((item) => {
+      const request = selectedRequests.find(({ xid, displayName }) => xid === item.xid || displayName.en === item.displayName || displayName.zh === item.displayName);
+      return { ...item, requestId: request?.requestId, reasonCode: item.reason };
+    });
+    const context = { preferences, dependencies, candidatePool, references, anchors, resolvedPreferences, budgetContext, selectedRequests, structuralOutcomes };
+    const profilePlan = buildProfilePlan({ profile: preferences.travelStyle, preferences, candidatePool, resolvedPreferences, budgetContext, costReferences: references, anchors });
+    const variant = await generateVariant(preferences.travelStyle, { ...context, profilePlan });
+    const variants = [variant];
+    const state = variant.state;
     const validation = {
       valid: state === "FINAL_VALIDATED",
-      issues: [
-        ...variants.flatMap(({ validation: result }) => result.issues),
-        ...differentiationIssues
-      ]
+      issues: variant.validation?.issues ?? []
     };
-    const run = {
+    const run = withLegacyVariants({
       id: runId,
       tripId,
       trip: {
         id: tripId,
-        title: `${preferences.destination.replace(/^./, (letter) => letter.toUpperCase())} journey`,
+        title: tripTitle(preferences),
         destination: preferences.destination,
         startDate: preferences.startDate,
         endDate: preferences.endDate,
         travellerCount: preferences.travellerCount,
-        totalBudgetCny: preferences.totalBudgetCny,
+        budgetMinor: preferences.budgetMinor,
         preferences
       },
       state,
-      variants,
+      itineraryRun: variant,
       validation,
       candidateCount: candidatePool.candidates.length,
       startedAt,
       completedAt: dependencies.now()
-    };
+    }, variants);
     return await save(dependencies, run);
   } catch (error) {
-    return await save(dependencies, {
+    return await save(dependencies, withLegacyVariants({
       id: runId,
       tripId,
       trip: {
         id: tripId,
-        title: `${preferences.destination.replace(/^./, (letter) => letter.toUpperCase())} journey`,
+        title: tripTitle(preferences),
         destination: preferences.destination,
         startDate: preferences.startDate,
         endDate: preferences.endDate,
         travellerCount: preferences.travellerCount,
-        totalBudgetCny: preferences.totalBudgetCny,
+        budgetMinor: preferences.budgetMinor,
         preferences
       },
       state: "FAILED",
-      variants: [],
+      itineraryRun: null,
       validation: { valid: false, issues: [issueFor(error)] },
       startedAt,
       completedAt: dependencies.now()
-    });
+    }, []));
   }
 }

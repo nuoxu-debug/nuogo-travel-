@@ -43,7 +43,7 @@ export default function LivingAtlasScene({
         if (!active || !canvasHostRef.current) return;
         const controller = createLivingAtlas(canvasHostRef.current, {
           points,
-          textureUrl: "/images/china-journey-map-daylight.png",
+          textureUrl: "/images/singapore-marina-bay-hero.png",
           onReady: () => active && setSceneState("ready"),
           onFailure: () => active && setSceneState("error")
         });

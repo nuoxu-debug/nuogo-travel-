@@ -20,33 +20,47 @@ const poiSchema = z.object({
   name: bilingualSchema,
   category: z.enum(["ATTRACTION", "HOTEL", "RESTAURANT", "TRANSPORT_HUB", "OTHER"]),
   coordinates: z.object({
-    latitude: z.number().min(18).max(54),
-    longitude: z.number().min(73).max(135)
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180)
   }).strict(),
   address: bilingualSchema.optional(),
   status: statusSchema,
   sources: z.array(sourceSchema).min(1).max(20)
 }).strict();
+const costReferenceTiers = Object.freeze({
+  ACCOMMODATION_ROOM_NIGHT: ["BUDGET", "MID_RANGE", "COMFORT"],
+  LOCAL_TRANSPORT_PERSON_DAY: ["BUDGET", "BALANCED", "COMFORT"],
+  FOOD_PERSON_DAY: ["ECONOMY", "BALANCED", "COMFORT"],
+  MISCELLANEOUS_PERSON_DAY: ["BUDGET", "BALANCED", "COMFORT"]
+});
 const costReferenceSchema = z.object({
   id: z.string().min(1).max(80),
-  destinationId: destinationIdSchema,
+  city: destinationIdSchema,
   category: z.enum([
-    "ACCOMMODATION_ROOM_NIGHT", "FOOD_PERSON_MEAL", "ATTRACTION_PERSON_ENTRY",
-    "ENTERTAINMENT_PERSON_ENTRY", "OTHER_TRIP", "FUEL_LITRE", "PARKING_DAY"
+    "ACCOMMODATION_ROOM_NIGHT", "LOCAL_TRANSPORT_PERSON_DAY", "FOOD_PERSON_DAY",
+    "ATTRACTION_PERSON_ENTRY", "ENTERTAINMENT_PERSON_ENTRY", "MISCELLANEOUS_PERSON_DAY"
   ]),
-  unit: z.string().min(1).max(40),
-  amountFen: z.number().int().nonnegative(),
-  source: z.object({
-    provider: z.string().min(1).max(80),
-    sourceUrl: httpsUrlSchema.optional(),
-    retrievedAt: z.string().datetime()
-  }).strict(),
-  effectiveFrom: z.string().date().optional(),
-  effectiveTo: z.string().date().optional(),
+  tier: z.enum(["BUDGET", "MID_RANGE", "COMFORT", "BALANCED", "ECONOMY"]).nullable(),
+  minMinor: z.number().int().nonnegative(),
+  maxMinor: z.number().int().nonnegative(),
+  representativeMinor: z.number().int().nonnegative(),
+  currency: z.literal("SGD"),
+  sourceName: z.string().trim().min(1).max(160),
+  sourceUrl: httpsUrlSchema,
+  collectedOn: z.string().date(),
+  updatedAt: z.string().datetime(),
   status: statusSchema
-}).strict().refine((value) => !value.effectiveFrom || !value.effectiveTo || value.effectiveTo >= value.effectiveFrom, {
-  path: ["effectiveTo"],
-  message: "Effective-to date must not precede effective-from date."
+}).strict().superRefine((value, context) => {
+  const allowedTiers = costReferenceTiers[value.category];
+  if (allowedTiers ? !allowedTiers.includes(value.tier) : value.tier !== null) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["tier"], message: "Tier is invalid for this cost category." });
+  }
+  if (value.minMinor > value.representativeMinor || value.representativeMinor > value.maxMinor) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["representativeMinor"], message: "Representative value must be within the supplied range." });
+  }
+  if (value.collectedOn > value.updatedAt.slice(0, 10)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["collectedOn"], message: "Collected-on date cannot follow the update timestamp." });
+  }
 });
 
 function notFound(resource) {
@@ -109,8 +123,8 @@ export function createAdminRouter({ repository, authenticate }) {
 
   router.get("/cost-references", async (req, res, next) => {
     try {
-      const destinationId = destinationIdSchema.parse(req.query.destinationId);
-      res.json({ costReferences: await repository.listCostReferences(destinationId) });
+      const city = destinationIdSchema.parse(req.query.city);
+      res.json({ costReferences: await repository.listCostReferences(city) });
     } catch (error) { next(error); }
   });
 

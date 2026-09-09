@@ -6,6 +6,7 @@ export default defineConfig({
   testDir: "./tests/e2e",
   outputDir: join(tmpdir(), "nuogo-playwright-results"),
   fullyParallel: false,
+  workers: 1,
   reporter: "line",
   use: {
     baseURL: "http://127.0.0.1:5176",
@@ -22,10 +23,11 @@ export default defineConfig({
         ...process.env,
         PORT: "8788",
         CLIENT_ORIGIN: "http://127.0.0.1:5176",
-        DEMO_MODE: "true",
+        APP_RUNTIME_MODE: "demo",
         AI_PROVIDER: "demo",
         TRAVEL_DATA_PROVIDER: "demo",
-        ENABLE_LEGACY_FEATURES: "false"
+        DEMO_ADMIN_EMAIL: "admin@nuogo.test",
+        DEMO_ADMIN_PASSWORD: "NuogoAdmin123!"
       }
     },
     {
@@ -36,8 +38,7 @@ export default defineConfig({
       env: {
         ...process.env,
         VITE_CACHE_DIR: join(tmpdir(), `nuogo-vite-cache-${process.pid}`),
-        VITE_API_URL: "http://127.0.0.1:8788/api",
-        VITE_ENABLE_LEGACY_FEATURES: "false"
+        VITE_API_URL: "http://127.0.0.1:8788/api"
       }
     }
   ],

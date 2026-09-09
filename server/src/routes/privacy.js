@@ -1,14 +1,19 @@
 import { Router } from "express";
 import { z } from "zod";
+import { passwordSchema } from "@nuogo/shared/schemas";
 
 const consentSchema = z.object({
   accepted: z.literal(true),
+  type: z.enum(["GENERAL", "LLM_ITINERARY_GENERATION"]).default("GENERAL"),
   version: z.string().trim().min(1).max(40)
 }).strict();
 
-const deletionSchema = z.object({ confirmation: z.literal("DELETE") }).strict();
+const deletionSchema = z.object({
+  confirmation: z.literal("DELETE"),
+  currentPassword: passwordSchema.optional()
+}).strict();
 
-export function createPrivacyRouter({ repository, authenticate }) {
+export function createPrivacyRouter({ repository, authService, authenticate }) {
   const router = Router();
   router.use(authenticate);
 
@@ -24,8 +29,8 @@ export function createPrivacyRouter({ repository, authenticate }) {
 
   router.delete("/account", async (req, res, next) => {
     try {
-      deletionSchema.parse(req.body);
-      await repository.deleteAccount(req.user.id);
+      const input = deletionSchema.parse(req.body);
+      await authService.deleteAccount(req.user.id, input);
       res.status(204).end();
     } catch (error) {
       next(error);

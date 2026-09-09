@@ -1,32 +1,41 @@
 # Live Provider Verification
 
-Live AMap, OpenTripMap, and OpenRouter checks are deliberately separate from deterministic CI.
+Verified record date: 2026-08-24
 
-## Required Environment
+Live OpenTripMap and OpenRouter checks are deliberately separate from deterministic tests.
 
-```dotenv
-DEMO_MODE=true
-AI_PROVIDER=openrouter
-OPENROUTER_API_KEY=<server-side-key>
-TRAVEL_DATA_PROVIDER=live
-AMAP_WEB_SERVICE_KEY=<server-side-key>
+## Opt-In Environment
+
+```env
+OPENTRIPMAP_LIVE_TEST=true
 OPENTRIPMAP_API_KEY=<server-side-key>
-RUN_LIVE_TRAVEL_API_TESTS=true
+OPENROUTER_LIVE_TEST=true
+OPENROUTER_API_KEY=<server-side-key>
+OPENROUTER_MODEL=<verified-model-id>
+OPENROUTER_STRUCTURED_OUTPUT=<true-only-if-model-support-is-verified>
 ```
 
-Never commit these values. Run provider-focused checks only from a local environment with valid keys. Record the date, destination, provider response status, provenance fields, timeout behavior, and redacted failure details below.
+Run:
+
+```powershell
+npm.cmd run test:integration
+```
 
 ## Current Record
 
 Status: **NOT EXECUTED**
 
-No live-provider pass is claimed by deterministic unit, API, or Playwright tests.
+The final 2026-08-24 integration run skipped both provider tests because explicit live-test configuration was unavailable. Deterministic unit, API, and Playwright tests do not prove current external behavior.
 
-The 2026-08-14 acceptance run used `AI_PROVIDER=demo` and `TRAVEL_DATA_PROVIDER=demo`. Live-provider verification remains pending until valid server-side keys are supplied in a local environment.
+## Required Evidence
 
-## OpenRouter Runtime Contract
+For each real run, record only sanitized information:
 
-- Configured model ID comes from `OPENROUTER_MODEL`; the code fallback is `openai/gpt-4.1-mini`.
-- `OPENROUTER_STRUCTURED_OUTPUT=true` sends a strict `json_schema` response format. Otherwise the adapter requests `json_object` and Nuogo still parses and validates the result through the same Zod contract.
-- Requests use temperature `0.2` for planning/repair and are bounded by `OPENROUTER_TIMEOUT_MS`.
-- Model support, price, context window, and live response behavior have not been independently verified in this record. A configured free model must pass the same parser, approved-candidate, budget, route, and repair pipeline.
+- date and configured model/provider identifier;
+- HTTP success/failure category;
+- presence of expected source/provenance fields;
+- schema validation result;
+- timeout/error classification;
+- no credential or full provider payload.
+
+OpenRouter model support, availability, rate limits, and price can change. Verify the selected model on official OpenRouter pages on the day of the run.

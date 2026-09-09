@@ -4,65 +4,60 @@ export const spendingProfileIds = Object.freeze([
   "COMFORT_FOCUSED"
 ]);
 
+export const profileWeights = Object.freeze({
+  BUDGET_SAVING: Object.freeze({ selectedAttractionPriority: .30, preferenceMatch: .20, costEfficiency: .18, travelEfficiency: .14, categoryDiversity: .06, comfortScore: .03, activityValue: .09 }),
+  BALANCED: Object.freeze({ selectedAttractionPriority: .30, preferenceMatch: .18, costEfficiency: .10, travelEfficiency: .12, categoryDiversity: .12, comfortScore: .10, activityValue: .08 }),
+  COMFORT_FOCUSED: Object.freeze({ selectedAttractionPriority: .30, preferenceMatch: .18, costEfficiency: .04, travelEfficiency: .14, categoryDiversity: .06, comfortScore: .18, activityValue: .10 })
+});
+
+export function validateProfileWeights(weights) {
+  const values = Object.values(weights);
+  const issues = values.some((value) => !Number.isFinite(value) || value < 0 || value > 1) ? ["INVALID_WEIGHT"] : [];
+  if (Math.abs(values.reduce((sum, value) => sum + value, 0) - 1) > 1e-9) issues.push("INVALID_TOTAL");
+  return issues;
+}
+
 const profiles = Object.freeze({
   BUDGET_SAVING: {
     accommodationTier: "BUDGET",
+    localTransportationTier: "BUDGET",
     foodTier: "ECONOMY",
-    accommodationFactorPercent: 70,
-    foodFactorPercent: 70,
+    miscellaneousTier: "BUDGET",
     routeModes: ["PUBLIC_TRANSIT", "WALK"],
     fullDayActivityTarget: 3,
     activityDurationMinutes: 75,
     pace: "ACTIVE",
     allocationsPercent: {
-      outboundTransport: 12,
-      returnTransport: 12,
-      accommodation: 20,
-      localTransportation: 10,
-      foodAndBeverages: 14,
-      attractionTickets: 18,
-      entertainmentActivities: 8,
-      other: 6
+      accommodation: 35, localTransportation: 10, foodAndBeverages: 25,
+      attractionTickets: 15, entertainmentActivities: 5, other: 10
     }
   },
   BALANCED: {
     accommodationTier: "MID_RANGE",
+    localTransportationTier: "BALANCED",
     foodTier: "BALANCED",
-    accommodationFactorPercent: 100,
-    foodFactorPercent: 100,
+    miscellaneousTier: "BALANCED",
     routeModes: ["PUBLIC_TRANSIT", "TAXI", "PUBLIC_TRANSIT"],
     fullDayActivityTarget: 3,
     activityDurationMinutes: 90,
     pace: "MODERATE",
     allocationsPercent: {
-      outboundTransport: 12,
-      returnTransport: 12,
-      accommodation: 25,
-      localTransportation: 10,
-      foodAndBeverages: 16,
-      attractionTickets: 15,
-      entertainmentActivities: 6,
-      other: 4
+      accommodation: 40, localTransportation: 10, foodAndBeverages: 22,
+      attractionTickets: 15, entertainmentActivities: 8, other: 5
     }
   },
   COMFORT_FOCUSED: {
     accommodationTier: "COMFORT",
+    localTransportationTier: "COMFORT",
     foodTier: "COMFORT",
-    accommodationFactorPercent: 135,
-    foodFactorPercent: 135,
+    miscellaneousTier: "COMFORT",
     routeModes: ["TAXI"],
     fullDayActivityTarget: 3,
     activityDurationMinutes: 105,
     pace: "RELAXED",
     allocationsPercent: {
-      outboundTransport: 12,
-      returnTransport: 12,
-      accommodation: 34,
-      localTransportation: 12,
-      foodAndBeverages: 17,
-      attractionTickets: 8,
-      entertainmentActivities: 3,
-      other: 2
+      accommodation: 52, localTransportation: 10, foodAndBeverages: 20,
+      attractionTickets: 8, entertainmentActivities: 7, other: 3
     }
   }
 });

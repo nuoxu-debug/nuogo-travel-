@@ -14,6 +14,7 @@ import {
   getAuthToken,
   setAuthToken
 } from "../api/authToken.js";
+import { clearAttractionDraft } from "../planning/attractionDraft.js";
 
 const AuthContext = createContext(null);
 
@@ -46,11 +47,15 @@ export function safeReturnTo(value) {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(() => !getAuthToken());
+  const [sessionReason, setSessionReason] = useState(null);
   const sessionRevision = useRef(0);
 
   useEffect(() => {
     const token = getAuthToken();
-    if (!token) return undefined;
+    if (!token) {
+      clearAuthToken();
+      return undefined;
+    }
 
     let active = true;
     const revision = sessionRevision.current;
@@ -60,7 +65,6 @@ export function AuthProvider({ children }) {
       })
       .catch(() => {
         if (!active || revision !== sessionRevision.current) return;
-        clearAuthToken();
         setUser(null);
       })
       .finally(() => {
@@ -73,9 +77,10 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    function handleTokenChange() {
+    function handleTokenChange(event) {
       if (getAuthToken()) return;
       sessionRevision.current += 1;
+      setSessionReason(event.detail?.reason === "expired" ? "expired" : null);
       setUser(null);
       setReady(true);
     }
@@ -91,7 +96,8 @@ export function AuthProvider({ children }) {
     try {
       const body = await request();
       if (revision === sessionRevision.current) {
-        setAuthToken(body.token);
+        setSessionReason(null);
+        setAuthToken(body.token, { guest: body.user.accountType === "GUEST" });
         setUser(body.user);
       }
       return body.user;
@@ -103,6 +109,8 @@ export function AuthProvider({ children }) {
   const logout = useCallback(() => {
     sessionRevision.current += 1;
     clearAuthToken();
+    clearAttractionDraft();
+    setSessionReason(null);
     setUser(null);
     setReady(true);
   }, []);
@@ -110,6 +118,7 @@ export function AuthProvider({ children }) {
   const value = useMemo(() => ({
     user,
     ready,
+    sessionReason,
     logout,
     login(email, password) {
       return establishSession(() => apiRequest("/auth/login", {
@@ -128,7 +137,7 @@ export function AuthProvider({ children }) {
         body: JSON.stringify({ name, email, password })
       }));
     }
-  }), [establishSession, logout, ready, user]);
+  }), [establishSession, logout, ready, sessionReason, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

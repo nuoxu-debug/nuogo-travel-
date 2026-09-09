@@ -1,14 +1,18 @@
 import { AppError } from "../../errors.js";
 
-const referenceKeys = Object.freeze({
-  ACCOMMODATION_ROOM_NIGHT: "accommodationRoomNightFen",
-  FOOD_PERSON_MEAL: "foodPersonMealFen",
-  ATTRACTION_PERSON_ENTRY: "attractionPersonEntryFen",
-  ENTERTAINMENT_PERSON_ENTRY: "entertainmentPersonEntryFen",
-  OTHER_TRIP: "otherTripFen",
-  FUEL_LITRE: "fuelLitreFen",
-  PARKING_DAY: "parkingDayFen"
+const tieredCategories = Object.freeze({
+  ACCOMMODATION_ROOM_NIGHT: ["BUDGET", "MID_RANGE", "COMFORT"],
+  LOCAL_TRANSPORT_PERSON_DAY: ["BUDGET", "BALANCED", "COMFORT"],
+  FOOD_PERSON_DAY: ["ECONOMY", "BALANCED", "COMFORT"],
+  MISCELLANEOUS_PERSON_DAY: ["BUDGET", "BALANCED", "COMFORT"]
 });
+
+export const costReferenceRequirements = Object.freeze([
+  ...Object.entries(tieredCategories).flatMap(([category, tiers]) => tiers.map((tier) => ({ category, tier }))),
+  { category: "ATTRACTION_PERSON_ENTRY" },
+  { category: "ENTERTAINMENT_PERSON_ENTRY" }
+]);
+export const costReferenceCategories = Object.freeze([...Object.keys(tieredCategories), "ATTRACTION_PERSON_ENTRY", "ENTERTAINMENT_PERSON_ENTRY"]);
 
 export class CostReferenceError extends AppError {
   constructor(message, details = {}) {
@@ -17,40 +21,25 @@ export class CostReferenceError extends AppError {
   }
 }
 
-function effectiveOn(record, onDate) {
-  return (!record.effectiveFrom || record.effectiveFrom <= onDate) &&
-    (!record.effectiveTo || record.effectiveTo >= onDate);
+function key({ category, tier }) { return `${category}:${tier ?? "GENERIC"}`; }
+function https(value) { try { return new URL(value).protocol === "https:"; } catch { return false; } }
+function valid(record) {
+  const tiers = tieredCategories[record.category];
+  return costReferenceCategories.includes(record.category) &&
+    (tiers ? tiers.includes(record.tier) : record.tier == null) &&
+    Number.isInteger(record.minMinor) && record.minMinor >= 0 &&
+    Number.isInteger(record.maxMinor) && record.maxMinor >= record.minMinor &&
+    Number.isInteger(record.representativeMinor) && record.representativeMinor >= record.minMinor && record.representativeMinor <= record.maxMinor &&
+    record.currency === "SGD" && typeof record.sourceName === "string" && record.sourceName.trim() && https(record.sourceUrl) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(record.collectedOn) && Number.isFinite(Date.parse(record.updatedAt));
 }
 
-export function resolveCostReferences(records, { destinationId, onDate }) {
-  const selected = new Map();
-  const eligible = records
-    .filter((record) => record.destinationId === destinationId)
-    .filter((record) => record.status === "ACTIVE" && effectiveOn(record, onDate))
-    .sort((left, right) => String(right.effectiveFrom ?? "").localeCompare(String(left.effectiveFrom ?? "")));
-
-  for (const record of eligible) {
-    if (referenceKeys[record.category] && !selected.has(record.category)) selected.set(record.category, record);
-  }
-  const missing = Object.keys(referenceKeys).filter((category) => !selected.has(category));
-  if (missing.length) {
-    throw new CostReferenceError(`Missing active cost references for ${destinationId}.`, {
-      destinationId,
-      categories: missing
-    });
-  }
-
-  const result = { provenance: {} };
-  for (const [category, key] of Object.entries(referenceKeys)) {
-    const record = selected.get(category);
-    result[key] = record.amountFen;
-    result.provenance[key] = {
-      referenceId: record.id,
-      category,
-      source: record.source,
-      effectiveFrom: record.effectiveFrom,
-      effectiveTo: record.effectiveTo
-    };
-  }
-  return result;
+export function resolveCostReferences(records, { city }) {
+  const active = (records ?? []).filter((record) => record.city === city && record.status === "ACTIVE");
+  const invalidReferenceIds = active.filter((record) => !valid(record)).map(({ id }) => id);
+  const validRecords = active.filter(valid).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id));
+  const selected = costReferenceRequirements.map((required) => validRecords.find((record) => key(record) === key(required)));
+  const missing = costReferenceRequirements.filter((_, index) => !selected[index]).map(key);
+  if (missing.length) throw new CostReferenceError(`Missing active cost references for ${city}.`, { city, references: missing, ...(invalidReferenceIds.length ? { invalidReferenceIds } : {}) });
+  return selected.map((record) => ({ ...record, tier: record.tier ?? null }));
 }

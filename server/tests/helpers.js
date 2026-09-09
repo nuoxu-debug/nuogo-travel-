@@ -1,7 +1,7 @@
 export function validPreferences(overrides = {}) {
   return {
     destination: "chengdu",
-    departureCity: "shanghai",
+    departureCity: "singapore",
     days: 4,
     totalBudget: 4800,
     interests: ["local_street_food", "historical_relics"],

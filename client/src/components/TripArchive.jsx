@@ -22,7 +22,7 @@ export default function TripArchive({ trips, onDuplicate, onReuse, onOpen }) {
           <div className="flex flex-wrap gap-2">
             {trip.objectiveAligned && <button type="button" aria-label={language === "zh" ? "打开行程" : "Open itinerary"} onClick={() => onOpen(trip)} className="flex min-h-10 items-center gap-2 bg-lake px-3 text-sm font-bold text-white"><View className="h-4 w-4" /> {language === "zh" ? "打开行程" : "Open itinerary"}</button>}
             <button type="button" aria-label={language === "zh" ? "复用偏好" : "Reuse preferences"} onClick={() => onReuse(trip)} className="min-h-10 border border-ink/15 px-3 text-sm font-bold">{language === "zh" ? "复用偏好" : "Reuse preferences"}</button>
-            {!trip.objectiveAligned && <button type="button" aria-label={language === "zh" ? "复制行程" : "Duplicate"} onClick={() => onDuplicate(trip)} className="flex min-h-10 items-center gap-2 bg-ink px-3 text-sm font-bold text-white"><Copy className="h-4 w-4" /> {language === "zh" ? "复制行程" : "Duplicate"}</button>}
+            <button type="button" aria-label={language === "zh" ? "复制行程" : "Duplicate"} onClick={() => onDuplicate(trip)} className="flex min-h-10 items-center gap-2 bg-ink px-3 text-sm font-bold text-white"><Copy className="h-4 w-4" /> {language === "zh" ? "复制行程" : "Duplicate"}</button>
           </div>
         </article>;
       })}

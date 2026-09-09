@@ -1,42 +1,31 @@
-import { ArrowUpRight, LogOut, Menu, X } from "lucide-react";
+import { ArrowUpRight, Gauge, LogOut, Menu, Settings, X } from "lucide-react";
 import { useState } from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import BrandLogo from "../components/BrandLogo.jsx";
 import LanguageToggle from "../components/LanguageToggle.jsx";
 import ScrollProgress from "../components/ScrollProgress.jsx";
-import { safeReturnTo, useAuth } from "../context/AuthContext.jsx";
+import UserModeBadge from "../components/UserModeBadge.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 
-function invitationContinuation(location) {
-  const requested = location.pathname.startsWith("/invite/")
-    ? `${location.pathname}${location.search}${location.hash}`
-    : new URLSearchParams(location.search).get("returnTo");
-  const safe = safeReturnTo(requested);
-  return safe.startsWith("/invite/")
-    ? `?returnTo=${encodeURIComponent(safe)}`
-    : "";
-}
-
 export default function AppShell({ children, dark = false, hideFooter = false }) {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const { user, logout } = useAuth();
-  const location = useLocation();
   const [open, setOpen] = useState(false);
-  const continuation = invitationContinuation(location);
-  const authPath = (path) => `${path}${continuation}`;
   const foreground = dark ? "text-white" : "text-ink";
+  const registered = user && user.accountType !== "GUEST";
   const navClass = ({ isActive }) =>
     `text-sm font-bold transition-colors hover:text-lake ${isActive ? (dark ? "text-white" : "text-lake") : (dark ? "text-white/82" : "text-ink/70")}`;
 
   return (
-    <div className="min-h-screen">
+    <div className="nuogo-app-shell min-h-screen">
       <ScrollProgress />
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[120] focus:rounded-lg focus:bg-lake focus:px-4 focus:py-3 focus:text-sm focus:font-bold focus:text-white">
         {t("shell.skipContent")}
       </a>
-      <header className={`z-40 ${dark ? "absolute inset-x-0 top-0 border-b border-white/12 bg-ink/12 backdrop-blur-2xl" : "sticky top-0 border-b border-ink/10 bg-paper/78 backdrop-blur-2xl"}`}>
-        <div className={`mx-auto flex h-[68px] max-w-[1440px] items-center justify-between px-5 sm:px-8 ${foreground}`}>
-          <Link to="/" className="group flex items-center gap-3 font-display text-xl font-extrabold" aria-label={t("shell.home")}>
+      <header className={`nuogo-shell ${dark ? "nuogo-shell--dark" : ""}`}>
+        <div className={`nuogo-shell-inner ${foreground}`}>
+          <Link to="/" className="nuogo-shell-brand" aria-label={t("shell.home")}>
             <BrandLogo />
             <span>Nuogo</span>
             <span className={`hidden border-l pl-3 text-[10px] font-bold uppercase leading-4 sm:block ${dark ? "border-white/25 text-white/55" : "border-ink/15 text-ink/45"}`}>
@@ -45,18 +34,23 @@ export default function AppShell({ children, dark = false, hideFooter = false })
             </span>
           </Link>
 
-          <nav className="hidden items-center gap-7 md:flex">
+          <nav className="nuogo-shell-nav hidden lg:flex" aria-label="Primary navigation">
             <NavLink to="/planner" className={navClass}>{t("nav.plan")}</NavLink>
-            {user && <NavLink to="/archive" className={navClass}>{t("nav.archive")}</NavLink>}
+            {registered && <NavLink to="/archive" className={navClass}>{t("nav.archive")}</NavLink>}
+            {registered && <NavLink to="/profile" className={navClass}>{t("nav.profile")}</NavLink>}
+            {user?.role === "admin" && <NavLink to="/admin" className={navClass}>{t("nav.administration")}</NavLink>}
             <LanguageToggle tone={dark ? "dark" : "light"} />
             {user ? (
-              <button type="button" onClick={logout} className="flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-bold transition-colors hover:text-lake">
-                <LogOut className="h-4 w-4" /> {t("nav.signOut")}
-              </button>
+              <div className="flex items-center gap-2">
+                <UserModeBadge user={user} language={language} tone={dark ? "dark" : "light"} />
+                <button type="button" onClick={logout} className="nuogo-shell-signout">
+                  <LogOut className="h-4 w-4" /> {t("nav.signOut")}
+                </button>
+              </div>
             ) : (
               <>
-                <Link to={authPath("/login")} className={`rounded-lg px-2 py-2 text-sm font-bold transition-colors hover:text-lake ${dark ? "text-white/82" : "text-ink/70"}`}>{t("nav.signIn")}</Link>
-                <Link to={authPath("/register")} className={`group flex min-h-11 items-center gap-2 rounded-lg px-4 text-sm font-bold shadow-sm transition-transform hover:-translate-y-0.5 ${dark ? "bg-white text-ink" : "bg-ink text-white"}`}>
+                <Link to="/login" className="nuogo-shell-login">{t("nav.signIn")}</Link>
+                <Link to="/register" className={`nuogo-shell-register ${dark ? "nuogo-shell-register--dark" : ""}`}>
                   {t("nav.register")} <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                 </Link>
               </>
@@ -65,7 +59,7 @@ export default function AppShell({ children, dark = false, hideFooter = false })
 
           <button
             type="button"
-            className={`grid h-11 w-11 place-items-center rounded-lg border transition-colors md:hidden ${dark ? "border-white/18 bg-white/10" : "border-ink/12 bg-white/80"}`}
+            className={`nuogo-shell-menu lg:hidden ${dark ? "nuogo-shell-menu--dark" : ""}`}
             aria-label={open ? t("shell.closeMenu") : t("shell.openMenu")}
             aria-expanded={open}
             aria-controls="mobile-navigation"
@@ -76,9 +70,12 @@ export default function AppShell({ children, dark = false, hideFooter = false })
         </div>
 
         {open && (
-          <nav id="mobile-navigation" className="apple-material mx-4 grid gap-1 p-3 text-ink md:hidden">
+          <nav id="mobile-navigation" className="nuogo-shell-mobile lg:hidden" aria-label="Mobile navigation">
+            {user && <div className="px-3 py-2"><UserModeBadge user={user} language={language} /></div>}
             <Link to="/planner" className="min-h-11 rounded-lg px-3 py-3 font-bold" onClick={() => setOpen(false)}>{t("nav.plan")}</Link>
-            {user && <Link to="/archive" className="min-h-11 rounded-lg px-3 py-3 font-bold" onClick={() => setOpen(false)}>{t("nav.archive")}</Link>}
+            {registered && <Link to="/archive" className="min-h-11 rounded-lg px-3 py-3 font-bold" onClick={() => setOpen(false)}>{t("nav.archive")}</Link>}
+            {registered && <Link to="/profile" className="flex min-h-11 items-center gap-2 rounded-lg px-3 py-3 font-bold" onClick={() => setOpen(false)}><Settings className="h-4 w-4" />{t("nav.profile")}</Link>}
+            {user?.role === "admin" && <Link to="/admin" className="flex min-h-11 items-center gap-2 rounded-lg px-3 py-3 font-bold" onClick={() => setOpen(false)}><Gauge className="h-4 w-4" />{t("nav.administration")}</Link>}
             <div className="p-2"><LanguageToggle tone="light" /></div>
             {user && (
               <button type="button" onClick={() => { logout(); setOpen(false); }} className="flex min-h-11 items-center gap-2 rounded-lg px-3 py-3 text-left font-bold">
@@ -87,8 +84,8 @@ export default function AppShell({ children, dark = false, hideFooter = false })
             )}
             {!user && (
               <>
-                <Link to={authPath("/login")} className="min-h-11 rounded-lg px-3 py-3 font-bold" onClick={() => setOpen(false)}>{t("nav.signIn")}</Link>
-                <Link to={authPath("/register")} className="min-h-11 rounded-lg bg-ink px-3 py-3 font-bold text-white" onClick={() => setOpen(false)}>{t("nav.register")}</Link>
+                <Link to="/login" className="min-h-11 rounded-lg px-3 py-3 font-bold" onClick={() => setOpen(false)}>{t("nav.signIn")}</Link>
+                <Link to="/register" className="min-h-11 rounded-lg bg-ink px-3 py-3 font-bold text-white" onClick={() => setOpen(false)}>{t("nav.register")}</Link>
               </>
             )}
           </nav>

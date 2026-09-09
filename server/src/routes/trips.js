@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { travelPreferenceSchema, tripRevisionSchema } from "@nuogo/shared/schemas";
-import { generateThreePlans } from "../services/generator.js";
-import { getTripAccess, requireTripRole } from "../services/tripAccess.js";
-import { validatePreferences } from "../services/validation.js";
+import { createGuestClaim, getTripAccess, guestClaimMatches, requireTripRole } from "../services/tripAccess.js";
+import { travelPreferenceRequest } from "../validation/requestValidators.js";
+import { validateRequest } from "../validation/validateRequest.js";
+import { screenTravelPreferences } from "../services/promptInjection.js";
+import { revalidateEditedTrip } from "../services/itinerary/revalidateEditedTrip.js";
 
 function notFound() {
   const error = new Error("Trip was not found.");
@@ -27,6 +29,20 @@ function validationError(message) {
   return error;
 }
 
+function failedGenerationResponse(result) {
+  const issueCodes = [...new Set((result.validation?.issues ?? []).map(({ code }) => code))];
+  return {
+    error: {
+      code: "GENERATION_CONSTRAINTS_UNSATISFIED",
+      message: "Nuogo could not create a valid itinerary within the current requirements and budget.",
+      details: {
+        issueCodes,
+        actionHints: ["ADJUST_BUDGET", "ADJUST_DATES_OR_PREFERENCES"]
+      }
+    }
+  };
+}
+
 function publicAccess(access) {
   return {
     role: access.role,
@@ -49,49 +65,92 @@ async function accessFor(repository, tripId, userId, roles) {
 
 export function createTripsRouter({
   repository,
-  planProvider,
   objectivePlanner,
-  attractionCatalogue,
   authenticate
 }) {
   const router = Router();
   router.use(authenticate);
 
-  router.post("/generate", async (req, res, next) => {
+  router.post(
+    "/generate",
+    ...travelPreferenceRequest,
+    validateRequest,
+    async (req, res, next) => {
     try {
-      if (req.body?.totalBudgetCny !== undefined) {
-        if (!objectivePlanner) throw Object.assign(new Error("Validated planning is unavailable."), {
-          code: "PLANNER_UNAVAILABLE",
-          status: 503
-        });
-        const result = await objectivePlanner(travelPreferenceSchema.parse(req.body));
-        if (result.state !== "FINAL_VALIDATED") return res.status(422).json(result);
-        const trip = repository.saveObjectiveTrip
-          ? await repository.saveObjectiveTrip(req.user.id, result)
-          : result.trip;
-        return res.status(201).json({ ...result, trip });
-      }
-      const preferences = validatePreferences(req.body);
-      const attractions = attractionCatalogue?.listApproved(preferences.destination) ?? [];
-      if (preferences.destination === "huangshan" && attractions.length === 0) {
-        const error = new Error(
-          "No approved Huangshan attractions are available. Review local attraction records first."
-        );
-        error.code = "ATTRACTION_CATALOGUE_EMPTY";
-        error.status = 422;
+      if (!objectivePlanner) throw Object.assign(new Error("Validated planning is unavailable."), {
+        code: "PLANNER_UNAVAILABLE",
+        status: 503
+      });
+      const preferences = travelPreferenceSchema.parse(req.body);
+      const screening = screenTravelPreferences(preferences);
+      if (!screening.safe) {
+        const error = new Error("Travel preferences contain instruction-like text that cannot be processed safely.");
+        error.code = "PROMPT_INJECTION_REJECTED";
+        error.status = 400;
+        error.details = { fields: screening.fields };
         throw error;
       }
-      const generated = await generateThreePlans(preferences, planProvider, { attractions });
-      const trip = await repository.createTrip(req.user.id, preferences, generated.variants);
-      res.status(201).json({ trip, variants: trip.variants });
+      await repository.recordPrivacyConsent(req.user.id, {
+        type: "LLM_ITINERARY_GENERATION",
+        version: "2026-08-21",
+        accepted: true
+      });
+      const result = await objectivePlanner(preferences);
+      if (result.state !== "FINAL_VALIDATED") {
+        return res.status(422).json(failedGenerationResponse(result));
+      }
+      const guestClaim = req.user.accountType === "GUEST" ? createGuestClaim() : null;
+      const persistedResult = guestClaim
+        ? {
+            ...result,
+            persistenceScope: "SESSION",
+            expiresAt: req.user.guestExpiresAt,
+            guestClaimTokenHash: guestClaim.tokenHash
+          }
+        : result;
+      const trip = repository.saveObjectiveTrip
+        ? await repository.saveObjectiveTrip(req.user.id, persistedResult)
+        : result.trip;
+      return res.status(201).json({ ...result, trip, ...(guestClaim ? { guestClaimToken: guestClaim.token } : {}) });
+    } catch (error) {
+      next(error);
+    }
+    }
+  );
+
+  router.get("/", async (req, res, next) => {
+    try {
+      res.json({ trips: await repository.listTrips(req.user.id) });
     } catch (error) {
       next(error);
     }
   });
 
-  router.get("/", async (req, res, next) => {
+  router.post("/:tripId/claim", async (req, res, next) => {
     try {
-      res.json({ trips: await repository.listTrips(req.user.id) });
+      if (req.user.accountType === "GUEST") {
+        const error = new Error("A registered account is required to save this itinerary.");
+        error.code = "REGISTERED_ACCOUNT_REQUIRED";
+        error.status = 403;
+        throw error;
+      }
+      const claimToken = typeof req.body.claimToken === "string" ? req.body.claimToken : "";
+      if (claimToken.length < 16 || claimToken.length > 256) throw validationError("A valid save token is required.");
+      const pending = await repository.getTrip(req.params.tripId);
+      if (!pending || !guestClaimMatches(pending.guestClaimTokenHash, claimToken)) {
+        const error = new Error("This guest itinerary cannot be saved by this account.");
+        error.code = "GUEST_TRIP_CLAIM_DENIED";
+        error.status = 403;
+        throw error;
+      }
+      const trip = await repository.claimGuestTrip(req.params.tripId, req.user.id, pending.guestClaimTokenHash);
+      if (!trip) {
+        const error = new Error("This guest itinerary cannot be saved by this account.");
+        error.code = "GUEST_TRIP_CLAIM_DENIED";
+        error.status = 403;
+        throw error;
+      }
+      res.json({ trip });
     } catch (error) {
       next(error);
     }
@@ -166,36 +225,62 @@ export function createTripsRouter({
     }
   });
 
-  router.post("/:tripId/select-variant", async (req, res, next) => {
+  router.patch("/:tripId/entries/:entryId", async (req, res, next) => {
     try {
-      const access = await accessFor(
-        repository,
-        req.params.tripId,
-        req.user.id,
-        ["editor"]
-      );
-      const hasVariant = access.trip.variants.some((variant) => (
-        (variant.id ?? variant.itinerary?.variant) === req.body.variantId
-      ));
-      if (!hasVariant) throw notFound();
+      const access = await accessFor(repository, req.params.tripId, req.user.id, ["editor"]);
       const revision = expectedRevision(req.body);
-      const select = access.trip.objectiveAligned && repository.selectObjectiveVariant
-        ? repository.selectObjectiveVariant.bind(repository)
-        : repository.selectVariant.bind(repository);
-      const trip = await select(
+      if (access.trip.revision !== revision) throw versionConflict();
+      const { expectedRevision: _expectedRevision, ...patch } = req.body;
+      const { variant } = await revalidateEditedTrip({
+        trip: access.trip,
+        entryId: req.params.entryId,
+        patch
+      });
+      const trip = await repository.updateObjectiveVariant(
         req.params.tripId,
         req.user.id,
-        req.body.variantId,
-        revision,
-        {
-          action: "trip.variant_selected",
-          entityType: "variant",
-          entityId: req.body.variantId,
-          summary: {}
-        }
+        variant,
+        revision
       );
       if (!trip) throw versionConflict();
       res.json({ trip, revision: trip.revision });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/:tripId/regenerate", async (req, res, next) => {
+    try {
+      const access = await accessFor(repository, req.params.tripId, req.user.id, ["owner"]);
+      const revision = expectedRevision(req.body);
+      if (access.trip.revision !== revision) throw versionConflict();
+      const preferences = travelPreferenceSchema.parse({
+        ...access.trip.preferences,
+        ...(req.body.preferences ?? {})
+      });
+      const screening = screenTravelPreferences(preferences);
+      if (!screening.safe) {
+        const error = new Error("Travel preferences contain instruction-like text that cannot be processed safely.");
+        error.code = "PROMPT_INJECTION_REJECTED";
+        error.status = 400;
+        error.details = { fields: screening.fields };
+        throw error;
+      }
+      await repository.recordPrivacyConsent(req.user.id, {
+        type: "LLM_ITINERARY_GENERATION",
+        version: "2026-08-21",
+        accepted: true
+      });
+      const result = await objectivePlanner(preferences);
+      if (result.state !== "FINAL_VALIDATED") {
+        return res.status(422).json(failedGenerationResponse(result));
+      }
+      const linked = {
+        ...result,
+        trip: { ...result.trip, parentTripId: access.trip.id }
+      };
+      const trip = await repository.saveObjectiveTrip(req.user.id, linked);
+      return res.status(201).json({ ...linked, trip });
     } catch (error) {
       next(error);
     }

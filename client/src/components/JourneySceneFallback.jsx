@@ -6,7 +6,6 @@ export default function JourneySceneFallback({ stops = DEFAULT_STOPS, complete =
       className={`living-atlas-fallback${complete ? " is-complete" : ""}`}
       data-testid="journey-scene-fallback"
     >
-      <img src="/images/china-journey-map-daylight.png" alt="" aria-hidden="true" />
       <svg viewBox="0 0 1000 620" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
         <path
           className="living-atlas-fallback-shadow"

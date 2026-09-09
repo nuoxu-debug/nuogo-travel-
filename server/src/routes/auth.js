@@ -1,9 +1,11 @@
 import { Router } from "express";
+import { loginRequest, registrationRequest } from "../validation/requestValidators.js";
+import { validateRequest } from "../validation/validateRequest.js";
 
 export function createAuthRouter({ authService, authenticate, demoMode = false }) {
   const router = Router();
 
-  router.post("/register", async (req, res, next) => {
+  router.post("/register", registrationRequest, validateRequest, async (req, res, next) => {
     try {
       res.status(201).json(await authService.register(req.body));
     } catch (error) {
@@ -11,7 +13,7 @@ export function createAuthRouter({ authService, authenticate, demoMode = false }
     }
   });
 
-  router.post("/login", async (req, res, next) => {
+  router.post("/login", loginRequest, validateRequest, async (req, res, next) => {
     try {
       res.json(await authService.login(req.body));
     } catch (error) {

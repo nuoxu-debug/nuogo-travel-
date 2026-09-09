@@ -1,10 +1,9 @@
-import { buildPrompt } from "../services/promptBuilder.js";
 import { ExternalServiceError, ExternalServiceTimeoutError } from "../errors.js";
 
 export class OpenRouterProvider {
   constructor({
     apiKey,
-    model = "openai/gpt-4.1-mini",
+    model = "deepseek/deepseek-chat-v3.1",
     timeoutMs = 30000,
     fetchImpl = fetch,
     supportsStructuredOutput = true
@@ -14,19 +13,6 @@ export class OpenRouterProvider {
     this.timeoutMs = timeoutMs;
     this.fetchImpl = fetchImpl;
     this.supportsStructuredOutput = supportsStructuredOutput;
-  }
-
-  async generate(preferences, style, context = {}) {
-    if (!this.apiKey) {
-      throw new Error("OpenRouter API key is not configured.");
-    }
-
-    const prompt = buildPrompt(preferences, style, context);
-    return this.#complete({
-      ...prompt,
-      responseFormat: { type: "json_object" },
-      temperature: 0.5
-    });
   }
 
   async generateStructured({ system, user, jsonSchema, temperature = 0.2 }) {
@@ -66,7 +52,11 @@ export class OpenRouterProvider {
             { role: "user", content: user }
           ],
           response_format: responseFormat,
-          temperature
+          temperature,
+          provider: {
+            data_collection: "deny",
+            zdr: true
+          }
         }),
         signal: controller.signal
       });
@@ -87,7 +77,9 @@ export class OpenRouterProvider {
 
     if (!response.ok) {
       throw new ExternalServiceError(`OpenRouter request failed with status ${response.status}.`, {
-        code: "OPENROUTER_REQUEST_FAILED"
+        code: response.status === 429
+          ? "OPENROUTER_RATE_LIMITED"
+          : response.status >= 500 ? "OPENROUTER_UNAVAILABLE" : "OPENROUTER_REQUEST_FAILED"
       });
     }
 

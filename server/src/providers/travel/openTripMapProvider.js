@@ -1,16 +1,18 @@
 import { z } from "zod";
 import { requestJson } from "./httpClient.js";
 
-const tourismRecordSchema = z.object({
+const tourismResponseSchema = z.array(z.unknown());
+const tourismDetailSchema = z.object({
   xid: z.string().min(1),
-  name: z.string().default(""),
-  kinds: z.string().default(""),
-  dist: z.number().nonnegative().optional(),
-  rate: z.union([z.number(), z.string()]).optional(),
-  point: z.object({ lon: z.number(), lat: z.number() })
+  name: z.string().optional(),
+  kinds: z.string().optional(),
+  point: z.object({ lon: z.number(), lat: z.number() }).optional(),
+  otm: z.string().url().optional(),
+  wikipedia_extracts: z.object({ text: z.string().optional() }).passthrough().optional(),
+  info: z.object({ descr: z.string().optional() }).passthrough().optional(),
+  address: z.record(z.unknown()).optional(),
+  preview: z.object({ source: z.string().url().optional() }).passthrough().optional()
 }).passthrough();
-
-const tourismResponseSchema = z.array(tourismRecordSchema);
 
 export class OpenTripMapProvider {
   constructor({ apiKey, fetchImpl = fetch, timeoutMs = 8000, retries = 2 }) {
@@ -19,7 +21,7 @@ export class OpenTripMapProvider {
     this.requestOptions = { fetchImpl, timeoutMs, retries };
   }
 
-  async enrichTourism({ city, coordinates, radiusMeters = 5000, signal }) {
+  async listAttractions({ city, coordinates, radiusMeters = 5000, signal }) {
     if (!city) throw new TypeError("A city is required for tourism enrichment.");
     const radius = Math.min(20_000, Math.max(100, Math.round(radiusMeters)));
     const params = new URLSearchParams({
@@ -37,5 +39,18 @@ export class OpenTripMapProvider {
       signal,
       schema: tourismResponseSchema
     });
+  }
+
+  async getAttractionDetails({ xid, signal }) {
+    if (!xid) throw new TypeError("An xid is required for attraction details.");
+    const params = new URLSearchParams({ apikey: this.apiKey });
+    return requestJson(
+      `https://api.opentripmap.com/0.1/en/places/xid/${encodeURIComponent(xid)}?${params}`,
+      { ...this.requestOptions, signal, schema: tourismDetailSchema }
+    );
+  }
+
+  async enrichTourism(input) {
+    return this.listAttractions(input);
   }
 }

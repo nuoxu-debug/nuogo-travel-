@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { useReducedMotion } from "../hooks/useAnime.js";
+import { useReducedMotion } from "../hooks/useReducedMotion.js";
 
 const canUseScrollTrigger = typeof window !== "undefined"
   && typeof window.matchMedia === "function"

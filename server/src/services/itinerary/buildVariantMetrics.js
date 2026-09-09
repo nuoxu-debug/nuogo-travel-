@@ -14,8 +14,9 @@ function pointLabel(point) {
 
 function daySummary(day) {
   const items = [{ type: "START", label: pointLabel(day.startPoint) }];
-  day.activities.forEach((activity, index) => {
-    const leg = day.legs[index];
+  let legIndex = 0;
+  day.activities.forEach((activity) => {
+    const leg = activity.xid ? day.legs[legIndex++] : undefined;
     if (leg) {
       items.push({
         type: "LEG",
@@ -23,17 +24,18 @@ function daySummary(day) {
         mode: leg.mode,
         distanceMeters: leg.distanceMeters,
         durationMinutes: leg.durationMinutes,
-        estimatedCostFen: leg.estimatedCostFen,
-        routeSource: leg.routeSource
+        estimatedCostMinor: leg.estimatedCostMinor,
+        routeSource: leg.routeSource,
+        sourceType: leg.sourceType
       });
     }
     items.push({
-      type: activity.activityType === "FOOD" ? "MEAL" : "ACTIVITY",
-      label: activity.poi?.name ?? activity.poiId,
+      type: activity.activityType === "MEAL" ? "MEAL" : "ACTIVITY",
+      label: activity.poi?.name ?? activity.activityType,
       startTime: activity.scheduledStartTime ?? activity.plannedStartTime
     });
   });
-  const finalLeg = day.legs[day.activities.length];
+  const finalLeg = day.legs[legIndex];
   if (finalLeg) {
     items.push({
       type: "LEG",
@@ -41,16 +43,17 @@ function daySummary(day) {
       mode: finalLeg.mode,
       distanceMeters: finalLeg.distanceMeters,
       durationMinutes: finalLeg.durationMinutes,
-      estimatedCostFen: finalLeg.estimatedCostFen,
-      routeSource: finalLeg.routeSource
+      estimatedCostMinor: finalLeg.estimatedCostMinor,
+      routeSource: finalLeg.routeSource,
+      sourceType: finalLeg.sourceType
     });
   }
   items.push({ type: "END", label: pointLabel(day.endPoint) });
   return {
     dayNumber: day.dayNumber,
     date: day.date,
-    activityCount: day.activities.filter(({ activityType }) => activityType !== "FOOD").length,
-    mealCount: day.activities.filter(({ activityType }) => activityType === "FOOD").length,
+    activityCount: day.activities.filter(({ activityType }) => activityType !== "MEAL").length,
+    mealCount: day.activities.filter(({ activityType }) => activityType === "MEAL").length,
     tripLegCount: day.legs.length,
     items
   };
@@ -60,18 +63,18 @@ export function buildVariantMetrics(itinerary, summary, profileDefinition) {
   const activities = itinerary.days.flatMap((day) => day.activities);
   const legs = itinerary.days.flatMap((day) => day.legs ?? []);
   const transportDistribution = countBy(legs, "mode");
-  const paidActivityCount = activities.filter(({ estimatedActivityCostFen }) => estimatedActivityCostFen > 0).length;
+  const paidActivityCount = activities.filter(({ estimatedActivityCostMinor }) => estimatedActivityCostMinor > 0).length;
   const valueLegCount = (transportDistribution.WALK ?? 0) + (transportDistribution.PUBLIC_TRANSIT ?? 0);
-  const differences = itinerary.variant === "BUDGET_SAVING"
+  const differences = itinerary.travelStyle === "BUDGET_SAVING"
     ? [`${valueLegCount} of ${legs.length} local legs use walking or public transit`, "Budget accommodation estimate", "Lower daily meal allowance"]
-    : itinerary.variant === "BALANCED"
+    : itinerary.travelStyle === "BALANCED"
       ? [`${transportDistribution.TAXI ?? 0} taxi legs balanced with public transit`, "Mid-range accommodation estimate", "Balanced meal allowance"]
       : [`${transportDistribution.TAXI ?? 0} taxi legs reduce transfer effort`, "Comfort accommodation estimate", "Higher meal allowance"];
 
   return {
     activityCount: activities.length,
-    attractionCount: activities.filter(({ activityType }) => activityType !== "FOOD").length,
-    mealCount: activities.filter(({ activityType }) => activityType === "FOOD").length,
+    attractionCount: activities.filter(({ xid }) => xid).length,
+    mealCount: activities.filter(({ activityType }) => activityType === "MEAL").length,
     paidActivityCount,
     freeActivityCount: activities.length - paidActivityCount,
     tripLegCount: legs.length,
@@ -80,14 +83,18 @@ export function buildVariantMetrics(itinerary, summary, profileDefinition) {
       .reduce((total, { distanceMeters }) => total + distanceMeters, 0),
     transportDistribution,
     accommodationTier: profileDefinition.accommodationTier,
+    localTransportationTier: profileDefinition.localTransportationTier,
     foodTier: profileDefinition.foodTier,
     pace: profileDefinition.pace,
-    estimatedTotalFen: summary.totalFen,
-    remainingFen: summary.remainingFen,
+    estimatedTotalMinor: summary.totalMinor,
+    baselineMandatoryCostMinor: summary.baselineMandatoryCostMinor,
+    profileControlledCostMinor: summary.profileControlledCostMinor,
+    utilisationPercent: summary.utilisationPercent,
+    remainingMinor: summary.remainingMinor,
     keyAttractions: activities
-      .filter(({ activityType }) => activityType !== "FOOD")
+      .filter(({ xid }) => xid)
       .slice(0, 4)
-      .map((activity) => activity.poi?.name ?? activity.poiId),
+      .map((activity) => activity.poi?.name ?? activity.xid),
     differences,
     daySummaries: itinerary.days.map(daySummary)
   };

@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { AmapTravelProvider } from "../src/providers/travel/amapProvider.js";
 import { DemoTravelProvider } from "../src/providers/travel/demoTravelProvider.js";
 import { requestJson } from "../src/providers/travel/httpClient.js";
 import { OpenTripMapProvider } from "../src/providers/travel/openTripMapProvider.js";
@@ -68,67 +67,8 @@ describe("travel provider HTTP resilience", () => {
   });
 });
 
-describe("AMap travel provider", () => {
-  it("maps bounded city POI searches without exposing its key in returned records", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(response({
-      status: "1",
-      info: "OK",
-      infocode: "10000",
-      pois: [{
-        id: "B001",
-        name: "Forbidden City",
-        type: "Scenic spot",
-        typecode: "110200",
-        address: "4 Jingshan Front Street",
-        pname: "Beijing",
-        cityname: "Beijing",
-        adname: "Dongcheng",
-        location: "116.397026,39.918058"
-      }]
-    }));
-    const provider = new AmapTravelProvider({ apiKey: "server-amap-key", fetchImpl });
-
-    const pois = await provider.searchPois({ city: "beijing", categories: ["ATTRACTION"] });
-
-    expect(fetchImpl.mock.calls[0][0]).toContain("key=server-amap-key");
-    expect(fetchImpl.mock.calls[0][0]).toContain("city=110000");
-    expect(pois).toEqual([expect.objectContaining({ id: "B001", location: "116.397026,39.918058" })]);
-    expect(JSON.stringify(pois)).not.toContain("server-amap-key");
-  });
-
-  it("maps the first route and rejects an unavailable route", async () => {
-    const successfulFetch = vi.fn().mockResolvedValue(response({
-      status: "1",
-      info: "OK",
-      infocode: "10000",
-      route: { paths: [{ distance: "2300", cost: { duration: "900", tolls: "5" } }] }
-    }));
-    const provider = new AmapTravelProvider({ apiKey: "server-amap-key", fetchImpl: successfulFetch });
-
-    await expect(provider.getRoute({
-      from: { longitude: 116.397, latitude: 39.918 },
-      to: { longitude: 116.407, latitude: 39.904 },
-      mode: "DRIVE",
-      city: "beijing"
-    })).resolves.toMatchObject({ distanceMeters: 2300, durationSeconds: 900, tollsCny: 5 });
-
-    const unavailable = new AmapTravelProvider({
-      apiKey: "server-amap-key",
-      fetchImpl: vi.fn().mockResolvedValue(response({
-        status: "1", info: "OK", infocode: "10000", route: { paths: [] }
-      }))
-    });
-    await expect(unavailable.getRoute({
-      from: { longitude: 116.397, latitude: 39.918 },
-      to: { longitude: 116.407, latitude: 39.904 },
-      mode: "DRIVE",
-      city: "beijing"
-    })).rejects.toMatchObject({ code: "ROUTE_UNAVAILABLE" });
-  });
-});
-
 describe("OpenTripMap and demo travel providers", () => {
-  it("requests tourism records around bounded coordinates", async () => {
+  it("requests attraction records around bounded coordinates", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(response([{
       xid: "Q80290",
       name: "Temple of Heaven",
@@ -139,8 +79,8 @@ describe("OpenTripMap and demo travel providers", () => {
     }]));
     const provider = new OpenTripMapProvider({ apiKey: "server-otm-key", fetchImpl });
 
-    const records = await provider.enrichTourism({
-      city: "beijing",
+    const records = await provider.listAttractions({
+      city: "singapore",
       coordinates: { longitude: 116.4074, latitude: 39.9042 },
       radiusMeters: 5000
     });
@@ -151,24 +91,101 @@ describe("OpenTripMap and demo travel providers", () => {
     expect(JSON.stringify(records)).not.toContain("server-otm-key");
   });
 
+  it("retrieves one attraction detail record by xid", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(response({
+      xid: "Q80290",
+      name: "Temple of Heaven",
+      kinds: "architecture,historic",
+      point: { lon: 116.4065, lat: 39.8822 },
+      otm: "https://opentripmap.com/en/card/Q80290",
+      wikipedia_extracts: { text: "A historic ceremonial complex." },
+      info: { descr: "Provider detail." },
+      address: { city: "Singapore" },
+      preview: { source: "https://images.example.test/temple.jpg" }
+    }));
+    const provider = new OpenTripMapProvider({ apiKey: "server-otm-key", fetchImpl });
+
+    const record = await provider.getAttractionDetails({ xid: "Q80290" });
+
+    expect(fetchImpl.mock.calls[0][0]).toContain("/places/xid/Q80290");
+    expect(fetchImpl.mock.calls[0][0]).toContain("apikey=server-otm-key");
+    expect(record).toMatchObject({
+      xid: "Q80290",
+      name: "Temple of Heaven",
+      wikipedia_extracts: { text: "A historic ceremonial complex." },
+      preview: { source: "https://images.example.test/temple.jpg" }
+    });
+  });
+
+  it("rejects malformed attraction lists and bounds timed out calls", async () => {
+    const malformed = new OpenTripMapProvider({
+      apiKey: "server-otm-key",
+      fetchImpl: vi.fn().mockResolvedValue(response({ features: [] })),
+      retries: 0
+    });
+    await expect(malformed.listAttractions({
+      city: "singapore",
+      coordinates: { longitude: 116.4074, latitude: 39.9042 },
+      radiusMeters: 5000
+    })).rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE" });
+
+    const timedOutFetch = vi.fn((_url, options) => new Promise((_resolve, reject) => {
+      options.signal.addEventListener("abort", () => reject(options.signal.reason));
+    }));
+    const timedOut = new OpenTripMapProvider({
+      apiKey: "server-otm-key",
+      fetchImpl: timedOutFetch,
+      timeoutMs: 5,
+      retries: 0
+    });
+    await expect(timedOut.getAttractionDetails({ xid: "Q80290" }))
+      .rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE" });
+    expect(timedOutFetch).toHaveBeenCalledTimes(1);
+  });
+
   it("returns stable demo POIs, routes, and supporting records", async () => {
     const provider = new DemoTravelProvider({ now: () => "2026-08-14T00:00:00.000Z" });
-    const first = await provider.searchPois({ city: "beijing", categories: ["ATTRACTION"] });
-    const second = await provider.searchPois({ city: "beijing", categories: ["ATTRACTION"] });
+    const first = await provider.searchPois({ city: "singapore", categories: ["ATTRACTION"] });
+    const second = await provider.searchPois({ city: "singapore", categories: ["ATTRACTION"] });
     expect(second).toEqual(first);
     expect(first.length).toBeGreaterThanOrEqual(3);
 
     await expect(provider.getRoute({
-      from: { longitude: 116.397, latitude: 39.918 },
-      to: { longitude: 116.407, latitude: 39.904 },
+      from: { longitude: 103.8514, latitude: 1.2903 },
+      to: { longitude: 103.8593, latitude: 1.2863 },
       mode: "WALK",
-      city: "beijing"
+      city: "singapore"
     })).resolves.toMatchObject({ provider: "DEMO", distanceMeters: expect.any(Number) });
 
-    await expect(provider.enrichTourism({
-      city: "beijing",
-      coordinates: { longitude: 116.4074, latitude: 39.9042 },
-      radiusMeters: 5000
+    await expect(provider.listAttractions({
+      city: "singapore",
+      coordinates: { longitude: 103.8198, latitude: 1.3521 },
+      radiusMeters: 20_000
     })).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ xid: expect.any(String) })]));
+    const candidates = await provider.listAttractions({
+      city: "singapore",
+      coordinates: { longitude: 103.8198, latitude: 1.3521 },
+      radiusMeters: 20_000
+    });
+    expect(candidates.map(({ xid }) => xid)).toEqual(expect.arrayContaining([
+      "demo-sg-gardens-by-the-bay",
+      "demo-sg-national-gallery"
+    ]));
+    expect(candidates.every(({ xid }) => xid.startsWith("demo-sg-"))).toBe(true);
+  });
+
+  it("provides grounded outdoor and indoor candidates for rainy-day demo scenarios", async () => {
+    const provider = new DemoTravelProvider({ now: () => "2026-08-14T00:00:00.000Z" });
+
+    for (const [city, center] of [["singapore", { longitude: 103.8198, latitude: 1.3521 }]]) {
+      const candidates = await provider.listAttractions({
+        city,
+        coordinates: center,
+        radiusMeters: 20_000
+      });
+
+      expect(candidates.some(({ kinds }) => /natural|parks|gardens|viewpoints/.test(kinds))).toBe(true);
+      expect(candidates.some(({ kinds }) => /museums|cultural|historic|architecture/.test(kinds))).toBe(true);
+    }
   });
 });

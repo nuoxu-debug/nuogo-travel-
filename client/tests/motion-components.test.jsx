@@ -14,18 +14,18 @@ describe("Nuogo wayfinding motion components", () => {
     render(
       <RouteRail
         stops={[
-          { label: "Huangshan North", meta: "08:10" },
-          { label: "Hongcun", meta: "10:00" },
-          { label: "Tunxi Old Street", meta: "17:20" }
+          { label: "Marina Bay", meta: "08:10" },
+          { label: "Gardens by the Bay", meta: "10:00" },
+          { label: "Chinatown", meta: "17:20" }
         ]}
       />
     );
 
     expect(screen.getAllByRole("listitem").map((item) => item.textContent))
       .toEqual([
-        expect.stringContaining("Huangshan North"),
-        expect.stringContaining("Hongcun"),
-        expect.stringContaining("Tunxi Old Street")
+        expect.stringContaining("Marina Bay"),
+        expect.stringContaining("Gardens by the Bay"),
+        expect.stringContaining("Chinatown")
       ]);
   });
 

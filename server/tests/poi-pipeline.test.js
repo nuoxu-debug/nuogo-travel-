@@ -1,24 +1,10 @@
-import { canonicalPoiSchema } from "@nuogo/shared/schemas";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildCandidatePool } from "../src/services/poi/buildCandidatePool.js";
-import { matchPois } from "../src/services/poi/matchPois.js";
-import { normalizeAmapPoi } from "../src/services/poi/normalizeAmapPoi.js";
+import { buildDiscoveryResponse } from "../src/services/poi/buildDiscoveryResponse.js";
 import { normalizeOpenTripMapPoi } from "../src/services/poi/normalizeOpenTripMapPoi.js";
+import { retrieveAttractionCandidates } from "../src/services/poi/openTripMapCandidateService.js";
 
 const retrievedAt = "2026-08-14T00:00:00.000Z";
-
-function amap(overrides = {}) {
-  return {
-    id: "B001",
-    name: "Temple of Heaven",
-    type: "Scenic spot",
-    typecode: "110200",
-    address: "Dongcheng District",
-    cityname: "Beijing",
-    location: "116.406605,39.881903",
-    ...overrides
-  };
-}
 
 function otm(overrides = {}) {
   return {
@@ -31,128 +17,180 @@ function otm(overrides = {}) {
 }
 
 describe("canonical POI pipeline", () => {
-  it("normalizes AMap IDs, categories, coordinates, and source timestamps", () => {
-    const poi = normalizeAmapPoi(amap(), { city: "beijing", retrievedAt });
-
-    expect(poi).toMatchObject({
-      canonicalPoiId: "amap:beijing:B001",
-      name: "Temple of Heaven",
-      city: "beijing",
-      category: "ATTRACTION",
-      coordinates: { longitude: 116.406605, latitude: 39.881903 },
-      primarySource: "AMAP",
-      amapPoiId: "B001",
-      retrievedAt,
-      verificationStatus: "PRIMARY_ONLY"
-    });
-    expect(poi.sourceRecords).toEqual([{
-      provider: "AMAP",
-      sourceId: "B001",
-      retrievedAt
-    }]);
-    expect(() => canonicalPoiSchema.parse(poi)).not.toThrow();
-  });
-
-  it("rejects malformed and out-of-China AMap coordinates", () => {
-    expect(() => normalizeAmapPoi(amap({ location: "invalid" }), {
-      city: "beijing", retrievedAt
-    })).toThrow(/coordinates/i);
-    expect(() => normalizeAmapPoi(amap({ location: "1,1" }), {
-      city: "beijing", retrievedAt
-    })).toThrow(/China/i);
-  });
-
   it("normalizes OpenTripMap only as a supporting record", () => {
-    expect(normalizeOpenTripMapPoi(otm(), { city: "beijing", retrievedAt })).toEqual({
+    expect(normalizeOpenTripMapPoi(otm(), { city: "singapore", retrievedAt })).toEqual({
       provider: "OPENTRIPMAP",
       sourceId: "Q80290",
       sourceUrl: "https://opentripmap.com/en/card/Q80290",
       retrievedAt,
       name: "Temple of Heaven",
-      city: "beijing",
+      city: "singapore",
       category: "ATTRACTION",
-      coordinates: { longitude: 116.40661, latitude: 39.88191 },
+      coordinates: { longitude: 116.40661, latitude: 39.88191, coordinateSystem: "WGS84" },
       verificationStatus: "SUPPORTING_ONLY"
     });
   });
 
-  it("matches same-city records by name, category, and distance", () => {
-    const primary = [normalizeAmapPoi(amap(), { city: "beijing", retrievedAt })];
-    const supporting = [normalizeOpenTripMapPoi(otm(), { city: "beijing", retrievedAt })];
+  it("builds a stable attraction-only pool whose candidate IDs are raw xids", () => {
+    const candidate = {
+      xid: "Q80290",
+      name: "Temple of Heaven",
+      kinds: "historic,architecture",
+      coordinates: { longitude: 116.40661, latitude: 39.88191, coordinateSystem: "WGS84" },
+      city: "singapore",
+      sourceUrl: "https://opentripmap.com/en/card/Q80290",
+      retrievedAt,
+      matchStatus: "MATCHED"
+    };
+    const second = { ...candidate, xid: "Q123", name: "National Gallery Singapore" };
+    const wrongCity = { ...candidate, xid: "Q456", city: "beijing" };
+    const unusable = { ...candidate, xid: "Q789", matchStatus: "UNMATCHED" };
+    const preferences = { destination: "singapore", interests: ["FOOD", "HISTORY"] };
 
-    const [matched] = matchPois(primary, supporting, 0.8);
+    const first = buildCandidatePool(preferences, [second, candidate, unusable, wrongCity]);
+    const reordered = buildCandidatePool(preferences, [candidate, unusable, second, wrongCity]);
 
-    expect(matched).toMatchObject({
-      verificationStatus: "MATCHED",
-      openTripMapXid: "Q80290"
-    });
-    expect(matched.sourceRecords).toHaveLength(2);
-    expect(() => canonicalPoiSchema.parse(matched)).not.toThrow();
-  });
-
-  it("does not cross cities, merge distant names, or promote unmatched support", () => {
-    const primary = [normalizeAmapPoi(amap(), { city: "beijing", retrievedAt })];
-    const supporting = [
-      normalizeOpenTripMapPoi(otm(), { city: "shanghai", retrievedAt }),
-      normalizeOpenTripMapPoi(otm({
-        xid: "Q-far",
-        name: "Temple of Heaven",
-        point: { lon: 121.49, lat: 31.24 }
-      }), { city: "beijing", retrievedAt }),
-      normalizeOpenTripMapPoi(otm({ xid: "Q-only", name: "Unlisted Tower" }), {
-        city: "beijing", retrievedAt
-      })
-    ];
-
-    const result = matchPois(primary, supporting, 0.8);
-
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ verificationStatus: "PRIMARY_ONLY" });
-    expect(JSON.stringify(result)).not.toContain("Q-only");
-  });
-
-  it("marks primary records ambiguous instead of guessing between support candidates", () => {
-    const primary = [normalizeAmapPoi(amap(), { city: "beijing", retrievedAt })];
-    const supporting = [
-      normalizeOpenTripMapPoi(otm(), { city: "beijing", retrievedAt }),
-      normalizeOpenTripMapPoi(otm({ xid: "Q80290-copy", point: { lon: 116.40662, lat: 39.88192 } }), {
-        city: "beijing", retrievedAt
-      })
-    ];
-
-    const [result] = matchPois(primary, supporting, 0.8);
-
-    expect(result.verificationStatus).toBe("AMBIGUOUS");
-    expect(result.openTripMapXid).toBeUndefined();
-    expect(result.sourceRecords).toHaveLength(1);
-  });
-
-  it("builds a stable, city-isolated approved candidate pool", () => {
-    const beijing = normalizeAmapPoi(amap(), { city: "beijing", retrievedAt });
-    const restaurant = normalizeAmapPoi(amap({
-      id: "B002",
-      name: "Local Noodle House",
-      typecode: "050100",
-      location: "116.407,39.882"
-    }), { city: "beijing", retrievedAt });
-    const shanghai = normalizeAmapPoi(amap({ id: "S001", location: "121.49,31.24" }), {
-      city: "shanghai", retrievedAt
-    });
-    const ambiguous = { ...beijing, canonicalPoiId: "amap:beijing:AMB", verificationStatus: "AMBIGUOUS" };
-    const preferences = { destination: "beijing", interests: ["FOOD", "HISTORY"] };
-
-    const first = buildCandidatePool(preferences, [restaurant, shanghai, ambiguous, beijing]);
-    const second = buildCandidatePool(preferences, [beijing, restaurant, ambiguous, shanghai]);
-
-    expect(first.candidateIds).toEqual([
-      "candidate:beijing:B001",
-      "candidate:beijing:B002"
-    ]);
-    expect(second).toEqual(first);
-    expect(first.candidates.every(({ city }) => city === "beijing")).toBe(true);
-    expect(first.rejected).toEqual(expect.arrayContaining([
-      expect.objectContaining({ canonicalPoiId: "amap:beijing:AMB", reason: "AMBIGUOUS" }),
-      expect.objectContaining({ canonicalPoiId: "amap:shanghai:S001", reason: "WRONG_CITY" })
+    expect(first.candidateIds).toEqual(["Q123", "Q80290"]);
+    expect(reordered).toEqual(first);
+    expect(first.candidates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ candidateId: "Q80290", xid: "Q80290", category: "CULTURE" })
     ]));
+    expect(first.candidates.every(({ city }) => city === "singapore")).toBe(true);
+    expect(first.rejected).toEqual(expect.arrayContaining([
+      expect.objectContaining({ xid: "Q789", reason: "UNMATCHED" }),
+      expect.objectContaining({ xid: "Q456", reason: "WRONG_CITY" })
+    ]));
+  });
+
+  it("builds localized browser-safe discovery records without credentials", () => {
+    const [result] = buildDiscoveryResponse("singapore", [{
+      xid: "otm-bj-forbidden-city",
+      name: "Forbidden City",
+      displayName: { en: "Forbidden City", zh: "故宫博物院" },
+      description: { en: "A palace complex.", zh: "皇家宫殿建筑群。" },
+      descriptionSourceType: "DATABASE_BACKED",
+      category: "HISTORY",
+      coordinates: { longitude: 116.397, latitude: 39.918, coordinateSystem: "WGS84" },
+      city: "singapore",
+      sourceUrl: "https://opentripmap.com/en/card/otm-bj-forbidden-city",
+      retrievedAt,
+      matchStatus: "MATCHED",
+      verificationStatus: "SUPPORTING_ONLY"
+    }], { runtimeMode: "live" });
+    expect(result).toMatchObject({
+      name: { en: "Forbidden City", zh: "故宫博物院" },
+      source: { provider: "OPENTRIPMAP", sourceType: "OPENTRIPMAP_API" }
+    });
+    expect(JSON.stringify(result)).not.toMatch(/apikey|server-otm-key/i);
+  });
+});
+
+describe("OpenTripMap candidate retrieval", () => {
+  const settings = {
+    center: { longitude: 116.4074, latitude: 39.9042 },
+    radiusMeters: 12_000
+  };
+
+  it("uses destination settings, bounds detail calls, and normalizes usable records", async () => {
+    const provider = {
+      listAttractions: vi.fn(async () => [
+        otm(),
+        otm({ xid: "Q2", name: "", point: { lon: 116.41, lat: 39.91 } }),
+        otm({ xid: "Q3", name: "List-only place", point: { lon: 116.42, lat: 39.92 } }),
+        { xid: "BROKEN", name: "No coordinates" }
+      ]),
+      getAttractionDetails: vi.fn(async ({ xid }) => xid === "Q2"
+        ? { xid, name: "Detail-only place", kinds: "museums", point: { lon: 116.41, lat: 39.91 } }
+        : { xid, name: "Temple of Heaven", kinds: "historic,architecture", point: { lon: 116.40661, lat: 39.88191 } })
+    };
+
+    const candidates = await retrieveAttractionCandidates({
+      destination: "singapore",
+      settings
+    }, { provider, now: () => retrievedAt, maxDetailCalls: 2 });
+
+    expect(provider.listAttractions).toHaveBeenCalledWith({
+      city: "singapore",
+      coordinates: settings.center,
+      radiusMeters: 12_000,
+      signal: undefined
+    });
+    expect(provider.getAttractionDetails).toHaveBeenCalledTimes(2);
+    expect(candidates).toEqual([
+      expect.objectContaining({
+        xid: "Q2",
+        name: "Detail-only place",
+        kinds: "museums",
+        coordinates: { longitude: 116.41, latitude: 39.91, coordinateSystem: "WGS84" },
+        city: "singapore",
+        sourceUrl: "https://opentripmap.com/en/card/Q2",
+        retrievedAt,
+        matchStatus: "MATCHED",
+        description: { en: "Description unavailable", zh: "暂无景点介绍" }
+      }),
+      expect.objectContaining({
+        xid: "Q3",
+        name: "List-only place",
+        kinds: "historic,architecture",
+        coordinates: { longitude: 116.42, latitude: 39.92, coordinateSystem: "WGS84" },
+        city: "singapore",
+        sourceUrl: "https://opentripmap.com/en/card/Q3",
+        retrievedAt,
+        matchStatus: "MATCHED",
+        description: { en: "Description unavailable", zh: "暂无景点介绍" }
+      }),
+      expect.objectContaining({ xid: "Q80290", name: "Temple of Heaven" })
+    ]);
+  });
+
+  it("returns an empty allow-list without detail calls", async () => {
+    const provider = {
+      listAttractions: vi.fn(async () => []),
+      getAttractionDetails: vi.fn()
+    };
+
+    await expect(retrieveAttractionCandidates({ destination: "singapore", settings }, {
+      provider,
+      now: () => retrievedAt
+    })).resolves.toEqual([]);
+    expect(provider.getAttractionDetails).not.toHaveBeenCalled();
+  });
+
+  it("falls back to usable list facts when a bounded detail request times out", async () => {
+    const timeout = Object.assign(new Error("timed out"), { code: "PROVIDER_UNAVAILABLE" });
+    const provider = {
+      listAttractions: vi.fn(async () => [otm()]),
+      getAttractionDetails: vi.fn().mockRejectedValue(timeout)
+    };
+
+    await expect(retrieveAttractionCandidates({ destination: "singapore", settings }, {
+      provider,
+      now: () => retrievedAt,
+      maxDetailCalls: 1
+    })).resolves.toEqual([
+      expect.objectContaining({ xid: "Q80290", name: "Temple of Heaven", matchStatus: "MATCHED" })
+    ]);
+  });
+
+  it("uses the canonical xid card URL instead of a provider detail link", async () => {
+    const provider = {
+      listAttractions: vi.fn(async () => [otm()]),
+      getAttractionDetails: vi.fn(async ({ xid }) => ({
+        xid,
+        name: "Temple of Heaven",
+        kinds: "historic,architecture",
+        point: { lon: 116.40661, lat: 39.88191 },
+        otm: "https://opentripmap.com/en/card/Q80290?locale=en"
+      }))
+    };
+
+    await expect(retrieveAttractionCandidates({ destination: "singapore", settings }, {
+      provider,
+      now: () => retrievedAt,
+      maxDetailCalls: 1
+    })).resolves.toEqual([expect.objectContaining({
+      xid: "Q80290",
+      sourceUrl: "https://opentripmap.com/en/card/Q80290"
+    })]);
   });
 });

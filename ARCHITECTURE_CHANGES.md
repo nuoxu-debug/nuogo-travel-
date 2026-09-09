@@ -1,5 +1,11 @@
 # Nuogo Architecture Changes
 
+> **SUPERSEDED BASELINE CHANGE LOG.** This file records an earlier architecture pass. Use `CURRENT_ARCHITECTURE.md` for the FINAL_UNIFIED active architecture.
+
+## Singapore Alignment Checkpoint (2026-09-04)
+
+The active Singapore implementation remains a modular monolith. It now presents one selected-style itinerary, a six-category SGD hard budget, Singapore-only discovery, explicit guest claiming, and supporting System Administrator maintenance. Detailed current changes and frontend/data mappings are recorded in `CURRENT_ARCHITECTURE.md`, `docs/FRONTEND_ERD_TRACEABILITY.md`, and `docs/REPORT_IMPLEMENTATION_TRACEABILITY.md`.
+
 Date: 2026-07-24
 
 ## 1. Summary Of Confirmed Original Weaknesses
@@ -124,7 +130,7 @@ No existing success response shapes were intentionally changed.
 - No root lint/typecheck scripts exist.
 - MySQL tests use a mocked pool, not a real MySQL container.
 - No integrated Playwright end-to-end test command exists.
-- Vite still emits a chunk-size warning: the latest main JavaScript bundle is 724.56 kB (232.08 kB gzip).
+- Vite still emits a chunk-size warning: the latest main JavaScript bundle is 670.79 kB (216.72 kB gzip).
 
 ## 14. Future Optional Improvements
 
@@ -197,10 +203,10 @@ Verification additions:
 - Memory and mocked-MySQL repository contract tests.
 - Invitation/member/expense API authorization and transaction tests.
 - Invitation, collaborative workspace, revision-conflict, expense, settlement, mobile, focus, and reduced-motion frontend tests.
-- Deterministic MySQL demo rows in `database/seeds/001_demo.sql`; no live invitation token or external credential is seeded.
+- Deterministic Singapore demo records are created by the demo runtime and Singapore migration fixtures; no live invitation token or external credential is seeded.
 - Playwright visual capture for desktop/mobile collaboration and group-expense states.
 
 Current build note:
 
-- The final post-review production build emits a 724.56 kB main JavaScript bundle (232.08 kB gzip), a 529.46 kB Three.js living-atlas chunk (134.64 kB gzip), and 76.43 kB of CSS (19.37 kB gzip).
+- The final post-review production build emits a 670.79 kB main JavaScript bundle (216.72 kB gzip), a 529.46 kB Three.js living-atlas chunk (134.64 kB gzip), and 77.53 kB of CSS (19.72 kB gzip).
 - Vite's existing chunk-size warning remains. Bundle optimization is intentionally outside this documentation and verification task.

@@ -30,7 +30,11 @@ function activityLocation(issue) {
 
 function removeActivities(itinerary, issues) {
   const removals = issues
-    .filter(({ code }) => code === "UNKNOWN_POI" || code === "DUPLICATE_POI")
+    .filter(({ code }) => [
+      "MISSING_ATTRACTION_XID",
+      "UNKNOWN_ATTRACTION_XID",
+      "DUPLICATE_ATTRACTION_XID"
+    ].includes(code))
     .map(activityLocation)
     .filter(Boolean)
     .sort((left, right) => right.dayIndex - left.dayIndex || right.activityIndex - left.activityIndex);
@@ -94,6 +98,9 @@ function resequence(itinerary) {
 
 export function deterministicRepair(input, issues) {
   const itinerary = clone(input);
+  const regenerationRequiredCodes = [...new Set(issues
+    .filter(({ code }) => code === "DAILY_DENSITY_TOO_LOW")
+    .map(({ code }) => code))];
   const changed = [
     removeActivities(itinerary, issues),
     repairContinuity(itinerary, issues),
@@ -107,6 +114,7 @@ export function deterministicRepair(input, issues) {
   return {
     itinerary,
     changed,
-    repairedCodes: changed ? [...new Set(issues.map(({ code }) => code))] : []
+    repairedCodes: changed ? [...new Set(issues.map(({ code }) => code))] : [],
+    regenerationRequiredCodes
   };
 }

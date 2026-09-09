@@ -2,11 +2,11 @@ import { CheckCircle2, Database, LoaderCircle, Route, ShieldCheck, Sparkles, Wre
 
 const states = {
   RETRIEVING: { Icon: Database, label: "Retrieving source-labelled travel data", detail: "Building a destination candidate pool from configured providers." },
-  PLANNING: { Icon: Sparkles, label: "Drafting three travel profiles", detail: "The AI may select only source-matched candidate IDs." },
+  PLANNING: { Icon: Sparkles, label: "Drafting your selected travel style", detail: "The AI may select only source-matched candidate IDs." },
   VALIDATING: { Icon: ShieldCheck, label: "Validating routes, time, and budget", detail: "Server rules recalculate every derived value." },
   REPAIRING: { Icon: Wrench, label: "Repairing a constrained draft", detail: "A bounded repair pass is resolving validation codes." },
   FAILED: { Icon: Route, label: "No safe itinerary was produced", detail: "Nothing invalid has been marked ready." },
-  FINAL_VALIDATED: { Icon: CheckCircle2, label: "Three plans validated", detail: "Every accepted profile stays inside the same hard budget." }
+  FINAL_VALIDATED: { Icon: CheckCircle2, label: "Itinerary validated", detail: "The accepted itinerary stays inside your hard budget." }
 };
 
 export default function PipelineOverlay({ open, state = "RETRIEVING", language = "en" }) {
@@ -15,11 +15,11 @@ export default function PipelineOverlay({ open, state = "RETRIEVING", language =
   const Icon = current.Icon;
   const chineseStates = {
     RETRIEVING: ["正在获取带来源标识的旅行资料", "正在从已配置的数据提供方建立目的地候选池。"],
-    PLANNING: ["正在生成三种旅行方案", "AI 只能选择与来源资料匹配的候选地点。"],
+    PLANNING: ["正在生成所选旅行风格的行程", "AI 只能选择与来源资料匹配的候选地点。"],
     VALIDATING: ["正在校验路线、时间与预算", "服务端规则会重新计算所有衍生数值。"],
     REPAIRING: ["正在修复受约束的行程草案", "有限次数的修复流程正在处理校验问题。"],
     FAILED: ["未能生成安全可用的行程", "无效方案不会被标记为可用。"],
-    FINAL_VALIDATED: ["三套方案已通过校验", "每套方案都遵守同一总预算。"]
+    FINAL_VALIDATED: ["行程已通过校验", "这份行程遵守您的总预算上限。"]
   };
   const [label, detail] = language === "zh" ? (chineseStates[state] ?? chineseStates.RETRIEVING) : [current.label, current.detail];
   return <div className="fixed inset-0 z-[100] grid place-items-center bg-ink/96 px-5 text-white" role="dialog" aria-modal="true" aria-label={language === "zh" ? "正在生成行程" : "Generating itinerary"}>

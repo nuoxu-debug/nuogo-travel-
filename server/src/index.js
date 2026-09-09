@@ -2,23 +2,20 @@ import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { DemoPlanProvider } from "./providers/demoProvider.js";
 import { OpenRouterProvider } from "./providers/openRouter.js";
-import { AmapTravelProvider } from "./providers/travel/amapProvider.js";
 import { DemoTravelProvider } from "./providers/travel/demoTravelProvider.js";
 import { OpenTripMapProvider } from "./providers/travel/openTripMapProvider.js";
-import { AttractionSqliteRepository } from "./ingestion/sqliteRepository.js";
-import { MemoryRepository } from "./repositories/memory.js";
-import { MySqlRepository } from "./repositories/mysql.js";
-import { SqliteAttractionCatalogue } from "./services/attractionCatalogue.js";
-import { AttractionMediaService } from "./services/attractionMedia.js";
+import { createRepository } from "./runtime/createRepository.js";
 import { resolveCostReferences } from "./services/budget/costReferenceService.js";
 import { generateValidatedTrip } from "./services/itinerary/generateValidatedTrip.js";
-import { createLogger } from "./services/logger.js";
+import { createLogger, createRepositoryLogSink } from "./services/logger.js";
+import { createOpenTripMapCandidateService } from "./services/poi/openTripMapCandidateService.js";
+import { buildDiscoveryResponse } from "./services/poi/buildDiscoveryResponse.js";
 import { getCity } from "@nuogo/shared/constants";
+import { initializeDemoRuntime } from "./runtime/initializeDemoRuntime.js";
 
 const config = loadConfig();
-const repository = config.demoMode
-  ? new MemoryRepository()
-  : new MySqlRepository(config.mysql);
+const repository = createRepository(config);
+await initializeDemoRuntime({ repository, config });
 const planProvider = config.aiProvider === "openrouter"
   ? new OpenRouterProvider({
       apiKey: config.openRouterKey,
@@ -30,62 +27,64 @@ const planProvider = config.aiProvider === "openrouter"
 const demoTravelProvider = config.travelDataProvider === "demo"
   ? new DemoTravelProvider()
   : undefined;
-const primaryTravelProvider = demoTravelProvider ?? new AmapTravelProvider({
-  apiKey: config.amapWebServiceKey,
-  timeoutMs: config.travelProviderTimeoutMs
-});
-const tourismProvider = demoTravelProvider ?? new OpenTripMapProvider({
+const attractionProvider = demoTravelProvider ?? new OpenTripMapProvider({
   apiKey: config.openTripMapKey,
   timeoutMs: config.travelProviderTimeoutMs
 });
-const demoReferences = {
-  accommodationRoomNightFen: 28_000,
-  foodPersonMealFen: 3_000,
-  attractionPersonEntryFen: 5_000,
-  entertainmentPersonEntryFen: 4_000,
-  otherTripFen: 3_000,
-  fuelLitreFen: 800,
-  parkingDayFen: 2_000,
-  provenance: { mode: "DEMO" }
-};
+const now = () => new Date().toISOString();
+const retrieveAttractionCandidates = createOpenTripMapCandidateService({
+  provider: attractionProvider,
+  now
+});
 const objectivePlanner = (preferences) => generateValidatedTrip(preferences, {
-  primaryProvider: primaryTravelProvider,
-  tourismProvider,
-  routeProvider: primaryTravelProvider,
+  retrieveAttractionCandidates,
+  getDestinationSettings: async ({ destination }) => {
+    const city = getCity(destination);
+    const [longitude, latitude] = city.center;
+    return {
+      center: { longitude, latitude },
+      radiusMeters: city.attractionRadiusMeters
+    };
+  },
   llmProvider: planProvider,
-  getCostReferences: async ({ destination, startDate }) => config.travelDataProvider === "demo"
-    ? demoReferences
-    : resolveCostReferences(await repository.listCostReferences(destination), {
-        destinationId: destination,
-        onDate: startDate
-      }),
+  getCostReferences: async ({ destination }) => resolveCostReferences(
+    await repository.listCostReferences(destination),
+    { city: destination }
+  ),
   resolveAnchors: async ({ destination }) => {
     const [longitude, latitude] = getCity(destination).center;
     const anchor = { longitude, latitude };
     return { origin: anchor, hotel: anchor, destination: anchor };
   },
-  now: () => new Date().toISOString()
+  now
 });
-const attractionRepository = new AttractionSqliteRepository(config.attractionDatabasePath);
-const attractionCatalogue = new SqliteAttractionCatalogue(attractionRepository);
-const attractionMediaService = new AttractionMediaService({
-  repository: attractionRepository,
-  storageDir: config.attractionMediaStoragePath
-});
-const logger = createLogger();
+const discoverAttractions = async ({ destination, signal }) => {
+  const city = getCity(destination);
+  const [longitude, latitude] = city.center;
+  const candidates = await retrieveAttractionCandidates({
+    destination,
+    settings: {
+      center: { longitude, latitude },
+      radiusMeters: city.attractionRadiusMeters
+    },
+    signal
+  });
+  return buildDiscoveryResponse(destination, candidates, {
+    runtimeMode: config.travelDataProvider
+  });
+};
+const logger = createLogger({ sink: createRepositoryLogSink({ repository }) });
 
 const app = createApp({
   repository,
-  planProvider,
   objectivePlanner,
-  attractionCatalogue,
-  attractionMediaService,
+  discoverAttractions,
   config,
   logger
 });
 app.listen(config.port, () => {
   console.log(
     `Nuogo API listening on http://localhost:${config.port} ` +
-    `(${config.demoMode ? "memory" : "mysql"} persistence, ${config.aiProvider} AI)`
+    `(${config.runtimeMode} runtime, ${config.aiProvider} AI)`
   );
 });
