@@ -6,15 +6,15 @@ This guide prepares the Singapore MVP in deterministic demo mode. Demo mode is r
 
 ### 1. Open the project
 
-Use two PowerShell terminals. In both terminals run:
+Use the authoritative workspace:
 
 ```powershell
-cd "C:\Users\G16\OneDrive\桌面\FYP\.worktrees\singapore-report-alignment"
+cd "C:\Users\G16\OneDrive\桌面\FYP"
 ```
 
-### 2. Start the backend and prepare the System Administrator
+### 2. Start the application and prepare the System Administrator
 
-In terminal 1, enter a development-only administrator email and password when prompted, then start the API:
+Enter a development-only administrator email and password when prompted, then start the API and frontend together:
 
 ```powershell
 $env:APP_RUNTIME_MODE = "demo"
@@ -25,24 +25,14 @@ $env:CLIENT_ORIGIN = "http://localhost:5173"
 $env:DEMO_ADMIN_EMAIL = Read-Host "Demo administrator email"
 $secureAdminPassword = Read-Host "Demo administrator password" -AsSecureString
 $env:DEMO_ADMIN_PASSWORD = [Net.NetworkCredential]::new("", $secureAdminPassword).Password
-npm.cmd --workspace server start
+npm.cmd run dev
 ```
 
 This reuses `initializeDemoRuntime.js`. It creates the account through the normal `USER` authentication model and assigns the stored role value `admin`, which represents the logical **System Administrator** role. It never runs in live mode and creates no separate administrator password table.
 
-Keep terminal 1 open. Demo mode uses the in-memory repository, so restarting the backend resets its demo accounts and trips.
+Keep the terminal open. Demo mode uses the in-memory repository, so restarting the backend resets its demo accounts and trips. Open [http://localhost:5173](http://localhost:5173).
 
-### 3. Start the frontend
-
-In terminal 2 run:
-
-```powershell
-npm.cmd --workspace client run dev -- --host 0.0.0.0 --port 5173
-```
-
-Keep terminal 2 open. Open [http://localhost:5173](http://localhost:5173).
-
-### 4. Verify frontend-to-backend communication
+### 3. Verify frontend-to-backend communication
 
 In a third PowerShell window run:
 
@@ -52,7 +42,7 @@ Invoke-RestMethod http://localhost:5173/api/health
 
 Expected result: `product` is `Nuogo`, `status` is `ok`, `demoMode` is `true`, and `aiProvider` is `demo`.
 
-### 5. Prepare the Registered Traveller
+### 4. Prepare the Registered Traveller
 
 Open [http://localhost:5173/register](http://localhost:5173/register), create a memorable classroom-only account, and sign out. This calls the real `POST /api/auth/register` route. Do not reuse a production password.
 
