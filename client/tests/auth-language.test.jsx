@@ -9,7 +9,7 @@ describe("Nuogo language and authentication UI", () => {
   it("uses the supplied logo and defaults to Chinese Singapore copy", () => {
     localStorage.clear();
     render(<App initialPath="/" />);
-    expect(screen.getAllByRole("img", { name: "Nuogo logo" })).toHaveLength(2);
+    expect(screen.getAllByRole("img", { name: "Nuogo logo" })).toHaveLength(1);
     expect(screen.getByRole("button", { name: "\u4e2d\u6587" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
     expect(screen.getByTestId("singapore-attraction-story")).toBeInTheDocument();

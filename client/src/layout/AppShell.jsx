@@ -8,7 +8,7 @@ import UserModeBadge from "../components/UserModeBadge.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 
-export default function AppShell({ children, dark = false, hideFooter = false }) {
+export default function AppShell({ children, dark = false }) {
   const { language, t } = useLanguage();
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
@@ -93,16 +93,6 @@ export default function AppShell({ children, dark = false, hideFooter = false })
       </header>
 
       <main id="main-content">{children}</main>
-
-      {!hideFooter && (
-        <footer className="border-t border-ink/10 bg-paper px-5 py-10 text-sm text-ink/58">
-          <div className="mx-auto flex max-w-[1440px] flex-col justify-between gap-5 sm:flex-row sm:items-center">
-            <span className="flex items-center gap-3 font-display text-lg font-bold text-ink"><BrandLogo small /> Nuogo</span>
-            <span className="max-w-xl">{t("landing.finalBody")}</span>
-            <span className="rounded-lg border border-ink/10 bg-white px-3 py-2 font-bold text-lake">{t("common.demo")}</span>
-          </div>
-        </footer>
-      )}
     </div>
   );
 }
