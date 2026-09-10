@@ -19,6 +19,10 @@ Nuogo is a Chinese-first, bilingual AI-assisted travel planner for Singapore. It
 
 Collaboration, shared expenses, tour guides, public sharing, Mafengwo/Anhui ingestion, SQL.js, AMap, booking, and payment are not part of the final runtime.
 
+## Completed Objective Evidence
+
+For assessment, Nuogo currently treats **Objective 2** as completed: generating one constraint-aware Singapore itinerary for a selected Travel Style within a hard SGD budget. See [docs/COMPLETED_OBJECTIVE.md](docs/COMPLETED_OBJECTIVE.md).
+
 ## Requirements
 
 - Node.js 20 or newer.
