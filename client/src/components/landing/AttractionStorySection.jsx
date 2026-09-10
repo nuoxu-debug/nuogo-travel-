@@ -1,5 +1,6 @@
 import { ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
+import { publicAssetPath } from "../../assets.js";
 import { useGsapContext } from "../../motion/useGsapContext.js";
 
 const places = [
@@ -41,7 +42,7 @@ export default function AttractionStorySection({ copy, zh }) {
         {places.map((place, index) => (
           <article className={`attraction-chapter attraction-chapter--${index % 2 ? "reverse" : "forward"}`} key={place.key}>
             <figure className="attraction-chapter__visual">
-              <img src={place.image} alt={`${zh ? place.zh : place.en} - Singapore travel chapter`} />
+              <img src={publicAssetPath(place.image)} alt={`${zh ? place.zh : place.en} - Singapore travel chapter`} />
               <figcaption>{String(index + 1).padStart(2, "0")}</figcaption>
             </figure>
             <div className="attraction-chapter__copy">

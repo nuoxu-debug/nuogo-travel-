@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { publicAssetPath } from "../assets.js";
 import { useReducedMotion } from "../hooks/useReducedMotion.js";
 import { useVisibility } from "../hooks/useVisibility.js";
 import { canUseWebGL } from "../three/capabilities.js";
@@ -43,7 +44,7 @@ export default function LivingAtlasScene({
         if (!active || !canvasHostRef.current) return;
         const controller = createLivingAtlas(canvasHostRef.current, {
           points,
-          textureUrl: "/images/singapore-marina-bay-hero.png",
+          textureUrl: publicAssetPath("/images/singapore-marina-bay-hero.png"),
           onReady: () => active && setSceneState("ready"),
           onFailure: () => active && setSceneState("error")
         });

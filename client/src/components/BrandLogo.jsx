@@ -1,12 +1,16 @@
+import { publicAssetPath } from "../assets.js";
+
 export default function BrandLogo({
   variant = "mark",
   small = false,
   className = ""
 }) {
+  const logo = publicAssetPath("/nuogo-logo.png");
+
   if (variant === "full") {
     return (
       <img
-        src="/nuogo-logo.png"
+        src={logo}
         alt="Nuogo logo"
         className={`block object-contain ${className}`}
       />
@@ -17,7 +21,7 @@ export default function BrandLogo({
     <span
       className={`nuogo-brand-mark ${small ? "nuogo-brand-mark-small" : ""} ${className}`}
     >
-      <img src="/nuogo-logo.png" alt="Nuogo logo" />
+      <img src={logo} alt="Nuogo logo" />
     </span>
   );
 }

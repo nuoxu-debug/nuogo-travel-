@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowRight, MapPinned, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
+import { publicAssetPath } from "../../assets.js";
 
 export default function HeroSection({ copy }) {
   return (
@@ -8,7 +9,7 @@ export default function HeroSection({ copy }) {
       <div className="atlas-hero__sun" aria-hidden="true" />
       <div className="atlas-hero__cloud atlas-hero__cloud--one" aria-hidden="true" />
       <div className="atlas-hero__cloud atlas-hero__cloud--two" aria-hidden="true" />
-      <div className="atlas-hero__photo" aria-hidden="true"><img src="/images/singapore-marina-bay-hero.png" alt="" /></div>
+      <div className="atlas-hero__photo" aria-hidden="true"><img src={publicAssetPath("/images/singapore-marina-bay-hero.png")} alt="" /></div>
       <div className="atlas-hero__wash" aria-hidden="true" />
       <div className="atlas-hero__content">
         <p className="atlas-kicker"><MapPinned size={16} /> {copy.eyebrow}</p>

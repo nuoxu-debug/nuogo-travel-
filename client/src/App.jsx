@@ -83,6 +83,7 @@ export default function App({ initialPath }) {
   const Router = initialPath ? MemoryRouter : BrowserRouter;
   const routerProps = {
     future: { v7_startTransition: true, v7_relativeSplatPath: true },
+    ...(!initialPath ? { basename: import.meta.env.BASE_URL } : {}),
     ...(initialPath ? { initialEntries: [initialPath] } : {})
   };
   return (
