@@ -54,17 +54,27 @@ function ProtectedRoute({ children }) {
 }
 
 function AdminRoute({ children }) {
-  const { ready, user } = useAuth();
+  const { ready, sessionReason, user } = useAuth();
   if (!ready) return null;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    if (sessionReason === "expired") {
+      return <Navigate to="/login?reason=session-expired" replace state={{ reason: "session-expired" }} />;
+    }
+    return <Navigate to="/login" replace />;
+  }
   if (user.role !== "admin") return <Navigate to="/planner" replace />;
   return children;
 }
 
 function RegisteredRoute({ children }) {
-  const { ready, user } = useAuth();
+  const { ready, sessionReason, user } = useAuth();
   if (!ready) return null;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    if (sessionReason === "expired") {
+      return <Navigate to="/login?reason=session-expired" replace state={{ reason: "session-expired" }} />;
+    }
+    return <Navigate to="/login" replace />;
+  }
   if (user.accountType === "GUEST") return <Navigate to="/planner" replace />;
   return children;
 }
