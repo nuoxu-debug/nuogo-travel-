@@ -18,7 +18,7 @@ function providerWith(fetchImpl, options = {}) {
 }
 
 describe("OpenRouterProvider", () => {
-  it("uses one approved model with per-request privacy controls", async () => {
+  it("leaves provider routing unrestricted for the selected model", async () => {
     let requestBody;
     const fetchImpl = vi.fn(async (_url, options) => {
       requestBody = JSON.parse(options.body);
@@ -32,10 +32,8 @@ describe("OpenRouterProvider", () => {
 
     await provider.generateStructured(structuredRequest);
 
-    expect(requestBody).toMatchObject({
-      model: "deepseek/deepseek-chat-v3.1",
-      provider: { data_collection: "deny", zdr: true }
-    });
+    expect(requestBody).toMatchObject({ model: "deepseek/deepseek-chat-v3.1" });
+    expect(requestBody).not.toHaveProperty("provider");
     expect(requestBody).not.toHaveProperty("models");
   });
 

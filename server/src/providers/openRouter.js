@@ -52,11 +52,7 @@ export class OpenRouterProvider {
             { role: "user", content: user }
           ],
           response_format: responseFormat,
-          temperature,
-          provider: {
-            data_collection: "deny",
-            zdr: true
-          }
+          temperature
         }),
         signal: controller.signal
       });
