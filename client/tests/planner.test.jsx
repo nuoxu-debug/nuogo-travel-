@@ -102,12 +102,13 @@ describe("Singapore preference planner", () => {
     expect(JSON.parse(request[1].body).language).toBe("zh");
   });
 
-  it("localizes a constrained generation failure", async () => {
+  it("shows the returned validation reason for a constrained generation failure", async () => {
     localStorage.clear();
-    installGenerationApi({ failure: { error: { code: "GENERATION_CONSTRAINTS_UNSATISFIED", message: "internal" } } });
+    installGenerationApi({ failure: { error: { code: "GENERATION_CONSTRAINTS_UNSATISFIED", message: "internal", details: { issueCodes: ["DAILY_DURATION_EXCEEDED"] } } } });
     render(<App initialPath="/planner" />);
     await userEvent.click(screen.getByRole("button", { name: "生成一份行程" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("无法在当前预算和旅行要求内生成有效行程");
+    expect(screen.getByRole("alert")).toHaveTextContent("DAILY_DURATION_EXCEEDED");
     expect(document.body).not.toHaveTextContent("internal");
   });
 });

@@ -19,6 +19,35 @@ function generationErrorMessage(error, language) {
   return error.message;
 }
 
+function generationIssueMessage(code, language) {
+  const messages = {
+    DAILY_DURATION_EXCEEDED: {
+      zh: "其中一天的景点与交通总时长超过可用时间。请减少当天景点，或选择更轻松的行程节奏。",
+      en: "One day exceeds the available time once attraction visits and travel are included. Choose fewer places or a slower pace."
+    },
+    ROUTE_UNAVAILABLE: {
+      zh: "系统无法为部分地点建立可用路线。请调整必去景点后重试。",
+      en: "A usable route could not be created for part of the itinerary. Adjust the required sights and try again."
+    },
+    TRAVEL_TIME_CONFLICT: {
+      zh: "景点之间的交通时间与安排冲突。请减少当天景点后重试。",
+      en: "Travel time conflicts with the planned activity times. Choose fewer places for that day and try again."
+    },
+    TIME_OVERLAP: {
+      zh: "部分活动时间重叠。请调整日期或偏好后重试。",
+      en: "Some activity times overlap. Adjust the dates or preferences and try again."
+    }
+  };
+  return messages[code]?.[language] ?? (language === "zh"
+    ? "生成的行程未通过系统验证。请调整输入后重试。"
+    : "The generated itinerary did not pass a system validation check. Adjust your inputs and try again.");
+}
+
+function generationIssueCodes(error) {
+  if (error.code !== "GENERATION_CONSTRAINTS_UNSATISFIED" || !Array.isArray(error.details?.issueCodes)) return [];
+  return [...new Set(error.details.issueCodes.filter((code) => typeof code === "string" && code))];
+}
+
 export default function PlannerPage() {
   const { language } = useLanguage();
   const { loginAsGuest, ready: authReady, user } = useAuth();
@@ -26,6 +55,7 @@ export default function PlannerPage() {
   const [generating, setGenerating] = useState(false);
   const [generationState, setGenerationState] = useState("RETRIEVING");
   const [error, setError] = useState("");
+  const [issueCodes, setIssueCodes] = useState([]);
   const [preferences, setPreferences] = useState(() => ({
     ...initialPreferenceValues,
     attractionDraft: readAttractionDraft()
@@ -40,6 +70,7 @@ export default function PlannerPage() {
 
   async function generate(preferences) {
     setError("");
+    setIssueCodes([]);
     setGenerating(true);
     setGenerationState("RETRIEVING");
     try {
@@ -65,6 +96,7 @@ export default function PlannerPage() {
       navigate(`/trip/${result.trip.id}`);
     } catch (requestError) {
       setError(generationErrorMessage(requestError, language));
+      setIssueCodes(generationIssueCodes(requestError));
       setGenerating(false);
     }
   }
@@ -119,6 +151,19 @@ export default function PlannerPage() {
               <div role="alert" className="mt-5 border border-red-200 bg-red-50 p-4 text-sm text-red-800">
                 <strong>{language === "zh" ? "暂时无法生成行程。" : "The itinerary could not be generated."}</strong>
                 <p className="mt-1">{error}</p>
+                {issueCodes.length > 0 && (
+                  <div className="mt-3 border-t border-red-200 pt-3">
+                    <p className="font-semibold">{language === "zh" ? "实际验证原因" : "Validation reason"}</p>
+                    <ul className="mt-1 space-y-2">
+                      {issueCodes.map((code) => (
+                        <li key={code}>
+                          <p>{generationIssueMessage(code, language)}</p>
+                          <p className="mt-1 text-xs font-semibold text-red-700">{code}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
           </div>

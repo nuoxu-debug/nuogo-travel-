@@ -113,6 +113,20 @@ describe("fixed itinerary LLM boundary", () => {
     }));
   });
 
+  it("normalizes unknown internal endpoints to the hotel anchor", async () => {
+    const invalidEndpoints = draft();
+    invalidEndpoints.days[0].startPoint = { locationId: "arrival-terminal", locationType: "TRANSPORT_HUB" };
+    invalidEndpoints.days[0].endPoint = { locationId: "unknown-hotel", locationType: "HOTEL" };
+    const provider = {
+      generateStructured: vi.fn().mockResolvedValue(JSON.stringify(invalidEndpoints))
+    };
+
+    const result = await planDraft({ preferences, candidatePool }, { provider });
+
+    expect(result.days[0].startPoint).toEqual({ locationId: "hotel", locationType: "HOTEL" });
+    expect(result.days[0].endPoint).toEqual({ locationId: "hotel", locationType: "HOTEL" });
+  });
+
   it("rejects unknown candidate IDs even when the JSON matches the draft schema", () => {
     const unknown = draft();
     unknown.days[0].activities[0].xid = "Q-UNKNOWN";
