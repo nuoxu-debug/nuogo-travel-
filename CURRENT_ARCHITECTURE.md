@@ -1,6 +1,6 @@
 # Nuogo Current Architecture
 
-Verified baseline: 2026-09-04
+Verified baseline: 2026-09-12
 
 This document describes the current executable system. Earlier architecture, ingestion, collaboration, guide, and visual-design documents are historical project evidence only.
 
@@ -189,7 +189,7 @@ No credential is sent to the browser except public third-party media/tile reques
 
 Fresh acceptance counts are produced by the commands above; superseded audit snapshots retain their original historical results.
 
-On 2026-09-04, `npm test` passed 346 tests: 10 shared, 242 server, and 94 client. Playwright passed 14 checks and skipped 4 project-scoped checks. `npm run lint` completed with zero errors and five pre-existing React Hook dependency warnings. Live MySQL, OpenTripMap, and OpenRouter checks were not executed because their explicit integration credentials and flags were unavailable.
+On 2026-09-12, `npm test` passed 354 tests: 10 shared, 243 server, and 101 client. Playwright passed 17 checks and skipped 5 project-scoped checks. `npm run lint` completed with zero errors and four pre-existing React Hook dependency warnings. A sanitized OpenRouter structured-output smoke check passed with the locally configured model; live MySQL and OpenTripMap checks were not executed because their explicit integration credentials and flags were unavailable.
 
 The 2026-09-04 build produced a 670.79 kB main JavaScript bundle (216.72 kB gzip), a 529.46 kB Living Atlas chunk (134.64 kB gzip), and 77.53 kB of CSS (19.72 kB gzip).
 
