@@ -9,12 +9,17 @@ const original = {
   OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
   OPENROUTER_MODEL: process.env.OPENROUTER_MODEL,
   MYSQL_PASSWORD: process.env.MYSQL_PASSWORD,
+  DATABASE_PROVIDER: process.env.DATABASE_PROVIDER,
+  DATABASE_URL: process.env.DATABASE_URL,
   JWT_SECRET: process.env.JWT_SECRET,
   OPENROUTER_TIMEOUT_MS: process.env.OPENROUTER_TIMEOUT_MS,
   TRAVEL_DATA_PROVIDER: process.env.TRAVEL_DATA_PROVIDER,
   TRAVEL_PROVIDER_TIMEOUT_MS: process.env.TRAVEL_PROVIDER_TIMEOUT_MS,
   AMAP_WEB_SERVICE_KEY: process.env.AMAP_WEB_SERVICE_KEY,
   OPENTRIPMAP_API_KEY: process.env.OPENTRIPMAP_API_KEY,
+  ONEMAP_ACCESS_TOKEN: process.env.ONEMAP_ACCESS_TOKEN,
+  ONEMAP_API_EMAIL: process.env.ONEMAP_API_EMAIL,
+  ONEMAP_API_PASSWORD: process.env.ONEMAP_API_PASSWORD,
   OPENROUTER_STRUCTURED_OUTPUT: process.env.OPENROUTER_STRUCTURED_OUTPUT,
   NODE_ENV: process.env.NODE_ENV,
   DEMO_ADMIN_EMAIL: process.env.DEMO_ADMIN_EMAIL,
@@ -75,8 +80,27 @@ describe("runtime configuration", () => {
   it("requires MySQL credentials when memory persistence is disabled", () => {
     process.env.AI_PROVIDER = "demo";
     process.env.APP_RUNTIME_MODE = "live";
+    delete process.env.DATABASE_PROVIDER;
     delete process.env.MYSQL_PASSWORD;
     expect(() => loadConfig()).toThrow(/MYSQL_PASSWORD/i);
+  });
+
+  it("uses Supabase Postgres in live mode without MySQL credentials", () => {
+    process.env.APP_RUNTIME_MODE = "live";
+    process.env.AI_PROVIDER = "demo";
+    process.env.TRAVEL_DATA_PROVIDER = "demo";
+    process.env.DATABASE_PROVIDER = "supabase";
+    process.env.DATABASE_URL = "postgresql://user:password@example.supabase.co:5432/postgres";
+    delete process.env.MYSQL_PASSWORD;
+    process.env.JWT_SECRET = "a".repeat(32);
+
+    expect(loadConfig()).toMatchObject({
+      runtimeMode: "live",
+      databaseProvider: "supabase",
+      postgres: {
+        connectionString: "postgresql://user:password@example.supabase.co:5432/postgres"
+      }
+    });
   });
 
   it("requires an explicit strong JWT secret outside demo persistence", () => {
@@ -158,6 +182,18 @@ describe("runtime configuration", () => {
       travelDataProvider: "live",
       travelProviderTimeoutMs: 12000,
       openTripMapKey: "test-otm-key"
+    });
+  });
+
+  it("keeps optional OneMap credentials on the server configuration", () => {
+    process.env.ONEMAP_ACCESS_TOKEN = "test-onemap-token";
+    process.env.ONEMAP_API_EMAIL = "student@example.com";
+    process.env.ONEMAP_API_PASSWORD = "secret-password";
+
+    expect(loadConfig()).toMatchObject({
+      oneMapAccessToken: "test-onemap-token",
+      oneMapApiEmail: "student@example.com",
+      oneMapApiPassword: "secret-password"
     });
   });
 });

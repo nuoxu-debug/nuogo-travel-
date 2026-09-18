@@ -1,4 +1,9 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+
+if (process.env.NODE_ENV !== "test") {
+  dotenv.config();
+  dotenv.config({ path: new URL("../../.env", import.meta.url), override: false });
+}
 
 export function loadConfig() {
   const runtimeMode = process.env.APP_RUNTIME_MODE || (process.env.NODE_ENV === "test" ? "test" : "live");
@@ -6,6 +11,10 @@ export function loadConfig() {
     throw new Error("APP_RUNTIME_MODE must be live, demo, or test.");
   }
   const demoMode = runtimeMode !== "live";
+  const databaseProvider = process.env.DATABASE_PROVIDER || "mysql";
+  if (!["mysql", "supabase", "postgres"].includes(databaseProvider)) {
+    throw new Error("DATABASE_PROVIDER must be mysql, supabase, or postgres.");
+  }
   const aiProvider = process.env.AI_PROVIDER || (runtimeMode === "live" ? "openrouter" : "demo");
   const openRouterTimeoutMs = Number(process.env.OPENROUTER_TIMEOUT_MS) || 30000;
   const openRouterStructuredOutput = process.env.OPENROUTER_STRUCTURED_OUTPUT === "true";
@@ -23,8 +32,11 @@ export function loadConfig() {
   if (travelProviderTimeoutMs < 1000 || travelProviderTimeoutMs > 30000) {
     throw new Error("TRAVEL_PROVIDER_TIMEOUT_MS must be between 1000 and 30000.");
   }
-  if (runtimeMode === "live" && !process.env.MYSQL_PASSWORD) {
+  if (runtimeMode === "live" && databaseProvider === "mysql" && !process.env.MYSQL_PASSWORD) {
     throw new Error("MYSQL_PASSWORD is required in live mode.");
+  }
+  if (runtimeMode === "live" && databaseProvider !== "mysql" && !process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is required when DATABASE_PROVIDER is supabase or postgres.");
   }
   if (
     runtimeMode === "live" &&
@@ -47,6 +59,7 @@ export function loadConfig() {
     demoMode,
     demoAdminEmail: demoMode ? (process.env.DEMO_ADMIN_EMAIL || "") : "",
     demoAdminPassword: demoMode ? (process.env.DEMO_ADMIN_PASSWORD || "") : "",
+    databaseProvider,
     aiProvider,
     openRouterKey: process.env.OPENROUTER_API_KEY || "",
     openRouterModel: process.env.OPENROUTER_MODEL || "deepseek/deepseek-chat-v3.1",
@@ -55,12 +68,18 @@ export function loadConfig() {
     travelDataProvider,
     travelProviderTimeoutMs,
     openTripMapKey: process.env.OPENTRIPMAP_API_KEY || "",
+    oneMapAccessToken: process.env.ONEMAP_ACCESS_TOKEN || "",
+    oneMapApiEmail: process.env.ONEMAP_API_EMAIL || "",
+    oneMapApiPassword: process.env.ONEMAP_API_PASSWORD || "",
     mysql: {
       host: process.env.MYSQL_HOST || "127.0.0.1",
       port: Number(process.env.MYSQL_PORT) || 3306,
       database: process.env.MYSQL_DATABASE || "nuogo",
       user: process.env.MYSQL_USER || "nuogo",
       password: process.env.MYSQL_PASSWORD || ""
+    },
+    postgres: {
+      connectionString: process.env.DATABASE_URL || ""
     }
   };
 }
