@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MemoryRepository } from "../src/repositories/memory.js";
 import { MySqlRepository } from "../src/repositories/mysql.js";
+import { PostgresRepository } from "../src/repositories/postgres.js";
 import { createRepository } from "../src/runtime/createRepository.js";
 
 describe("runtime repository selection", () => {
@@ -21,6 +22,45 @@ describe("runtime repository selection", () => {
 
     expect(repository.constructor.name).toBe("PostgresRepository");
     repository.pool.end();
+  });
+
+  it("maps lower-case PostgreSQL aliases back to repository contract names", async () => {
+    const repository = new PostgresRepository({
+      query: async () => ({
+        command: "SELECT",
+        rows: [{
+          id: "cost-food",
+          city: "singapore",
+          category: "FOOD_PERSON_DAY",
+          tier: "ECONOMY",
+          minminor: 2000,
+          representativeminor: 2750,
+          maxminor: 3500,
+          currency: "SGD",
+          sourcename: "Evidence",
+          sourceurl: "https://example.com/evidence",
+          collectedon: "2026-09-02",
+          updatedat: "2026-09-02T00:00:00.000Z",
+          status: "ACTIVE"
+        }]
+      })
+    });
+
+    await expect(repository.listCostReferences("singapore")).resolves.toEqual([{
+      id: "cost-food",
+      city: "singapore",
+      category: "FOOD_PERSON_DAY",
+      tier: "ECONOMY",
+      minMinor: 2000,
+      representativeMinor: 2750,
+      maxMinor: 3500,
+      currency: "SGD",
+      sourceName: "Evidence",
+      sourceUrl: "https://example.com/evidence",
+      collectedOn: "2026-09-02",
+      updatedAt: "2026-09-02T00:00:00.000Z",
+      status: "ACTIVE"
+    }]);
   });
 
   it("uses memory only for explicit demo or injected test repositories", () => {

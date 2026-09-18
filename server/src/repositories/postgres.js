@@ -29,6 +29,7 @@ function normalizeRow(row) {
   const aliases = {
     accounttype: "accountType",
     addressjson: "address_json",
+    collectedon: "collectedOn",
     createdat: "createdAt",
     destinationid: "destinationId",
     estimatedtotalminor: "estimatedTotalMinor",
