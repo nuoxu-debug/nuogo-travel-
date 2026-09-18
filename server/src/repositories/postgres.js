@@ -21,8 +21,45 @@ function expandPlaceholders(sql, values = []) {
 }
 
 function normalizeResult(result) {
-  if (result.command === "SELECT") return result.rows;
+  if (result.command === "SELECT") return result.rows.map(normalizeRow);
   return { affectedRows: result.rowCount };
+}
+
+function normalizeRow(row) {
+  const aliases = {
+    accounttype: "accountType",
+    addressjson: "address_json",
+    createdat: "createdAt",
+    destinationid: "destinationId",
+    estimatedtotalminor: "estimatedTotalMinor",
+    expiresat: "expiresAt",
+    guestclaimtokenhash: "guestClaimTokenHash",
+    guestexpiresat: "guestExpiresAt",
+    guestlastactivityat: "guestLastActivityAt",
+    maxminor: "maxMinor",
+    minminor: "minMinor",
+    nameen: "nameEn",
+    namejson: "name_json",
+    namezh: "nameZh",
+    ownerid: "ownerId",
+    parenttripid: "parentTripId",
+    passwordhash: "passwordHash",
+    preferredlanguage: "preferredLanguage",
+    persistencescope: "persistenceScope",
+    raw_json: "raw_json",
+    recordedat: "recordedAt",
+    representativesminor: "representativeMinor",
+    representativeminor: "representativeMinor",
+    retrievedat: "retrievedAt",
+    revision: "revision",
+    sourceid: "sourceId",
+    sourcename: "sourceName",
+    sourceurl: "sourceUrl",
+    updatedat: "updatedAt"
+  };
+  return Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [aliases[key] ?? key, value])
+  );
 }
 
 class PostgresPoolAdapter {
