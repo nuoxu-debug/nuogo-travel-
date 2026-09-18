@@ -63,6 +63,37 @@ describe("runtime repository selection", () => {
     }]);
   });
 
+  it("uses PostgreSQL conflict syntax when saving itinerary runs", async () => {
+    const calls = [];
+    const connection = {
+      execute: async (sql) => {
+        calls.push(sql);
+        return [{ affectedRows: 1 }];
+      },
+      query: async (sql) => {
+        calls.push(sql);
+        return [{ affectedRows: 1 }];
+      }
+    };
+    const repository = new PostgresRepository({ query: async () => ({ command: "SELECT", rows: [] }) });
+
+    await repository.persistItineraryRun(connection, {
+      id: "run-1",
+      tripId: "trip-1",
+      profile: "BALANCED",
+      state: "FINAL_VALIDATED",
+      estimatedTotalMinor: 1000,
+      summary: {},
+      legs: [],
+      provenance: [],
+      validationIssues: [],
+      repairs: []
+    });
+
+    expect(calls.join("\n")).toContain("ON CONFLICT (id) DO UPDATE");
+    expect(calls.join("\n")).not.toContain("ON DUPLICATE KEY UPDATE");
+  });
+
   it("uses memory only for explicit demo or injected test repositories", () => {
     expect(createRepository({ runtimeMode: "demo" })).toBeInstanceOf(MemoryRepository);
     const testRepository = new MemoryRepository();

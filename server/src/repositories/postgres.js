@@ -240,6 +240,52 @@ export class PostgresRepository extends MySqlRepository {
     return record;
   }
 
+  async persistItineraryRun(connection, run) {
+    await connection.execute(
+      `INSERT INTO itinerary_runs
+        (id, trip_id, profile, state, estimated_total_fen, summary_json)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (id) DO UPDATE SET
+         state = EXCLUDED.state,
+         estimated_total_fen = EXCLUDED.estimated_total_fen,
+         summary_json = EXCLUDED.summary_json`,
+      [run.id, run.tripId, run.profile, run.state, run.estimatedTotalMinor ?? null, JSON.stringify(run.summary ?? {})]
+    );
+    for (const table of [
+      "trip_legs", "itinerary_provenance", "itinerary_validation_issues", "itinerary_repairs"
+    ]) {
+      await connection.query(`DELETE FROM ${table} WHERE itinerary_run_id = ?`, [run.id]);
+    }
+    for (const leg of run.legs ?? []) {
+      await connection.execute(
+        "INSERT INTO trip_legs (id, itinerary_run_id, day_number, sequence, leg_json) VALUES (?, ?, ?, ?, ?)",
+        [leg.id ?? randomUUID(), run.id, leg.dayNumber, leg.sequence, JSON.stringify(leg)]
+      );
+    }
+    for (const item of run.provenance ?? []) {
+      await connection.execute(
+        "INSERT INTO itinerary_provenance (id, itinerary_run_id, path, source_json) VALUES (?, ?, ?, ?)",
+        [item.id ?? randomUUID(), run.id, item.path, JSON.stringify(item.source)]
+      );
+    }
+    for (const issue of run.validationIssues ?? []) {
+      await connection.execute(
+        `INSERT INTO itinerary_validation_issues
+          (id, itinerary_run_id, code, path, severity, metadata_json) VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          issue.id ?? randomUUID(), run.id, issue.code, issue.path,
+          issue.severity, JSON.stringify(issue.metadata ?? {})
+        ]
+      );
+    }
+    for (const repair of run.repairs ?? []) {
+      await connection.execute(
+        "INSERT INTO itinerary_repairs (id, itinerary_run_id, attempt, repair_json) VALUES (?, ?, ?, ?)",
+        [repair.id ?? randomUUID(), run.id, repair.attempt, JSON.stringify(repair)]
+      );
+    }
+  }
+
   async selectObjectiveVariant(id, _actorId, variantId, expectedRevision) {
     const [result] = await this.pool.execute(
       `UPDATE trips
