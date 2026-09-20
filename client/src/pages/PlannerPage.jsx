@@ -5,6 +5,7 @@ import { apiRequest } from "../api/client.js";
 import PipelineOverlay from "../components/PipelineOverlay.jsx";
 import PlannerJourneyHorizon from "../components/PlannerJourneyHorizon.jsx";
 import PreferenceForm, { initialPreferenceValues } from "../components/PreferenceForm.jsx";
+import { publicAssetPath } from "../assets.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import AppShell from "../layout/AppShell.jsx";
@@ -104,6 +105,15 @@ export default function PlannerPage() {
   return (
     <AppShell>
       <section data-testid="planner-brief-hero" data-layout="travel-brief" className="relative overflow-hidden bg-paper px-5 py-12 text-ink sm:px-8 sm:py-16">
+        <img
+          aria-hidden="true"
+          data-testid="planner-brief-background"
+          className="absolute inset-0 h-full w-full scale-[1.04] object-cover object-center opacity-[.42] saturate-[.72] contrast-[.86] blur-[.55px]"
+          src={publicAssetPath("/images/landing/attractions/chinatown.png")}
+          alt=""
+        />
+        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-paper/76 via-paper/46 to-paper/24" />
+        <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(circle_at_24%_50%,rgba(247,248,244,.84)_0,rgba(247,248,244,.55)_34%,rgba(247,248,244,.14)_68%)]" />
         <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-px bg-ink/10" />
         <div aria-hidden="true" className="absolute right-[6%] top-0 hidden h-full w-[31%] border-x border-ink/8 lg:block" />
         <div className="relative mx-auto grid max-w-[1440px] gap-9 lg:grid-cols-[1.05fr_.95fr] lg:items-center">

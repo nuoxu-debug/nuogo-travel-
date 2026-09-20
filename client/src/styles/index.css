@@ -83,6 +83,10 @@
 .destination-fixed strong, .destination-fixed small { display: block; }
 .destination-fixed small { margin-top: .2rem; color: rgb(22 39 35 / .5); font-size: .75rem; }
 .destination-orchid { width: .75rem; height: 2.7rem; border-radius: 999px; background: linear-gradient(#d72b5f, #ef718e); box-shadow: 0 0 0 5px rgb(215 43 95 / .1); }
+.place-hint { margin-top: .75rem; max-width: 68ch; color: rgb(22 39 35 / .58); font-size: .86rem; line-height: 1.65; }
+.quick-place-row { display: flex; flex-wrap: wrap; gap: .45rem; }
+.quick-place-row button { min-height: 2rem; border: 1px solid rgb(22 39 35 / .12); border-radius: 999px; background: #fff; padding: .25rem .65rem; color: rgb(22 39 35 / .68); font-size: .72rem; font-weight: 800; transition: border-color 160ms ease, color 160ms ease, background 160ms ease; }
+.quick-place-row button:hover, .quick-place-row button:focus-visible { border-color: #007a66; background: #eef7f5; color: #007a66; outline: none; }
 .duration-readout { display: grid; align-content: center; padding: .65rem 1rem; border-radius: .5rem; background: #eef7f5; }
 .duration-readout span { font-size: .7rem; color: rgb(22 39 35 / .55); }
 .duration-readout strong { margin-top: .15rem; font-size: 1.05rem; }
@@ -90,6 +94,12 @@
 .budget-control label { display: flex; justify-content: space-between; gap: 1rem; font-weight: 800; }
 .budget-control label span { display: flex; align-items: center; gap: .45rem; }
 .budget-control input { width: 100%; margin-top: .8rem; accent-color: #007a66; }
+.exchange-reference { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: .85rem; margin-top: .85rem; border-top: 1px solid rgb(22 39 35 / .1); padding-top: .85rem; }
+.exchange-reference strong, .exchange-reference small { display: block; }
+.exchange-reference strong { color: #123028; font-size: .78rem; }
+.exchange-reference small { margin-top: .15rem; color: rgb(22 39 35 / .54); font-size: .7rem; }
+.exchange-reference > div:last-child { display: flex; flex-wrap: wrap; gap: .4rem; }
+.exchange-reference span { border-radius: 999px; background: rgb(255 255 255 / .78); padding: .32rem .55rem; color: #007a66; font-size: .72rem; font-weight: 900; }
 .attraction-selection-summary { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid rgb(22 39 35 / .12); padding: 1rem; border-radius: .5rem; }
 .attraction-selection-summary p { margin-top: .25rem; color: rgb(22 39 35 / .58); font-size: .82rem; }
 .attraction-selection-summary a { display: inline-flex; align-items: center; gap: .35rem; color: #007a66; font-size: .82rem; font-weight: 800; }
@@ -2017,6 +2027,65 @@ textarea:focus-visible {
   width: 1rem;
   height: 1rem;
 }
+.journey-map__canvas--mrt {
+  display: grid;
+  min-height: auto;
+  place-items: stretch;
+  overflow: visible;
+  background: #fff;
+}
+.journey-map__canvas--mrt::before,
+.journey-map__canvas--mrt::after {
+  display: none;
+}
+.journey-map__mrt-caption {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: .5rem;
+  margin: clamp(.75rem, 1.4vw, 1.25rem) clamp(.75rem, 1.4vw, 1.25rem) 0;
+  padding: .58rem .72rem;
+  border-radius: .55rem;
+  background: #eef6f1;
+  color: #155849;
+  font-size: .72rem;
+  font-weight: 900;
+}
+.journey-map__mrt-caption svg {
+  position: static;
+  inset: auto;
+  width: 1rem;
+  height: 1rem;
+}
+.journey-map__mrt-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  padding: clamp(.75rem, 1.4vw, 1.25rem);
+  background: #fff;
+}
+.journey-map__source {
+  position: static;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .55rem;
+  padding: .7rem .9rem .8rem;
+  border-top: 1px solid rgb(22 62 51 / .12);
+  background: #fff;
+  color: #315c51;
+  font-size: .68rem;
+  font-weight: 800;
+}
+.journey-map__source a {
+  color: #0f745d;
+  text-decoration: none;
+}
+.journey-map__source a:hover {
+  text-decoration: underline;
+}
 
 @media (max-width: 780px) {
   .attraction-story__chapters { gap: 3.75rem; }
@@ -2026,6 +2095,13 @@ textarea:focus-visible {
   .attraction-chapter__visual { min-height: min(112vw, 31rem); }
   .attraction-chapter__copy { padding: 0 .35rem; }
   .attraction-chapter__copy h3 { font-size: clamp(2.1rem, 10vw, 3.6rem); }
+  .journey-map__mrt-image {
+    padding: .45rem;
+  }
+  .journey-map__source {
+    justify-content: flex-start;
+    font-size: .58rem;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .attraction-chapter,

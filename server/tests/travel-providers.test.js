@@ -169,7 +169,8 @@ describe("OpenTripMap and demo travel providers", () => {
     });
     expect(candidates.map(({ xid }) => xid)).toEqual(expect.arrayContaining([
       "demo-sg-gardens-by-the-bay",
-      "demo-sg-national-gallery"
+      "demo-sg-national-gallery",
+      "demo-sg-sentosa"
     ]));
     expect(candidates.every(({ xid }) => xid.startsWith("demo-sg-"))).toBe(true);
   });

@@ -32,8 +32,8 @@ function content(language) {
     journey: {
       eyebrow: zh ? "\u4e00\u6bb5\u65c5\u7a0b\uff0c\u6e05\u695a\u53ef\u89c1" : "A journey, made visible",
       title: zh ? "\u4ece\u7075\u611f\u51fa\u53d1\uff0c\u8ba9\u8def\u7ebf\u6162\u6162\u6210\u5f62\u3002" : "From a spark of interest to a route with shape.",
-      body: zh ? "\u6eda\u52a8\u6d4f\u89c8\u8fd9\u6761\u793a\u610f\u8def\u7ebf\uff0c\u611f\u53d7 Nuogo \u5982\u4f55\u628a\u4f60\u7684\u504f\u597d\u3001\u666f\u70b9\u4e0e\u9884\u7b97\u7ea6\u675f\u8fde\u63a5\u4e3a\u4e00\u4efd\u53ef\u5ba1\u9605\u7684\u884c\u7a0b\u3002" : "Follow this illustrated route to see how Nuogo connects preferences, places and budget constraints into an itinerary you can review.",
-      legend: zh ? "\u65b0\u52a0\u5761\u57ce\u5e02\u6f2b\u6e38\u8def\u7ebf" : "Singapore city journey",
+      body: zh ? "\u53c2\u8003 MRT \u8def\u7ebf\u56fe\uff0c\u611f\u53d7 Nuogo \u5982\u4f55\u628a\u4f60\u7684\u504f\u597d\u3001\u666f\u70b9\u4e0e\u9884\u7b97\u7ea6\u675f\u8fde\u63a5\u4e3a\u4e00\u4efd\u53ef\u5ba1\u9605\u7684\u884c\u7a0b\u3002" : "Use the MRT network as a clear reference while Nuogo connects preferences, places and budget constraints into an itinerary you can review.",
+      legend: zh ? "\u65b0\u52a0\u5761 MRT \u8def\u7ebf\u53c2\u8003" : "Singapore MRT route reference",
     },
     workflow: {
       eyebrow: zh ? "Nuogo \u5982\u4f55\u5de5\u4f5c" : "How Nuogo works",
@@ -64,7 +64,7 @@ export default function LandingPage() {
   return <AppShell dark><main className="nuogo-landing nuogo-landing--atlas" ref={rootRef}>
     <HeroSection copy={t.hero} />
     <div className="landing-story-reveal"><AttractionStorySection copy={t.stories} zh={t.zh} /></div>
-    <div className="landing-story-reveal"><JourneyMapSection copy={t.journey} /></div>
+    <div className="landing-story-reveal"><JourneyMapSection copy={t.journey} zh={t.zh} /></div>
     <div className="landing-story-reveal"><WorkflowSection copy={t.workflow} zh={t.zh} /></div>
     <div className="landing-story-reveal"><FinalCTASection copy={t.final} /></div>
   </main></AppShell>;

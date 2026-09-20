@@ -24,6 +24,52 @@ const localizedTextSchema = z.object({
   zh: z.string().min(1).max(500)
 }).strict();
 
+const mrtStationSchema = z.object({
+  id: z.string().min(1).max(80),
+  code: z.string().min(1).max(40).optional(),
+  name: localizedTextSchema,
+  lineCodes: z.array(z.string().min(1).max(8)).min(1).max(4),
+  distanceMeters: z.number().int().nonnegative().optional(),
+  walkMinutes: z.number().int().positive().optional()
+}).strict();
+
+const mrtLineSchema = z.object({
+  code: z.string().min(1).max(8),
+  name: localizedTextSchema,
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/)
+}).strict();
+
+const mrtRouteSchema = z.object({
+  accessStation: mrtStationSchema,
+  egressStation: mrtStationSchema,
+  stations: z.array(mrtStationSchema).min(1).max(40),
+  lines: z.array(mrtLineSchema).max(8),
+  segments: z.array(z.object({
+    lineCode: z.string().min(1).max(8),
+    stationIds: z.array(z.string().min(1).max(80)).min(2).max(40)
+  }).strict()).max(12),
+  stationCount: z.number().int().positive(),
+  transferCount: z.number().int().nonnegative(),
+  railMinutes: z.number().int().positive(),
+  walkMinutes: z.number().int().nonnegative(),
+  distanceMeters: z.number().int().nonnegative().optional(),
+  fareMinor: z.number().int().nonnegative().optional(),
+  provider: z.enum(["STATIC_REFERENCE", "ONEMAP"]).optional(),
+  legs: z.array(z.object({
+    mode: z.string().min(1).max(40),
+    route: z.string().min(1).max(40).optional(),
+    fromName: z.string().min(1).max(160).optional(),
+    toName: z.string().min(1).max(160).optional(),
+    durationMinutes: z.number().int().nonnegative().optional(),
+    distanceMeters: z.number().int().nonnegative().optional()
+  }).strict()).max(24).optional(),
+  source: z.object({
+    name: z.string().min(1).max(160),
+    url: z.string().url(),
+    stationNameSource: z.string().min(1).max(160).optional()
+  }).strict()
+}).strict();
+
 const selectedAttractionRecordSchema = z.object({
   requestId: z.string().min(1).max(180),
   xid: z.string().min(1).max(120).optional(),
@@ -51,6 +97,8 @@ export const profileBudgetSummarySchema = z.object({
 
 export const travelPreferenceSchema = z.object({
   destination: z.enum(supportedDestinationIds),
+  departurePoint: z.string().trim().min(1).max(160),
+  arrivalPoint: z.string().trim().min(1).max(160),
   startDate: z.string().date(),
   endDate: z.string().date(),
   travellerCount: z.number().int().min(1).max(20),
@@ -116,7 +164,8 @@ export const tripLegSchema = z.object({
   estimatedCostMinor: z.number().int().nonnegative(),
   routeSource: z.enum(["USER_PROVIDED", "REFERENCE", "DEMO", "ESTIMATED"]),
   sourceType: z.enum(["ESTIMATED"]).optional(),
-  routeRetrievedAt: z.string().datetime().optional()
+  routeRetrievedAt: z.string().datetime().optional(),
+  mrtRoute: mrtRouteSchema.optional()
 }).strict();
 
 const draftPointSchema = z.object({

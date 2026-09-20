@@ -175,6 +175,7 @@ export async function revalidateEditedTrip({ trip, entryId, patch }) {
 
   const routed = await buildTripLegs(variant.itinerary, {
     locations: locationsFor(variant.itinerary, pool),
+    destination: trip.preferences.destination,
     mode: trip.preferences.localTransportPreference ?? "PUBLIC_TRANSIT"
   });
   const scheduled = {

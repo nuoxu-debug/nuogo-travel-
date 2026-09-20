@@ -1,5 +1,7 @@
 import { tripLegSchema } from "@nuogo/shared/schemas";
 import { estimateTravelLeg } from "../travel/estimateTravelTime.js";
+import { estimateOneMapPublicTransportLeg } from "../travel/oneMapPublicTransport.js";
+import { estimateSingaporeMrtLeg } from "../travel/singaporeMrtGraph.js";
 
 function pointSequence(day) {
   return [
@@ -11,8 +13,11 @@ function pointSequence(day) {
 
 export async function buildTripLegs(itinerary, {
   locations,
-  mode
+  mode,
+  destination,
+  publicTransportEstimator = estimateOneMapPublicTransportLeg
 }) {
+  const destinationId = destination ?? itinerary.trip?.destination;
   const days = [];
   for (const day of itinerary.days) {
     const points = pointSequence(day);
@@ -28,7 +33,13 @@ export async function buildTripLegs(itinerary, {
         const resolvedMode = typeof mode === "function"
           ? mode({ day, legIndex: index, fromLocationId, toLocationId, from, to })
           : mode;
-        const estimate = estimateTravelLeg({ from, to, mode: resolvedMode });
+        const oneMapEstimate = destinationId === "singapore"
+          ? await publicTransportEstimator({ from, to, mode: resolvedMode })
+          : null;
+        const mrtEstimate = destinationId === "singapore"
+          ? oneMapEstimate ?? estimateSingaporeMrtLeg({ from, to, mode: resolvedMode })
+          : null;
+        const estimate = mrtEstimate ?? estimateTravelLeg({ from, to, mode: resolvedMode });
         const leg = tripLegSchema.parse({
           id: `${itinerary.travelStyle}:${day.dayNumber}:leg:${index + 1}`,
           fromLocationId,
@@ -38,7 +49,8 @@ export async function buildTripLegs(itinerary, {
           durationMinutes: estimate.durationMinutes,
           estimatedCostMinor: estimate.estimatedCostMinor,
           routeSource: "ESTIMATED",
-          sourceType: estimate.sourceType
+          sourceType: estimate.sourceType,
+          ...(estimate.mrtRoute ? { mrtRoute: estimate.mrtRoute } : {})
         });
         legs.push(leg);
       } catch (error) {

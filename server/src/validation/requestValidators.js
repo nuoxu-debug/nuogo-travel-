@@ -24,6 +24,8 @@ export const loginRequest = [checkExact([
 
 export const travelPreferenceRequest = [checkExact([
   body("destination").isIn(supportedDestinations),
+  requiredText("departurePoint", 1, 160),
+  requiredText("arrivalPoint", 1, 160),
   body("startDate").isISO8601({ strict: true, strictSeparator: true }),
   body("endDate").isISO8601({ strict: true, strictSeparator: true }).custom((value, { req }) => {
     if (value < req.body.startDate) throw new Error("End date must be on or after start date.");

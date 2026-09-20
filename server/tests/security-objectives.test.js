@@ -31,6 +31,8 @@ async function register(app, email) {
 function objectivePreferences(overrides = {}) {
   return {
     destination: "singapore",
+    departurePoint: "Changi Airport",
+    arrivalPoint: "Hotel in Singapore",
     startDate: "2026-10-10",
     endDate: "2026-10-11",
     travellerCount: 2,

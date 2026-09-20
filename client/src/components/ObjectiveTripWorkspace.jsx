@@ -1,4 +1,4 @@
-import { CheckCircle2, Edit3, ExternalLink, LockKeyhole, MapPinned, RefreshCw, Route, Save, Trash2, WalletCards } from "lucide-react";
+﻿import { CheckCircle2, Edit3, ExternalLink, LockKeyhole, MapPinned, RefreshCw, Route, Save, TrainFront, Trash2, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiRequest } from "../api/client.js";
@@ -6,6 +6,7 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { displayLabel, localizedText } from "../i18n/display.js";
 import LeafletRouteMap from "./LeafletRouteMap.jsx";
+import MrtItineraryMap from "./MrtItineraryMap.jsx";
 import PrivacyDialog from "./PrivacyDialog.jsx";
 import TripLegRow from "./TripLegRow.jsx";
 import DailyItinerarySummary from "./DailyItinerarySummary.jsx";
@@ -103,7 +104,7 @@ function EntryEditor({ activity, busy, error, language, onSave }) {
       </div>
       {error && <p role="alert" className="mt-3 text-sm font-semibold text-vermilion">{error}</p>}
       <button type="submit" disabled={busy} className="mt-4 min-h-11 rounded-lg bg-ink px-4 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-50">
-        {busy ? (zh ? "正在重新验证…" : "Revalidating…") : (zh ? "保存行程调整" : "Save entry changes")}
+        {busy ? (zh ? "正在重新验证..." : "Revalidating...") : (zh ? "保存行程调整" : "Save entry changes")}
       </button>
     </form>
   );
@@ -152,11 +153,11 @@ function ActivityDetails({ activity, onClose, language, canEdit, onSave, editBus
           <dl className="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
             <div><dt className="text-ink/45">{language === "zh" ? "提供方" : "Provider"}</dt><dd className="mt-1 font-semibold">{displayLabel(language, "source", provider?.provider ?? poi.primarySource)}</dd></div>
             <div><dt className="text-ink/45">OpenTripMap xid</dt><dd className="mt-1 break-all font-semibold">{activity.xid}</dd></div>
-            <div><dt className="text-ink/45">{language === "zh" ? "城市" : "City"}</dt><dd className="mt-1 font-semibold">{poi.city}</dd></div>
+            <div><dt className="text-ink/45">{language === "zh" ? "鍩庡競" : "City"}</dt><dd className="mt-1 font-semibold">{poi.city}</dd></div>
             <div><dt className="text-ink/45">{language === "zh" ? "匹配状态" : "Match status"}</dt><dd className="mt-1 font-semibold">{displayLabel(language, "verification", poi.matchStatus)}</dd></div>
             <div><dt className="text-ink/45">{language === "zh" ? "核验状态" : "Verification status"}</dt><dd className="mt-1 font-semibold">{displayLabel(language, "verification", poi.verificationStatus)}</dd></div>
             <div><dt className="text-ink/45">{language === "zh" ? "检索时间" : "Retrieved at"}</dt><dd className="mt-1 font-semibold">{provider?.retrievedAt}</dd></div>
-            <div><dt className="text-ink/45">{language === "zh" ? "类别" : "Category"}</dt><dd className="mt-1 font-semibold">{displayLabel(language, "category", poi.category)}</dd></div>
+            <div><dt className="text-ink/45">{language === "zh" ? "绫诲埆" : "Category"}</dt><dd className="mt-1 font-semibold">{displayLabel(language, "category", poi.category)}</dd></div>
             <div><dt className="text-ink/45">{language === "zh" ? "地址" : "Address"}</dt><dd className="mt-1 font-semibold">{typeof poi.address === "string" ? poi.address : poi.address?.[language] ?? poi.address?.en}</dd></div>
           </dl>
           {provider?.sourceUrl && <a href={provider.sourceUrl} target="_blank" rel="noreferrer" aria-label={language === "zh" ? "查看 OpenTripMap 记录" : "View OpenTripMap record"} className="mt-4 inline-flex min-h-11 items-center gap-2 text-sm font-bold text-jade underline"><ExternalLink className="h-4 w-4" aria-hidden="true" />{language === "zh" ? "查看 OpenTripMap 记录" : "View OpenTripMap record"}</a>}
@@ -226,12 +227,14 @@ export default function ObjectiveTripWorkspace({ trip, setTrip, access }) {
   const [notice, setNotice] = useState("");
   const [versioningOpen, setVersioningOpen] = useState(false);
   const [versionBudget, setVersionBudget] = useState(trip.budgetMinor);
+  const [activeMapView, setActiveMapView] = useState("route");
   const validation = trip.validation ?? variant.validation;
   const groundedAttractionCount = variant.itinerary.days.reduce((count, item) => (
     count + item.activities.filter((activity) => activity.xid && activity.poi).length
   ), 0);
   const withinBudget = variant.summary.totalMinor <= variant.summary.budgetMinor;
   const day = variant.itinerary.days.find((item) => item.dayNumber === activeDayNumber) ?? variant.itinerary.days[0];
+  const hasMrtRoute = Boolean(day.legs?.some((leg) => leg.mrtRoute));
   const activityLegs = useMemo(() => {
     let legIndex = 0;
     return day.activities.map((activity) => {
@@ -246,15 +249,19 @@ export default function ObjectiveTripWorkspace({ trip, setTrip, access }) {
     ? { ...day.legs[finalLegIndex], presentation: day.presentation?.transport?.[finalLegIndex] }
     : undefined;
   const mapActivities = useMemo(() => [
-    ...(day.startPoint?.coordinates ? [mapAnchor(day.startPoint, zh ? "起点" : "Start", day.activities[0]?.scheduledStartTime ?? "08:00", language)] : []),
+    ...(day.startPoint?.coordinates ? [mapAnchor(day.startPoint, zh ? "璧风偣" : "Start", day.activities[0]?.scheduledStartTime ?? "08:00", language)] : []),
     ...day.activities.filter((activity) => activity.xid && activity.poi?.coordinates).map((activity) => mapActivity(activity, language)),
-    ...(day.endPoint?.coordinates ? [mapAnchor(day.endPoint, zh ? "终点" : "End", day.activities.at(-1)?.scheduledEndTime ?? "20:00", language)] : [])
+    ...(day.endPoint?.coordinates ? [mapAnchor(day.endPoint, zh ? "缁堢偣" : "End", day.activities.at(-1)?.scheduledEndTime ?? "20:00", language)] : [])
   ], [day, language, zh]);
+
+  useEffect(() => {
+    setActiveMapView(hasMrtRoute ? "mrt" : "route");
+  }, [activeDayNumber, hasMrtRoute]);
 
   const tripTitle = typeof trip.title === "string" ? trip.title : trip.title?.[language] ?? trip.title?.en;
 
   async function rename() {
-    const title = window.prompt(zh ? "行程名称" : "Trip name", tripTitle);
+    const title = window.prompt(zh ? "琛岀▼鍚嶇О" : "Trip name", tripTitle);
     if (!title?.trim()) return;
     setBusy(true);
     try {
@@ -355,7 +362,7 @@ export default function ObjectiveTripWorkspace({ trip, setTrip, access }) {
         <div className="mx-auto flex max-w-[1520px] flex-col justify-between gap-5 lg:flex-row lg:items-end">
           <div>
             <p className="text-xs font-extrabold uppercase text-lake">{zh ? "已验证行程工作区" : "Validated trip workspace"} {"\u00b7"} {displayLabel(language, "profile", selectedTravelStyle)}</p>
-            <h1 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">{tripTitle ?? `${trip.destination}${zh ? "行程" : " journey"}`}</h1>
+            <h1 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">{tripTitle ?? `${trip.destination}${zh ? "琛岀▼" : " journey"}`}</h1>
             <p className="mt-2 text-sm text-ink/55">{trip.startDate} - {trip.endDate} {"\u00b7"} {trip.travellerCount} {zh ? "人" : "travellers"}</p>
           </div>
           {access?.canEdit && <div className="flex flex-wrap gap-2">
@@ -372,7 +379,7 @@ export default function ObjectiveTripWorkspace({ trip, setTrip, access }) {
         {notice && <p role="status" className="mx-auto mt-4 max-w-[1520px] rounded-lg bg-jade/10 px-4 py-3 text-sm font-bold text-jade">{notice}</p>}
         {versioningOpen && <form onSubmit={(event) => { event.preventDefault(); regenerate({ budgetMinor: Number(versionBudget) }); }} className="mx-auto mt-4 grid max-w-[1520px] gap-4 border-t border-ink/10 pt-4 sm:grid-cols-[minmax(220px,360px)_auto] sm:items-end">
           <label className="grid gap-1.5 text-sm font-semibold text-ink/65">{zh ? "总预算（新币）" : "Hard budget in SGD"}<input aria-label={zh ? "总预算（新币）" : "Hard budget in SGD"} type="number" min="100" max="1000000" required value={versionBudget} onChange={(event) => setVersionBudget(event.target.value)} className="field-control" disabled={busy} /></label>
-          <button type="submit" aria-label={zh ? "创建新的行程版本" : "Create new trip version"} disabled={busy} className="min-h-11 rounded-lg bg-lake px-4 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-50">{busy ? (zh ? "正在生成…" : "Generating…") : (zh ? "创建新版本" : "Create new trip version")}</button>
+          <button type="submit" aria-label={zh ? "创建新的行程版本" : "Create new trip version"} disabled={busy} className="min-h-11 rounded-lg bg-lake px-4 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-50">{busy ? (zh ? "正在生成..." : "Generating...") : (zh ? "创建新版本" : "Create new trip version")}</button>
         </form>}
       </header>
 
@@ -413,9 +420,31 @@ export default function ObjectiveTripWorkspace({ trip, setTrip, access }) {
             {finalLeg && <TripLegRow leg={finalLeg} />}
             <div className="flex items-center gap-3 rounded-lg bg-ink/[0.035] p-3 text-sm font-bold"><span className="grid h-8 w-8 place-items-center rounded-full border border-ink/20 bg-white">E</span>{zh ? "终点" : "End"} {"\u00b7"} {pointLabel(day.endPoint, language)}</div>
           </section>
-          <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
-            <LeafletRouteMap activities={mapActivities} selectedActivityId={detail?.xid} onSelect={(id) => setDetail(day.activities.find((activity) => activity.xid === id))} />
-            <p className="border-x border-b border-ink/10 bg-paper px-3 py-2 text-xs leading-5 text-ink/55">{zh ? "出发地与酒店位置可能为估算值；景点坐标保留其数据提供方来源。" : "Origin and hotel anchors may be estimated; POI coordinates retain their provider source."}</p>
+          <aside className="min-w-0 lg:sticky lg:top-4 lg:self-start" data-testid="route-view-aside">
+            <section aria-label={zh ? "行程地图与 MRT 估算路线" : "Itinerary map and MRT estimate"} className="border border-ink/10 bg-paper p-3">
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-extrabold uppercase text-lake">{zh ? "当天路线视图" : "Day route view"}</p>
+                  <h3 className="mt-1 font-display text-lg font-bold">{hasMrtRoute ? (zh ? "MRT 估算路线已可查看" : "MRT estimate available") : (zh ? "路线地图与 MRT 估算" : "Route map + MRT estimate")}</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-1 rounded-lg bg-ink/[0.045] p-1">
+                  <button type="button" aria-pressed={activeMapView === "route"} onClick={() => setActiveMapView("route")} className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 text-sm font-extrabold ${activeMapView === "route" ? "bg-ink text-white" : "text-ink/65 hover:bg-white"}`}>
+                    <MapPinned className="h-4 w-4" />{zh ? "路线地图" : "Route map"}
+                  </button>
+                  <button type="button" aria-pressed={activeMapView === "mrt"} onClick={() => setActiveMapView("mrt")} className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 text-sm font-extrabold ${activeMapView === "mrt" ? "bg-sky text-white" : "text-ink/65 hover:bg-white"}`}>
+                    <TrainFront className="h-4 w-4" />{zh ? "MRT 估算" : "MRT estimate"}
+                  </button>
+                </div>
+              </div>
+              {activeMapView === "mrt" ? (
+                <MrtItineraryMap day={day} />
+              ) : (
+                <>
+                  <LeafletRouteMap activities={mapActivities} selectedActivityId={detail?.xid} onSelect={(id) => setDetail(day.activities.find((activity) => activity.xid === id))} />
+                  <p className="border-x border-b border-ink/10 bg-paper px-3 py-2 text-xs leading-5 text-ink/55">{zh ? "出发地与酒店位置可能为估算值；景点坐标保留其数据提供方来源。" : "Origin and hotel anchors may be estimated; POI coordinates retain their provider source."}</p>
+                </>
+              )}
+            </section>
           </aside>
           <div className="min-w-0 bg-paper px-5 lg:col-span-2 xl:col-span-1"><ProfileBudgetSummary summary={variant.summary} /><BudgetSummary summary={variant.summary} language={language} /></div>
         </div>

@@ -86,7 +86,7 @@ function directDistanceMeters(from, to) {
 
 function routeModeFor(profile, preferences) {
   const strategy = getSpendingProfile(profile);
-  if (preferences.localTransportPreference === "WALK") {
+  if (["WALK", "PUBLIC_TRANSIT", "MIXED", "TAXI"].includes(preferences.localTransportPreference)) {
     return () => preferences.localTransportPreference;
   }
   return ({ day, legIndex, from, to }) => {
@@ -233,6 +233,7 @@ async function evaluateDraft(draft, { preferences, candidatePool, anchors, refer
   Object.assign(locations, anchors);
   const routed = await buildTripLegs(draft, {
     locations,
+    destination: preferences.destination,
     mode: routeModeFor(draft.travelStyle, preferences)
   });
   const scheduled = {

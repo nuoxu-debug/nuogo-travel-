@@ -72,6 +72,8 @@ function trip() {
     budgetMinor: 30_000,
     preferences: {
       destination: "singapore",
+      departurePoint: "Changi Airport",
+      arrivalPoint: "Hotel in Singapore",
       startDate: "2026-10-10",
       endDate: "2026-10-10",
       travellerCount: 2,

@@ -3,6 +3,51 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import App from "../src/App.jsx";
 
+function mrtLeg() {
+  return {
+    id: "leg-mrt",
+    fromLocationId: "origin",
+    toLocationId: "otm-bj-forbidden-city",
+    mode: "PUBLIC_TRANSIT",
+    distanceMeters: 1200,
+    durationMinutes: 24,
+    estimatedCostMinor: 300,
+    routeSource: "ESTIMATED",
+    sourceType: "ESTIMATED",
+    mrtRoute: {
+      accessStation: { id: "city-hall", code: "NS25/EW13", name: { en: "City Hall", zh: "政府大厦" }, lineCodes: ["NS", "EW"], distanceMeters: 320, walkMinutes: 4 },
+      egressStation: { id: "bayfront", code: "CE1/DT16", name: { en: "Bayfront", zh: "海湾舫" }, lineCodes: ["CC", "DT"], distanceMeters: 520, walkMinutes: 7 },
+      stations: [
+        { id: "city-hall", code: "NS25/EW13", name: { en: "City Hall", zh: "政府大厦" }, lineCodes: ["NS", "EW"] },
+        { id: "raffles-place", code: "NS26/EW14", name: { en: "Raffles Place", zh: "莱佛士坊" }, lineCodes: ["NS", "EW"] },
+        { id: "bayfront", code: "CE1/DT16", name: { en: "Bayfront", zh: "海湾舫" }, lineCodes: ["CC", "DT"] }
+      ],
+      lines: [
+        { code: "NS", name: { en: "North-South Line", zh: "南北线" }, color: "#d42e12" },
+        { code: "DT", name: { en: "Downtown Line", zh: "滨海市区线" }, color: "#005ec4" }
+      ],
+      segments: [
+        { lineCode: "NS", stationIds: ["city-hall", "raffles-place"] },
+        { lineCode: "DT", stationIds: ["raffles-place", "bayfront"] }
+      ],
+      stationCount: 3,
+      transferCount: 1,
+      railMinutes: 13,
+      walkMinutes: 11,
+      distanceMeters: 6830,
+      fareMinor: 177,
+      provider: "ONEMAP",
+      legs: [
+        { mode: "WALK", fromName: "Marina Bay Sands", toName: "Bayfront", durationMinutes: 5, distanceMeters: 320 },
+        { mode: "SUBWAY", route: "DT", fromName: "Bayfront", toName: "Bugis", durationMinutes: 12, distanceMeters: 4100 },
+        { mode: "SUBWAY", route: "EW", fromName: "Bugis", toName: "City Hall", durationMinutes: 10, distanceMeters: 2200 },
+        { mode: "WALK", fromName: "City Hall", toName: "National Gallery Singapore", durationMinutes: 2, distanceMeters: 210 }
+      ],
+      source: { name: "OneMap public transport routing", url: "https://www.onemap.gov.sg/apidocs/routing" }
+    }
+  };
+}
+
 function objectiveTrip() {
   const categoriesMinor = {
     outboundTransport: 30000,
@@ -356,11 +401,28 @@ describe("validated itinerary workspace", () => {
 
   it("keeps the map compact, ordered, and explicit about estimated anchors", async () => {
     await renderWorkspace();
+    expect(screen.getByRole("button", { name: /MRT estimate/i })).toBeInTheDocument();
+    expect(screen.getByTestId("route-view-aside")).toHaveClass("lg:sticky", "lg:top-4");
     expect(screen.getByTestId("route-map-panel")).toHaveClass("h-[280px]");
     expect(screen.getByText("Origin and hotel anchors may be estimated; POI coordinates retain their provider source.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Map marker: Palace Museum" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Map marker: Start: Departure point" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Map marker: End: Accommodation" })).toBeInTheDocument();
+  });
+
+  it("keeps the MRT estimate panel visible even when no MRT route was resolved", async () => {
+    await renderWorkspace();
+
+    await userEvent.click(screen.getByRole("button", { name: /MRT estimate/i }));
+
+    const mrt = screen.getByRole("region", { name: "Estimated MRT route for Day 1" });
+    expect(within(mrt).getByTestId("mrt-route-diagram")).toBeInTheDocument();
+    expect(within(mrt).getByRole("img", { name: "Official Singapore MRT network map" }))
+      .toHaveAttribute("src", "https://journey.smrt.com.sg/static/journey/img/network_map_2026_June.png");
+    expect(within(mrt).getByRole("link", { name: "Open official SMRT map" }))
+      .toHaveAttribute("href", "https://journey.smrt.com.sg/journey/mrt_network_map/");
+    expect(within(mrt).getByText("No MRT estimate for Day 1")).toBeInTheDocument();
+    expect(within(mrt).getByText(/falls back to the existing travel-time estimate/i)).toBeInTheDocument();
   });
 
   it("maps only grounded attractions and selects them by xid", async () => {
@@ -371,6 +433,34 @@ describe("validated itinerary workspace", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Map marker: Jingshan Park" }));
     expect(screen.getByRole("dialog", { name: "Jingshan Park details" })).toBeInTheDocument();
+  });
+
+  it("promotes the estimated MRT route as the visible map panel when trip legs include MRT metadata", async () => {
+    const trip = singleRunTrip();
+    trip.itineraryRun.itinerary.days[0].legs[0] = mrtLeg();
+
+    await renderWorkspace(trip);
+
+    expect(screen.getByRole("button", { name: /MRT estimate/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /Route map/i })).toHaveAttribute("aria-pressed", "false");
+    const mrt = screen.getByRole("region", { name: "Estimated MRT route for Day 1" });
+    expect(within(mrt).getByTestId("mrt-route-diagram")).toBeInTheDocument();
+    expect(within(mrt).getByRole("img", { name: "Official Singapore MRT network map" }))
+      .toHaveAttribute("src", "https://journey.smrt.com.sg/static/journey/img/network_map_2026_June.png");
+    expect(within(mrt).getByText("City Hall")).toBeInTheDocument();
+    expect(within(mrt).getByText("Bayfront")).toBeInTheDocument();
+    expect(within(mrt).getByText("North-South Line")).toBeInTheDocument();
+    expect(within(mrt).getByText("Downtown Line")).toBeInTheDocument();
+    expect(within(mrt).getByText("6.8 km")).toBeInTheDocument();
+    expect(within(mrt).getByText("S$ 1.77")).toBeInTheDocument();
+    expect(within(mrt).getByText("Public transport legs")).toBeInTheDocument();
+    expect(within(mrt).getByText("Bayfront -> Bugis")).toBeInTheDocument();
+    expect(within(mrt).getByText(/Estimated only/)).toBeInTheDocument();
+    expect(within(mrt).getByText(/does not include real-time arrivals/i)).toBeInTheDocument();
+    expect(within(mrt).queryByText(/live SMRT routing/i)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Route map/i }));
+    expect(screen.getByTestId("route-map-panel")).toBeInTheDocument();
   });
 
   it("exposes owner management, invalidation, and privacy consent states", async () => {

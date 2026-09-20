@@ -31,15 +31,15 @@ describe("Singapore landing experience", () => {
     expect(screen.getByText("Marina Bay Sands")).toBeInTheDocument();
     expect(screen.getByText("Gardens by the Bay")).toBeInTheDocument();
     expect(screen.getAllByText("Chinatown").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Sentosa").length).toBeGreaterThan(0);
+    expect(screen.getByText("Little India")).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/\bChina\b|CNY|Compare Plans/i);
   });
 
   it("renders an accessible Singapore journey map and five-step planning story", () => {
     renderEnglishLanding();
     expect(screen.getByTestId("singapore-journey-map")).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Singapore illustrated journey map" })).toBeInTheDocument();
-    expect(screen.getByTestId("journey-carriage")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Singapore MRT network map" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open official MRT map" })).toHaveAttribute("href", "https://journey.smrt.com.sg/journey/mrt_network_map/");
     expect(screen.getByText("Enter travel preferences")).toBeInTheDocument();
     expect(screen.getByText("Browse/select attractions")).toBeInTheDocument();
     expect(screen.getByText("Generate itinerary")).toBeInTheDocument();

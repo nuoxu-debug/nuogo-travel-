@@ -67,6 +67,9 @@ describe("Express request validation boundaries", () => {
       .set("Authorization", `Bearer ${auth.body.token}`)
       .send({
         destination: "singapore",
+        departureLocation: "Kuala Lumpur, Malaysia",
+        arrivalPoint: "Auto Recommend",
+        accommodationAreaPreference: "Auto Recommend",
         startDate: "2026-10-10",
         endDate: "2026-10-11",
         travellerCount: 2,

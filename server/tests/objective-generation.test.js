@@ -16,6 +16,8 @@ const centres = {
 function preferences(destination = "singapore", overrides = {}) {
   return {
     destination,
+    departurePoint: "Changi Airport",
+    arrivalPoint: "Hotel in Singapore",
     startDate: "2026-10-10",
     endDate: "2026-10-11",
     travellerCount: 2,

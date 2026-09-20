@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="1400" viewBox="0 0 2200 1400" role="img" aria-labelledby="title desc">
+  <title id="title">Figure 3.11 Simplified Use Case Diagram of Nuogo</title>
+  <desc id="desc">Clean high-level UML use case diagram for the Singapore-only Nuogo MVP.</desc>
+  <defs>
+    <style>
+      .page { fill: #ffffff; }
+      .boundary { fill: #fbfcfe; stroke: #25384d; stroke-width: 3; }
+      .header { fill: #edf3f8; }
+      .title { font: 700 40px Arial, sans-serif; fill: #172435; }
+      .subtitle { font: 400 22px Arial, sans-serif; fill: #647386; }
+      .boundary-title { font: 700 30px Arial, sans-serif; fill: #172435; }
+      .section { font: 700 17px Arial, sans-serif; fill: #5c7185; letter-spacing: 1px; }
+      .use-case { fill: #ffffff; stroke: #376486; stroke-width: 2.5; }
+      .use-case-key { fill: #eaf4ff; stroke: #1971b8; stroke-width: 3; }
+      .use-case-admin { fill: #f0f7f2; stroke: #4d795d; stroke-width: 2.5; }
+      .uc-title { font: 700 21px Arial, sans-serif; fill: #172435; text-anchor: middle; }
+      .uc-detail { font: 400 16px Arial, sans-serif; fill: #526477; text-anchor: middle; }
+      .actor-line { fill: none; stroke: #172435; stroke-width: 4; stroke-linecap: round; }
+      .actor-name { font: 700 22px Arial, sans-serif; fill: #172435; text-anchor: middle; }
+      .association { fill: none; stroke: #52677c; stroke-width: 2.5; }
+      .external { fill: #fff8e9; stroke: #9c6d20; stroke-width: 2.5; }
+      .external-type { font: 600 16px Arial, sans-serif; fill: #79551d; text-anchor: middle; }
+      .external-name { font: 700 21px Arial, sans-serif; fill: #172435; text-anchor: middle; }
+      .note { fill: #fffdf5; stroke: #9a8a54; stroke-width: 2; }
+      .note-heading { font: 700 17px Arial, sans-serif; fill: #554b27; }
+      .note-text { font: 400 16px Arial, sans-serif; fill: #554b27; }
+    </style>
+  </defs>
+  <rect class="page" width="2200" height="1400"/>
+  <text class="title" x="1100" y="58" text-anchor="middle">Figure 3.11 Simplified Use Case Diagram of Nuogo</text>
+  <text class="subtitle" x="1100" y="96" text-anchor="middle">Singapore MVP | One Travel Style | One Generated Itinerary</text>
+  <rect class="boundary" x="300" y="135" width="1500" height="1130" rx="4"/>
+  <rect class="header" x="300" y="135" width="1500" height="60"/>
+  <line x1="300" y1="195" x2="1800" y2="195" stroke="#c8d4df" stroke-width="2"/>
+  <text class="boundary-title" x="1050" y="175" text-anchor="middle">Nuogo System</text>
+  <text class="section" x="760" y="232" text-anchor="middle">TRAVELLER FUNCTIONS</text>
+  <text class="section" x="1470" y="835" text-anchor="middle">AUTHORISED MAINTENANCE</text>
+
+  <ellipse class="use-case" cx="760" cy="300" rx="310" ry="65"/>
+  <text class="uc-title" x="760" y="292">Access Nuogo</text>
+  <text class="uc-detail" x="760" y="322">Register, log in, or continue as Guest</text>
+  <ellipse class="use-case" cx="760" cy="450" rx="310" ry="68"/>
+  <text class="uc-title" x="760" y="441">Discover and Select Grounded Attractions</text>
+  <text class="uc-detail" x="760" y="472">Singapore only | MANUAL or AUTO preference mode</text>
+  <ellipse class="use-case" cx="760" cy="605" rx="310" ry="72"/>
+  <text class="uc-title" x="760" y="592">Configure Trip Preferences</text>
+  <text class="uc-detail" x="760" y="621">Essential inputs | ONE travel style</text>
+  <text class="uc-detail" x="760" y="645">Optional rainy-day backup remains inactive until chosen</text>
+  <ellipse class="use-case-key" cx="760" cy="765" rx="310" ry="72"/>
+  <text class="uc-title" x="760" y="756">Generate ONE Grounded, Budget-Safe Itinerary</text>
+  <text class="uc-detail" x="760" y="786">Validated against the user's hard SGD budget</text>
+  <ellipse class="use-case" cx="760" cy="925" rx="310" ry="70"/>
+  <text class="uc-title" x="760" y="916">Review Current Itinerary</text>
+  <text class="uc-detail" x="760" y="946">Daily plan | route map | budget estimate | source labels</text>
+  <ellipse class="use-case" cx="760" cy="1085" rx="310" ry="75"/>
+  <text class="uc-title" x="760" y="1074">Manage Profile and Persistent Itineraries</text>
+  <text class="uc-detail" x="760" y="1104">Authenticated only | save, regenerate, manage, delete</text>
+
+  <ellipse class="use-case-admin" cx="1470" cy="920" rx="225" ry="55"/>
+  <text class="uc-title" x="1470" y="927">Maintain Supported Destination</text>
+  <ellipse class="use-case-admin" cx="1470" cy="1055" rx="225" ry="55"/>
+  <text class="uc-title" x="1470" y="1062">Maintain Attraction Data</text>
+  <ellipse class="use-case-admin" cx="1470" cy="1190" rx="225" ry="55"/>
+  <text class="uc-title" x="1470" y="1197">Maintain Cost References</text>
+
+  <g aria-label="Traveller actor">
+    <circle class="actor-line" cx="135" cy="555" r="34"/>
+    <path class="actor-line" d="M 135 589 L 135 700 M 72 625 L 198 625 M 135 700 L 82 782 M 135 700 L 188 782"/>
+    <text class="actor-name" x="135" y="825">Traveller</text>
+  </g>
+  <path class="association" d="M 190 590 L 463 326"/>
+  <path class="association" d="M 198 610 L 454 463"/>
+  <path class="association" d="M 198 625 L 450 605"/>
+  <path class="association" d="M 198 640 L 454 746"/>
+  <path class="association" d="M 190 660 L 462 901"/>
+  <path class="association" d="M 178 685 L 468 1051"/>
+
+  <g aria-label="Authorised Maintainer actor">
+    <circle class="actor-line" cx="2040" cy="955" r="34"/>
+    <path class="actor-line" d="M 2040 989 L 2040 1100 M 1977 1025 L 2103 1025 M 2040 1100 L 1987 1182 M 2040 1100 L 2093 1182"/>
+    <text class="actor-name" x="2040" y="1225">Authorised</text>
+    <text class="actor-name" x="2040" y="1253">Maintainer</text>
+  </g>
+  <path class="association" d="M 1977 1005 L 1687 935"/>
+  <path class="association" d="M 1977 1025 L 1695 1055"/>
+  <path class="association" d="M 1987 1088 L 1687 1178"/>
+
+  <rect class="external" x="1860" y="390" width="285" height="120" rx="8"/>
+  <text class="external-type" x="2002" y="425">&lt;&lt;external system&gt;&gt;</text>
+  <text class="external-name" x="2002" y="468">OpenTripMap</text>
+  <path class="association" d="M 1070 450 L 1860 450"/>
+  <rect class="external" x="1860" y="700" width="285" height="130" rx="8"/>
+  <text class="external-type" x="2002" y="736">&lt;&lt;external system&gt;&gt;</text>
+  <text class="external-name" x="2002" y="775">OpenRouter</text>
+  <text class="uc-detail" x="2002" y="804">DeepSeek V3.1 model</text>
+  <path class="association" d="M 1070 765 L 1860 765"/>
+
+  <path class="note" d="M 1125 255 H 1700 V 365 H 1125 Z M 1655 255 V 300 H 1700"/>
+  <text class="note-heading" x="1150" y="290">Access rule</text>
+  <text class="note-text" x="1150" y="321">Guest: current-session itinerary only.</text>
+  <text class="note-text" x="1150" y="348">Persistent itinerary and profile functions require authentication.</text>
+  <path class="association" d="M 1070 300 L 1125 300" stroke-dasharray="7 6"/>
+  <text class="subtitle" x="1100" y="1340" text-anchor="middle">Solid lines represent actor or external-system associations.</text>
+</svg>

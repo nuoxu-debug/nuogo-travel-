@@ -5,6 +5,9 @@ import { itineraryDraftJsonSchema } from "./itineraryDraftSchema.js";
 
 const validPreferences = {
   destination: "singapore",
+  departureLocation: "Kuala Lumpur, Malaysia",
+  arrivalPoint: "Auto Recommend",
+  accommodationAreaPreference: "Auto Recommend",
   startDate: "2026-10-10",
   endDate: "2026-10-12",
   travellerCount: 2,
@@ -29,11 +32,14 @@ describe("Nuogo Singapore contracts", () => {
 
   it("accepts the simplified SGD preference contract and derives duration", () => {
     const parsed = schemas.travelPreferenceSchema.parse(validPreferences);
-    expect(parsed).toMatchObject({ destination: "singapore", budgetMinor: 120000, currency: "SGD" });
+    expect(parsed).toMatchObject({ destination: "singapore", departureLocation: "Kuala Lumpur, Malaysia", arrivalPoint: "Auto Recommend", accommodationAreaPreference: "Auto Recommend", budgetMinor: 120000, currency: "SGD" });
     expect(schemas.deriveTripDurationDays(parsed.startDate, parsed.endDate)).toBe(3);
     for (const field of ["origin", "arrivalDateTime", "departureDateTime", "budgetMinor"]) {
       expect(() => schemas.travelPreferenceSchema.parse({ ...validPreferences, [field]: "obsolete" })).toThrow();
     }
+    expect(() => schemas.travelPreferenceSchema.parse({ ...validPreferences, departureLocation: "" })).toThrow();
+    expect(() => schemas.travelPreferenceSchema.parse({ ...validPreferences, arrivalPoint: "" })).toThrow();
+    expect(() => schemas.travelPreferenceSchema.parse({ ...validPreferences, accommodationAreaPreference: "" })).toThrow();
   });
 
   it("validates MANUAL and AUTO selection semantics", () => {

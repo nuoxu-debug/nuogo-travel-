@@ -31,6 +31,10 @@ function validatedResult() {
 
 function installGenerationApi({ failure } = {}) {
   fetch.mockImplementation(async (url) => {
+    if (String(url).includes("api.frankfurter.dev")) {
+      const quote = String(url).split("/").pop().toUpperCase();
+      return response({ rate: { MYR: 3.31, CNY: 5.39, USD: 0.77 }[quote], date: "2026-09-18" });
+    }
     if (url.endsWith("/auth/guest")) return response({ user: { id: "guest-1", accountType: "GUEST" }, token: "guest-token" });
     if (url.endsWith("/trips/generate")) return failure ? response(failure, false, 422) : response(validatedResult());
     return response({});
@@ -41,29 +45,41 @@ describe("Singapore preference planner", () => {
   it("shows one fixed Singapore destination and the report inputs", () => {
     render(<App initialPath="/planner" />);
     expect(screen.getByTestId("planner-brief-hero")).toHaveAttribute("data-layout", "travel-brief");
+    expect(screen.getByTestId("planner-brief-background")).toHaveAttribute("src", expect.stringContaining("chinatown.png"));
     expect(screen.getByText("Supported MVP destination")).toBeInTheDocument();
+    expect(screen.getByLabelText("Departure Location")).toHaveAttribute("placeholder", "e.g. Kuala Lumpur, Malaysia");
+    expect(screen.queryByRole("button", { name: "Changi Airport" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Singapore Arrival Point")).toHaveValue("Auto Recommend");
+    expect(screen.getByRole("button", { name: "Woodlands Checkpoint" })).toBeInTheDocument();
+    expect(screen.queryByText("Hotel in Singapore")).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Accommodation Preference" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Auto Recommend" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Sentosa" })).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Destination" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Start date")).toBeRequired();
     expect(screen.getByLabelText("End date")).toBeRequired();
     expect(screen.getByRole("spinbutton", { name: "Travellers" })).toHaveValue(2);
     expect(screen.getByRole("button", { name: /Balanced/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("checkbox", { name: /rainy-day backup/i })).not.toBeChecked();
-    expect(document.body).not.toHaveTextContent(/Beijing|Shanghai|Xi'an|CNY/);
+    expect(document.body).not.toHaveTextContent(/Beijing|Shanghai|Xi'an/);
   });
 
   it("derives inclusive duration and converts SGD to minor units", async () => {
     installGenerationApi();
     render(<App initialPath="/planner" />);
     expect(screen.getByText("3 days")).toBeInTheDocument();
+    expect(await screen.findByText(/MYR 6,620/, {}, { timeout: 2500 })).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Departure Location"), "Kuala Lumpur, Malaysia");
     await userEvent.click(screen.getByRole("button", { name: "Generate ONE itinerary" }));
     const request = fetch.mock.calls.find(([url]) => url.endsWith("/trips/generate"));
-    expect(JSON.parse(request[1].body)).toMatchObject({ destination: "singapore", startDate: "2026-10-10", endDate: "2026-10-12", travellerCount: 2, budgetMinor: 200000, currency: "SGD", travelStyle: "BALANCED", rainyDayBackupEnabled: false, language: "en" });
+    expect(JSON.parse(request[1].body)).toMatchObject({ destination: "singapore", departureLocation: "Kuala Lumpur, Malaysia", arrivalPoint: "Auto Recommend", accommodationAreaPreference: "Auto Recommend", startDate: "2026-10-10", endDate: "2026-10-12", travellerCount: 2, budgetMinor: 200000, currency: "SGD", travelStyle: "BALANCED", rainyDayBackupEnabled: false, language: "en" });
   });
 
   it("submits only safe fields for manually selected attractions", async () => {
     sessionStorage.setItem("nuogo-attraction-draft", JSON.stringify({ destination: "singapore", mode: "MANUAL", selectedAttractions: [{ xid: "demo-sg-gardens", displayName: "Gardens by the Bay", provider: "untrusted" }] }));
     installGenerationApi();
     render(<App initialPath="/planner" />);
+    await userEvent.type(screen.getByLabelText("Departure Location"), "Kuala Lumpur, Malaysia");
     await userEvent.click(screen.getByRole("button", { name: "Generate ONE itinerary" }));
     const request = fetch.mock.calls.find(([url]) => url.endsWith("/trips/generate"));
     const body = JSON.parse(request[1].body);
@@ -75,6 +91,7 @@ describe("Singapore preference planner", () => {
   it("creates a guest session before generation and opens one workspace", async () => {
     installGenerationApi();
     render(<App initialPath="/planner" />);
+    await userEvent.type(screen.getByLabelText("Departure Location"), "Kuala Lumpur, Malaysia");
     await userEvent.click(screen.getByRole("button", { name: "Generate ONE itinerary" }));
     expect(await screen.findByText(/Validated trip workspace/)).toBeInTheDocument();
     expect(fetch.mock.calls.find(([url]) => url.endsWith("/auth/guest"))).toBeDefined();

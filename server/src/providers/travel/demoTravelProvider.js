@@ -9,6 +9,7 @@ const demoPois = Object.freeze([
   ["demo-sg-chinatown", "Chinatown", "ATTRACTION", 103.8439, 1.2838, "historic,cultural,foods"],
   ["demo-sg-kampong-gelam", "Kampong Gelam", "ATTRACTION", 103.8592, 1.3024, "historic,cultural,foods"],
   ["demo-sg-little-india", "Little India", "ATTRACTION", 103.8520, 1.3066, "historic,cultural,foods"],
+  ["demo-sg-sentosa", "Sentosa", "ATTRACTION", 103.8238, 1.2540, "entertainment,beaches,viewpoints"],
   ["demo-sg-maxwell-food-centre", "Maxwell Food Centre", "RESTAURANT", 103.8449, 1.2803, "foods,indoor"],
   ["demo-sg-lau-pa-sat", "Lau Pa Sat", "RESTAURANT", 103.8500, 1.2806, "foods,indoor"]
 ]);

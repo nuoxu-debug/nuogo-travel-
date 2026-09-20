@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#52616f"/></marker></defs>
+  <rect width="100%" height="100%" fill="white"/>
+  <text x="60" y="62" text-anchor="start" font-size="34" font-weight="700" fill="#17212b"><tspan x="60" dy="0">Hybrid Agile-Waterfall Methodology</tspan></text>
+  <line x1="60" y1="94" x2="1540" y2="94" stroke="#c9d1d8" stroke-width="2"/>
+  
+  <text x="70" y="145" text-anchor="start" font-size="26" font-weight="700" fill="#2764a5"><tspan x="70" dy="0">Structured academic stages</tspan></text>
+  <g><rect x="70" y="180" width="235" height="110" rx="12" fill="#eaf2fb" stroke="#2764a5" stroke-width="2.5"/><text x="187.5" y="243" text-anchor="middle" font-size="27" font-weight="600" fill="#17212b"><tspan x="187.5" dy="0">Planning</tspan></text></g>
+  <line x1="305" y1="235" x2="350" y2="235" stroke="#52616f" stroke-width="3"  marker-end="url(#arrow)"/>
+  <g><rect x="350" y="180" width="235" height="110" rx="12" fill="#eaf2fb" stroke="#2764a5" stroke-width="2.5"/><text x="467.5" y="243" text-anchor="middle" font-size="27" font-weight="600" fill="#17212b"><tspan x="467.5" dy="0">Requirements</tspan></text></g>
+  <line x1="585" y1="235" x2="630" y2="235" stroke="#52616f" stroke-width="3"  marker-end="url(#arrow)"/>
+  <g><rect x="630" y="180" width="235" height="110" rx="12" fill="#eaf2fb" stroke="#2764a5" stroke-width="2.5"/><text x="747.5" y="243" text-anchor="middle" font-size="27" font-weight="600" fill="#17212b"><tspan x="747.5" dy="0">System Design</tspan></text></g>
+  <line x1="865" y1="235" x2="910" y2="235" stroke="#52616f" stroke-width="3"  marker-end="url(#arrow)"/>
+  <g><rect x="910" y="180" width="235" height="110" rx="12" fill="#eaf2fb" stroke="#2764a5" stroke-width="2.5"/><text x="1027.5" y="243" text-anchor="middle" font-size="27" font-weight="600" fill="#17212b"><tspan x="1027.5" dy="0">Prototype</tspan></text></g>
+  <line x1="1145" y1="235" x2="1190" y2="235" stroke="#52616f" stroke-width="3"  marker-end="url(#arrow)"/>
+  <g><rect x="1190" y="180" width="335" height="110" rx="12" fill="#eaf2fb" stroke="#2764a5" stroke-width="2.5"/><text x="1357.5" y="243" text-anchor="middle" font-size="27" font-weight="600" fill="#17212b"><tspan x="1357.5" dy="0">Documentation Baseline</tspan></text></g>
+  <text x="70" y="385" text-anchor="start" font-size="26" font-weight="700" fill="#237a66"><tspan x="70" dy="0">Iterative implementation and verification</tspan></text>
+  <g><rect x="130" y="430" width="245" height="100" rx="12" fill="#e8f5f1" stroke="#237a66" stroke-width="2.5"/><text x="252.5" y="471" text-anchor="middle" font-size="23" font-weight="600" fill="#17212b"><tspan x="252.5" dy="0">Sprint 1</tspan><tspan x="252.5" dy="34">Core / Security / UI</tspan></text></g>
+  <line x1="375" y1="480" x2="480" y2="480" stroke="#52616f" stroke-width="3"  marker-end="url(#arrow)"/>
+  <g><rect x="480" y="430" width="280" height="100" rx="12" fill="#e8f5f1" stroke="#237a66" stroke-width="2.5"/><text x="620" y="471" text-anchor="middle" font-size="23" font-weight="600" fill="#17212b"><tspan x="620" dy="0">Sprint 2</tspan><tspan x="620" dy="34">Planning / LLM / Budget</tspan></text></g>
+  <line x1="760" y1="480" x2="865" y2="480" stroke="#52616f" stroke-width="3"  marker-end="url(#arrow)"/>
+  <g><rect x="865" y="430" width="330" height="100" rx="12" fill="#e8f5f1" stroke="#237a66" stroke-width="2.5"/><text x="1030" y="471" text-anchor="middle" font-size="23" font-weight="600" fill="#17212b"><tspan x="1030" dy="0">Sprint 3</tspan><tspan x="1030" dy="34">Grounding / Discovery / Backup</tspan></text></g>
+  <line x1="1195" y1="480" x2="1300" y2="480" stroke="#52616f" stroke-width="3"  marker-end="url(#arrow)"/>
+  <g><rect x="1300" y="430" width="220" height="100" rx="12" fill="#e8f5f1" stroke="#237a66" stroke-width="2.5"/><text x="1410" y="471" text-anchor="middle" font-size="23" font-weight="600" fill="#17212b"><tspan x="1410" dy="0">Integration</tspan><tspan x="1410" dy="34">and Testing</tspan></text></g>
+  <path d="M1410 530 C1410 640 1040 660 820 660 C560 660 280 640 250 530" fill="none" stroke="#237a66" stroke-width="3"  marker-end="url(#arrow)"/>
+  <text x="820" y="650" text-anchor="middle" font-size="25" font-weight="700" fill="#237a66"><tspan x="820" dy="0">Plan  →  Design  →  Develop  →  Test  →  Review</tspan></text>
+  <g><rect x="245" y="735" width="1110" height="90" rx="12" fill="#f5f7f8" stroke="#9aa6b2" stroke-width="2.5"/><text x="800" y="788" text-anchor="middle" font-size="25" font-weight="600" fill="#17212b"><tspan x="800" dy="0">Supporting maintenance: supported destinations, POIs, and cost-reference records</tspan></text></g>
+
+  </svg>

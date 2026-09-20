@@ -19,6 +19,14 @@ describe("Singapore discovery content", () => {
     });
   });
 
+  it("adds controlled Sentosa discovery content", () => {
+    expect(resolveAttractionDisplay({ xid: "demo-sg-sentosa", sourceName: "Sentosa", language: "en" })).toMatchObject({
+      name: "Sentosa",
+      suggestedVisitDurationMinutes: 180,
+      descriptionSourceType: "DATABASE_BACKED"
+    });
+  });
+
   it("rejects unsupported active destinations", () => {
     expect(() => getDestinationDiscoveryContent("beijing")).toThrow(/Unsupported destination/);
   });

@@ -50,6 +50,11 @@ const attractionContent = Object.freeze({
     name: { en: "Chinatown", zh: "牛车水" },
     description: { en: "A heritage district with temples, shophouses, markets, and local food.", zh: "汇集寺庙、店屋、市场与本地美食的历史街区。" },
     suggestedVisitDurationMinutes: 120
+  },
+  "demo-sg-sentosa": {
+    name: { en: "Sentosa", zh: "\u5723\u6dd8\u6c99" },
+    description: { en: "An island resort area with beaches, attractions, viewpoints, and family-friendly entertainment.", zh: "\u96c6\u6d77\u6ee9\u3001\u666f\u70b9\u3001\u89c2\u666f\u70b9\u4e0e\u5bb6\u5ead\u5a31\u4e50\u4e8e\u4e00\u4f53\u7684\u5c9b\u5c7f\u5ea6\u5047\u533a\u3002" },
+    suggestedVisitDurationMinutes: 180
   }
 });
 

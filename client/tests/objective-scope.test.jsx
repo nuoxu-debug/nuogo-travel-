@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+﻿import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import App from "../src/App.jsx";
 import { LanguageProvider } from "../src/context/LanguageContext.jsx";
@@ -44,6 +44,15 @@ describe("assessed MVP scope", () => {
     expect(screen.getByText("Gardens by the Bay")).toBeVisible();
   });
 
+  it("fills the AUTO attraction area with a useful recommendation preview", () => {
+    renderLocalized(<SelectedAttractionOutcome mode="AUTO" />, "en");
+
+    expect(screen.getByText("Recommendation pool preview")).toBeVisible();
+    expect(screen.getByText("Gardens by the Bay")).toBeVisible();
+    expect(screen.getByText("National Gallery Singapore")).toBeVisible();
+    expect(screen.getByRole("link", { name: /Open Singapore discovery/i })).toHaveAttribute("href", "/discover/singapore");
+  });
+
   it("shows reconciled profile budget arithmetic and hides a meaningless baseline", () => {
     const { rerender } = renderLocalized(<ProfileBudgetSummary summary={{
       budgetMinor: 600_000,
@@ -52,41 +61,41 @@ describe("assessed MVP scope", () => {
       totalMinor: 480_000,
       remainingMinor: 120_000,
       utilisationPercent: 80
-    }} />);
-    expect(screen.getByText("用户总预算")).toBeVisible();
-    expect(screen.getByText("基础预计费用")).toBeVisible();
-    expect(screen.getByText("计划体验费用")).toBeVisible();
-    expect(screen.getByText("预算使用率")).toBeVisible();
+    }} />, "en");
+    expect(screen.getByText("User budget")).toBeVisible();
+    expect(screen.getByText("Baseline estimated cost")).toBeVisible();
+    expect(screen.getByText("Planned experience cost")).toBeVisible();
+    expect(screen.getByText("Budget utilization")).toBeVisible();
     expect(screen.getByText("80%")).toBeVisible();
 
     rerender(<LanguageProvider><ProfileBudgetSummary summary={{ budgetMinor: 600_000, baselineMandatoryCostMinor: 0, profileControlledCostMinor: 480_000, totalMinor: 480_000, remainingMinor: 120_000, utilisationPercent: 80 }} /></LanguageProvider>);
-    expect(screen.queryByText("基础预计费用")).not.toBeInTheDocument();
+    expect(screen.queryByText("Baseline estimated cost")).not.toBeInTheDocument();
   });
 
   it("renders daily, attraction, and meal presentation without inventing a restaurant", () => {
     const presentation = {
-      theme: { en: "Historic Singapore", zh: "新加坡历史街区" }, activityCount: 3, attractionCount: 2,
+      theme: { en: "Historic Singapore" }, activityCount: 3, attractionCount: 2,
       mealCount: 1, transportLegCount: 3, estimatedDailyCostMinor: 18_800
     };
     const attraction = { activityType: "HISTORY", presentation: {
-      name: { en: "National Gallery Singapore", zh: "新加坡国家美术馆" },
-      description: { en: "A civic-district art museum.", zh: "位于市政区的艺术博物馆。" },
-      reason: { zh: "符合历史文化兴趣。" }, startTime: "09:10", endTime: "10:40",
+      name: { en: "National Gallery Singapore" },
+      description: { en: "A civic-district art museum." },
+      reason: { en: "Fits the history and culture interests." }, startTime: "09:10", endTime: "10:40",
       durationMinutes: 90, estimatedCostMinor: 4_000, descriptionSourceType: "OPENTRIPMAP_API",
       reasonSourceType: "AI_GENERATED", costSourceType: "ESTIMATED"
     }};
     const meal = { activityType: "MEAL", presentation: {
-      name: { en: "Lunch", zh: "午餐" }, area: { en: "Near the Civic District", zh: "市政区附近" },
-      style: { en: "Balanced local meal", zh: "均衡当地餐食" }, startTime: "12:15", endTime: "13:15",
-      durationMinutes: 60, estimatedCostPerTravellerMinor: 6_000, reason: { zh: "安排适当的用餐休息。" },
+      name: { en: "Lunch" }, area: { en: "Near the Civic District" },
+      style: { en: "Balanced local meal" }, startTime: "12:15", endTime: "13:15",
+      durationMinutes: 60, estimatedCostPerTravellerMinor: 6_000, reason: { en: "Adds a reasonable meal break." },
       reasonSourceType: "AI_GENERATED", costSourceType: "ESTIMATED"
     }};
-    renderLocalized(<><DailyItinerarySummary day={{ dayNumber: 1, date: "2026-10-10", presentation }} /><ItineraryActivityDetails activity={attraction} /><MealDetails activity={meal} /></>);
-    expect(screen.getByText("新加坡历史街区")).toBeVisible();
-    expect(screen.getByText("位于市政区的艺术博物馆。")).toBeVisible();
+    renderLocalized(<><DailyItinerarySummary day={{ dayNumber: 1, date: "2026-10-10", presentation }} /><ItineraryActivityDetails activity={attraction} /><MealDetails activity={meal} /></>, "en");
+    expect(screen.getByText("Historic Singapore")).toBeVisible();
+    expect(screen.getByText("A civic-district art museum.")).toBeVisible();
     expect(screen.getByText("OpenTripMap API")).toBeVisible();
-    expect(screen.getByText("市政区附近")).toBeVisible();
-    expect(document.body).toHaveTextContent("估算");
-    expect(document.body).not.toHaveTextContent(/restaurant|餐厅/i);
+    expect(screen.getByText("Near the Civic District")).toBeVisible();
+    expect(document.body).toHaveTextContent("Estimated");
+    expect(document.body).not.toHaveTextContent(/restaurant/i);
   });
 });
