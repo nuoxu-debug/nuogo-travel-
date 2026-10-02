@@ -4,6 +4,13 @@ import { buildTripLegs } from "../src/services/itinerary/buildTripLegs.js";
 
 const from = { latitude: 0, longitude: 0 };
 const to = { latitude: 0, longitude: 0.01 };
+const transportReferences = [
+  { category: "PUBLIC_TRANSPORT_DISTANCE_FARE", tier: "KM_0_32", representativeMinor: 109 },
+  { category: "PUBLIC_TRANSPORT_DISTANCE_FARE", tier: "KM_32_42", representativeMinor: 119 },
+  { category: "PUBLIC_TRANSPORT_DISTANCE_FARE", tier: "KM_42_80", representativeMinor: 177 },
+  { category: "TAXI_OR_RIDE_HAIL_ESTIMATE", tier: "BASE_FARE", representativeMinor: 420 },
+  { category: "TAXI_OR_RIDE_HAIL_ESTIMATE", tier: "PER_KM", representativeMinor: 85 }
+];
 
 describe("deterministic travel estimator", () => {
   it.each([
@@ -42,7 +49,8 @@ describe("deterministic travel estimator", () => {
     const result = await buildTripLegs(itinerary, {
       locations: { origin: from, "Q-B001": to, hotel: from },
       mode: "WALK",
-      routeCostResolver: () => 0
+      references: transportReferences,
+      travellerCount: 3
     });
 
     expect(result.days[0]).not.toHaveProperty("routeUnavailable");
@@ -70,16 +78,17 @@ describe("deterministic travel estimator", () => {
     };
     const result = await buildTripLegs(itinerary, {
       locations: { origin: from, "Q-B001": to, hotel: from },
-      mode
+      mode,
+      references: transportReferences,
+      travellerCount: 4
     });
 
     expect(result.days[0]).not.toHaveProperty("routeUnavailable");
     expect(result.days[0].legs[0]).toMatchObject({
       sourceType: "ESTIMATED",
       routeSource: "ESTIMATED",
-      estimatedCostMinor: expect.any(Number)
+      estimatedCostMinor: 590
     });
-    expect(result.days[0].legs[0].estimatedCostMinor).toBeGreaterThan(0);
   });
 
   it("adds MRT details only to Singapore public-transit legs that can be resolved", async () => {
@@ -99,12 +108,15 @@ describe("deterministic travel estimator", () => {
         "demo-sg-gardens-by-the-bay": { latitude: 1.2816, longitude: 103.8636 },
         hotel: { latitude: 1.2903, longitude: 103.8514 }
       },
-      mode: "PUBLIC_TRANSIT"
+      mode: "PUBLIC_TRANSIT",
+      references: transportReferences,
+      travellerCount: 2
     });
 
     expect(result.days[0].legs[0]).toMatchObject({
       mode: "PUBLIC_TRANSIT",
-      routeSource: "ESTIMATED",
+      routeSource: "STATIC_REFERENCE",
+      estimatedCostMinor: 218,
       mrtRoute: {
         accessStation: expect.objectContaining({ name: expect.objectContaining({ en: "City Hall" }) }),
         egressStation: expect.objectContaining({ name: expect.objectContaining({ en: "Bayfront" }) }),
@@ -130,7 +142,9 @@ describe("deterministic travel estimator", () => {
         "demo-sg-gardens-by-the-bay": { latitude: 1.2816, longitude: 103.8636 },
         hotel: { latitude: 1.2903, longitude: 103.8514 }
       },
-      mode: "PUBLIC_TRANSIT"
+      mode: "PUBLIC_TRANSIT",
+      references: transportReferences,
+      travellerCount: 2
     });
 
     expect(result.days[0].legs[0].mrtRoute).toMatchObject({
@@ -157,10 +171,13 @@ describe("deterministic travel estimator", () => {
         hotel: { latitude: 1.2839, longitude: 103.8609 }
       },
       mode: "PUBLIC_TRANSIT",
+      references: transportReferences,
+      travellerCount: 2,
       publicTransportEstimator: async ({ mode }) => mode === "PUBLIC_TRANSIT" ? ({
         distanceMeters: 6830,
         durationMinutes: 31,
         estimatedCostMinor: 177,
+        routeSource: "ONEMAP",
         sourceType: "ESTIMATED",
         mrtRoute: {
           accessStation: { id: "bayfront", name: { en: "Bayfront", zh: "Bayfront" }, lineCodes: ["DT"] },
@@ -193,10 +210,11 @@ describe("deterministic travel estimator", () => {
     expect(result.days[0].legs[0]).toMatchObject({
       distanceMeters: 6830,
       durationMinutes: 31,
-      estimatedCostMinor: 177,
+      estimatedCostMinor: 354,
+      routeSource: "ONEMAP",
       mrtRoute: {
         provider: "ONEMAP",
-        fareMinor: 177,
+        fareMinor: 354,
         source: expect.objectContaining({ name: "OneMap public transport routing" })
       }
     });

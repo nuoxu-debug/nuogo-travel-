@@ -67,9 +67,8 @@ describe("Express request validation boundaries", () => {
       .set("Authorization", `Bearer ${auth.body.token}`)
       .send({
         destination: "singapore",
-        departureLocation: "Kuala Lumpur, Malaysia",
-        arrivalPoint: "Auto Recommend",
-        accommodationAreaPreference: "Auto Recommend",
+        departurePoint: "Changi Airport",
+        arrivalPoint: "Hotel in Singapore",
         startDate: "2026-10-10",
         endDate: "2026-10-11",
         travellerCount: 2,
@@ -77,9 +76,12 @@ describe("Express request validation boundaries", () => {
         currency: "SGD",
         interests: ["HISTORY", "FOOD"],
         preferredSights: [],
+        transportPreferenceMode: "AUTO_CHEAPEST",
+        preferredTransportModes: [],
         attractionSelectionMode: "AUTO",
         selectedAttractions: [],
         travelStyle: "BALANCED",
+        dailyAttractionTarget: 12,
         rainyDayBackupEnabled: true,
         otherPreferences: "",
         language: "en",
@@ -88,5 +90,52 @@ describe("Express request validation boundaries", () => {
       .expect(422);
 
     expect(generated.body.error.code).toBe("GENERATION_CONSTRAINTS_UNSATISFIED");
+  });
+
+  it("validates transport preference request boundaries", async () => {
+    const application = app();
+    const auth = await request(application).post("/api/auth/register").send({
+      name: "Transport Preference User",
+      email: "transport-preferences@nuogo.test",
+      password: "Nuogo123!"
+    });
+    const base = {
+      destination: "singapore",
+      departurePoint: "Changi Airport",
+      arrivalPoint: "Hotel in Singapore",
+      startDate: "2026-10-10",
+      endDate: "2026-10-11",
+      travellerCount: 2,
+      budgetMinor: 6000,
+      currency: "SGD",
+      interests: ["HISTORY", "FOOD"],
+      preferredSights: [],
+      attractionSelectionMode: "AUTO",
+      selectedAttractions: [],
+      travelStyle: "BALANCED",
+      rainyDayBackupEnabled: true,
+      language: "en",
+      consentToLlmProcessing: true
+    };
+
+    await request(application).post("/api/trips/generate")
+      .set("Authorization", `Bearer ${auth.body.token}`)
+      .send({ ...base, transportPreferenceMode: "MANUAL", preferredTransportModes: ["PUBLIC_TRANSIT", "WALK"] })
+      .expect(422);
+
+    await request(application).post("/api/trips/generate")
+      .set("Authorization", `Bearer ${auth.body.token}`)
+      .send({ ...base, transportPreferenceMode: "AUTO_CHEAPEST", preferredTransportModes: [] })
+      .expect(422);
+
+    await request(application).post("/api/trips/generate")
+      .set("Authorization", `Bearer ${auth.body.token}`)
+      .send({ ...base, transportPreferenceMode: "MANUAL", preferredTransportModes: [] })
+      .expect(400);
+
+    await request(application).post("/api/trips/generate")
+      .set("Authorization", `Bearer ${auth.body.token}`)
+      .send({ ...base, transportPreferenceMode: "MANUAL", preferredTransportModes: ["TAXI_OR_RIDE_HAIL"] })
+      .expect(400);
   });
 });

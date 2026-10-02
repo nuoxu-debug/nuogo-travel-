@@ -5,9 +5,8 @@ import { itineraryDraftJsonSchema } from "./itineraryDraftSchema.js";
 
 const validPreferences = {
   destination: "singapore",
-  departureLocation: "Kuala Lumpur, Malaysia",
+  departurePoint: "Changi Airport",
   arrivalPoint: "Auto Recommend",
-  accommodationAreaPreference: "Auto Recommend",
   startDate: "2026-10-10",
   endDate: "2026-10-12",
   travellerCount: 2,
@@ -15,6 +14,8 @@ const validPreferences = {
   currency: "SGD",
   interests: ["HISTORY", "FOOD"],
   preferredSights: [],
+  transportPreferenceMode: "AUTO_CHEAPEST",
+  preferredTransportModes: [],
   attractionSelectionMode: "AUTO",
   selectedAttractions: [],
   travelStyle: "BALANCED",
@@ -32,14 +33,13 @@ describe("Nuogo Singapore contracts", () => {
 
   it("accepts the simplified SGD preference contract and derives duration", () => {
     const parsed = schemas.travelPreferenceSchema.parse(validPreferences);
-    expect(parsed).toMatchObject({ destination: "singapore", departureLocation: "Kuala Lumpur, Malaysia", arrivalPoint: "Auto Recommend", accommodationAreaPreference: "Auto Recommend", budgetMinor: 120000, currency: "SGD" });
+    expect(parsed).toMatchObject({ destination: "singapore", departurePoint: "Changi Airport", arrivalPoint: "Auto Recommend", budgetMinor: 120000, currency: "SGD" });
     expect(schemas.deriveTripDurationDays(parsed.startDate, parsed.endDate)).toBe(3);
     for (const field of ["origin", "arrivalDateTime", "departureDateTime", "budgetMinor"]) {
       expect(() => schemas.travelPreferenceSchema.parse({ ...validPreferences, [field]: "obsolete" })).toThrow();
     }
-    expect(() => schemas.travelPreferenceSchema.parse({ ...validPreferences, departureLocation: "" })).toThrow();
+    expect(() => schemas.travelPreferenceSchema.parse({ ...validPreferences, departurePoint: "" })).toThrow();
     expect(() => schemas.travelPreferenceSchema.parse({ ...validPreferences, arrivalPoint: "" })).toThrow();
-    expect(() => schemas.travelPreferenceSchema.parse({ ...validPreferences, accommodationAreaPreference: "" })).toThrow();
   });
 
   it("validates MANUAL and AUTO selection semantics", () => {
@@ -52,6 +52,45 @@ describe("Nuogo Singapore contracts", () => {
       ...validPreferences,
       attractionSelectionMode: "AUTO",
       selectedAttractions: [{ xid: "demo-sg-gardens", displayName: "Gardens by the Bay" }]
+    })).toThrow();
+  });
+
+  it("accepts a bounded daily attraction target", () => {
+    expect(schemas.travelPreferenceSchema.parse({
+      ...validPreferences,
+      dailyAttractionTarget: 12
+    }).dailyAttractionTarget).toBe(12);
+    expect(() => schemas.travelPreferenceSchema.parse({
+      ...validPreferences,
+      dailyAttractionTarget: 13
+    })).toThrow();
+  });
+
+  it("validates transportation preference semantics while keeping old requests compatible", () => {
+    expect(schemas.travelPreferenceSchema.parse({
+      ...validPreferences,
+      transportPreferenceMode: "MANUAL",
+      preferredTransportModes: ["PUBLIC_TRANSIT", "WALK"]
+    })).toMatchObject({ transportPreferenceMode: "MANUAL", preferredTransportModes: ["PUBLIC_TRANSIT", "WALK"] });
+    expect(schemas.travelPreferenceSchema.parse({
+      ...validPreferences,
+      transportPreferenceMode: "AUTO_CHEAPEST",
+      preferredTransportModes: []
+    })).toMatchObject({ transportPreferenceMode: "AUTO_CHEAPEST", preferredTransportModes: [] });
+    expect(schemas.travelPreferenceSchema.parse({
+      ...validPreferences,
+      transportPreferenceMode: undefined,
+      preferredTransportModes: undefined
+    })).toMatchObject({ transportPreferenceMode: "AUTO_CHEAPEST", preferredTransportModes: [] });
+    expect(() => schemas.travelPreferenceSchema.parse({
+      ...validPreferences,
+      transportPreferenceMode: "MANUAL",
+      preferredTransportModes: []
+    })).toThrow();
+    expect(() => schemas.travelPreferenceSchema.parse({
+      ...validPreferences,
+      transportPreferenceMode: "MANUAL",
+      preferredTransportModes: ["TAXI_OR_RIDE_HAIL"]
     })).toThrow();
   });
 
@@ -91,5 +130,21 @@ describe("Nuogo Singapore contracts", () => {
       distanceMeters: 1200, durationMinutes: 12, estimatedCostMinor: 128,
       routeSource: "ESTIMATED", sourceType: "ESTIMATED"
     }).estimatedCostMinor).toBe(128);
+  });
+
+  it("accepts authoritative Singapore route sources on trip legs", () => {
+    for (const routeSource of ["ONEMAP", "STATIC_REFERENCE"]) {
+      expect(schemas.tripLegSchema.parse({
+        id: `leg-${routeSource}`,
+        fromLocationId: "hotel",
+        toLocationId: "demo-sg-gardens",
+        mode: "PUBLIC_TRANSIT",
+        distanceMeters: 1200,
+        durationMinutes: 12,
+        estimatedCostMinor: 128,
+        routeSource,
+        sourceType: "ESTIMATED"
+      }).routeSource).toBe(routeSource);
+    }
   });
 });

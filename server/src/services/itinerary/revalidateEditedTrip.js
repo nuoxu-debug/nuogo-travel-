@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { calculateItineraryBudget } from "../budget/budgetEngine.js";
+import { resolveAttractionActivityCostMinor } from "../budget/attractionPriceResolver.js";
 import { validateItinerary } from "../validation/validationEngine.js";
 import { buildTripLegs } from "./buildTripLegs.js";
 import { buildVariantProvenance } from "./generateValidatedTrip.js";
@@ -85,6 +86,13 @@ function activityCostMinor(type, references, travellerCount) {
     : 0;
 }
 
+function activityCostMinorFor(activity, references, travellerCount) {
+  if (["CULTURE", "HISTORY", "NATURE", "FAMILY"].includes(activity.activityType)) {
+    return resolveAttractionActivityCostMinor({ activity, references, travellerCount });
+  }
+  return activityCostMinor(activity.activityType, references, travellerCount);
+}
+
 function locationsFor(itinerary, pool) {
   const locations = Object.fromEntries(pool.candidates.map(({ xid, coordinates }) => [xid, coordinates]));
   for (const day of itinerary.days) {
@@ -139,7 +147,7 @@ function applyPatch(activity, patch, pool, references, travellerCount) {
     }
     delete next.sourceType;
   }
-  next.estimatedActivityCostMinor = activityCostMinor(next.activityType, references, travellerCount);
+  next.estimatedActivityCostMinor = activityCostMinorFor(next, references, travellerCount);
   return next;
 }
 
@@ -188,7 +196,8 @@ export async function revalidateEditedTrip({ trip, entryId, patch }) {
     preferences: trip.preferences,
     itinerary: scheduled,
     references,
-    profile: scheduled.travelStyle ?? scheduled.variant
+    profile: scheduled.travelStyle ?? scheduled.variant,
+    candidatePool: pool
   });
   const validatedItinerary = { ...scheduled, budgetSummary: summary };
   const validation = validateItinerary({ preferences: trip.preferences, itinerary: validatedItinerary, candidatePool: pool });

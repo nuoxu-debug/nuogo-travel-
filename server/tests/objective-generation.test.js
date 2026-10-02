@@ -2,12 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app.js";
 import { DemoPlanProvider } from "../src/providers/demoProvider.js";
+import { DemoTravelProvider } from "../src/providers/travel/demoTravelProvider.js";
 import { MemoryRepository } from "../src/repositories/memory.js";
 import { resolveCostReferences } from "../src/services/budget/costReferenceService.js";
 import { demoCostReferenceFixtures } from "../src/services/budget/demoCostReferenceFixtures.js";
 import { spendingProfileIds } from "../src/services/budget/spendingProfiles.js";
 import { buildVariantMetrics } from "../src/services/itinerary/buildVariantMetrics.js";
 import { generateValidatedTrip } from "../src/services/itinerary/generateValidatedTrip.js";
+import { createOpenTripMapCandidateService } from "../src/services/poi/openTripMapCandidateService.js";
 
 const centres = {
   singapore: { longitude: 103.8198, latitude: 1.3521 }
@@ -49,6 +51,47 @@ function attractionCandidates(city) {
     },
     city,
     sourceUrl: `https://opentripmap.com/en/card/${city}-xid-${index + 1}`,
+    retrievedAt: "2026-08-14T00:00:00.000Z",
+    matchStatus: "MATCHED"
+  }));
+}
+
+function databaseBackedCandidates(city) {
+  const { longitude, latitude } = centres[city];
+  return [
+    ["sg-national-gallery", "National Gallery Singapore", "CULTURE"],
+    ["sg-asian-civilisations-museum", "Asian Civilisations Museum", "HISTORY"],
+    ["sg-botanic-gardens", "Singapore Botanic Gardens", "NATURE"],
+    ["demo-sg-merlion-park", "Merlion Park", "CULTURE"]
+  ].map(([id, name, category], index) => ({
+    xid: id,
+    canonicalPoiId: id,
+    name,
+    displayName: { en: name, zh: name },
+    description: { en: `${name} source-backed pilot POI.`, zh: `${name} source-backed pilot POI.` },
+    descriptionSourceType: "DATABASE_BACKED",
+    kinds: "source_backed_poi",
+    category,
+    suggestedVisitDurationMinutes: 90,
+    durationSourceType: "ESTIMATED",
+    coordinates: {
+      longitude: longitude + index * 0.006,
+      latitude: latitude + index * 0.004,
+      coordinateSystem: "WGS84"
+    },
+    city,
+    providerMode: "DATABASE",
+    sourceType: "DATABASE_BACKED",
+    primarySource: "DATABASE",
+    verificationStatus: "SUPPORTING_ONLY",
+    sourceRecords: [{
+      provider: "DATABASE",
+      sourceId: id,
+      sourceName: `${name} official source`,
+      sourceType: "OFFICIAL",
+      sourceUrl: `https://example.test/${id}`,
+      retrievedAt: "2026-08-14T00:00:00.000Z"
+    }],
     retrievedAt: "2026-08-14T00:00:00.000Z",
     matchStatus: "MATCHED"
   }));
@@ -143,6 +186,24 @@ function dependencies(overrides = {}) {
     now: () => "2026-08-14T00:00:00.000Z",
     ...overrides
   };
+}
+
+function demoTravelDependencies(overrides = {}) {
+  const provider = new DemoTravelProvider({ now: () => "2026-08-14T00:00:00.000Z" });
+  const retrieveAttractionCandidates = createOpenTripMapCandidateService({
+    provider,
+    now: () => "2026-08-14T00:00:00.000Z",
+    maxDetailCalls: 0
+  });
+  return dependencies({
+    retrieveAttractionCandidates,
+    getDestinationSettings: vi.fn(async () => ({
+      center: centres.singapore,
+      radiusMeters: 20_000
+    })),
+    llmProvider: new DemoPlanProvider(),
+    ...overrides
+  });
 }
 
 describe("objective-aligned trip generation", () => {
@@ -298,6 +359,61 @@ describe("objective-aligned trip generation", () => {
       (source.sourceType === "OPENTRIPMAP_API" && source.xid === undefined))).toBe(false);
   });
 
+  it("keeps database-backed candidate IDs grounded through generation and POI enrichment", async () => {
+    const dbCandidates = databaseBackedCandidates("singapore");
+    const result = await generateValidatedTrip(preferences("singapore", {
+      startDate: "2026-10-10",
+      endDate: "2026-10-10",
+      dailyAttractionTarget: 2
+    }), dependencies({
+      retrieveAttractionCandidates: vi.fn(async () => dbCandidates),
+      getOperatingHours: vi.fn(async () => ({
+        weeklyHours: [{
+          id: "hours-sg-national-gallery-saturday",
+          poiId: "sg-national-gallery",
+          dayOfWeek: 6,
+          opensAt: "09:00:00",
+          closesAt: "18:00:00",
+          isClosed: false,
+          sourceName: "National Gallery Singapore official hours",
+          sourceUrl: "https://example.test/sg-national-gallery-hours",
+          sourceType: "OFFICIAL",
+          lastReviewedDate: "2026-09-30",
+          status: "ACTIVE",
+          verificationStatus: "VERIFIED"
+        }],
+        exceptions: []
+      }))
+    }));
+
+    expect(result.state, JSON.stringify(result.validation)).toBe("FINAL_VALIDATED");
+    const activities = result.variants[0].itinerary.days[0].activities.filter(({ xid }) => xid);
+    expect(activities.map(({ xid }) => xid)).toEqual(expect.arrayContaining([
+      "sg-asian-civilisations-museum",
+      "sg-national-gallery"
+    ]));
+    expect(activities.every((activity) =>
+      activity.poi.canonicalPoiId === activity.xid &&
+      activity.poi.primarySource === "DATABASE" &&
+      activity.poi.sourceRecords[0].provider === "DATABASE" &&
+      activity.poi.sourceRecords[0].sourceName)).toBe(true);
+
+    const verified = activities.find(({ xid }) => xid === "sg-national-gallery");
+    expect(verified.operatingHoursVerification).toMatchObject({
+      state: "VERIFIED_OPEN",
+      source: "WEEKLY",
+      sourceName: "National Gallery Singapore official hours",
+      sourceUrl: "https://example.test/sg-national-gallery-hours",
+      verificationStatus: "VERIFIED"
+    });
+
+    const unverified = activities.find(({ xid }) => xid === "sg-asian-civilisations-museum");
+    expect(unverified.operatingHoursVerification).toMatchObject({
+      state: "UNVERIFIED"
+    });
+    expect(unverified.operatingHoursVerification.state).not.toBe("VERIFIED_OPEN");
+  });
+
   it("attaches a grounded rainy-day alternative without adding its unused cost to the trip total", async () => {
     const selectedXid = "singapore-xid-2";
     const candidates = attractionCandidates("singapore").map((item, index) => index === 0
@@ -365,6 +481,41 @@ describe("objective-aligned trip generation", () => {
     expect(result.variants.every(({ variantMetrics }) => variantMetrics.activityCount === 15)).toBe(true);
   });
 
+  it("uses Singapore timing and landmark heuristics in the demo itinerary", async () => {
+    const input = preferences("singapore", {
+      startDate: "2026-10-10",
+      endDate: "2026-10-12",
+      budgetMinor: 200_000,
+      attractionSelectionMode: "MANUAL",
+      selectedAttractions: [{ xid: "demo-sg-clarke-quay", displayName: "Clarke Quay" }]
+    });
+    const result = await generateValidatedTrip(input, demoTravelDependencies());
+    const activities = result.variants[0].itinerary.days.flatMap((day) => day.activities);
+    const byXid = Object.fromEntries(activities.filter(({ xid }) => xid).map((activity) => [activity.xid, activity]));
+
+    expect(result.state, JSON.stringify(result.validation)).toBe("FINAL_VALIDATED");
+    expect(byXid["demo-sg-clarke-quay"].scheduledStartTime >= "18:00").toBe(true);
+    expect(Object.keys(byXid)).toEqual(expect.arrayContaining([
+      "demo-sg-gardens-by-the-bay",
+      "demo-sg-marina-bay-sands"
+    ]));
+  });
+
+  it("honors the traveller's daily attraction target in the demo itinerary", async () => {
+    const input = preferences("singapore", {
+      startDate: "2026-10-10",
+      endDate: "2026-10-12",
+      budgetMinor: 2_000_000,
+      dailyAttractionTarget: 5
+    });
+    const result = await generateValidatedTrip(input, demoTravelDependencies());
+
+    expect(result.state, JSON.stringify(result.validation)).toBe("FINAL_VALIDATED");
+    expect(result.variants[0].itinerary.days.map((day) =>
+      day.activities.filter(({ xid }) => xid).length
+    )).toEqual([5, 5, 5]);
+  });
+
   for (const city of ["singapore"]) {
     for (const travelStyle of spendingProfileIds) {
       it(`generates one validated ${travelStyle} hard-budget itinerary for ${city}`, async () => {
@@ -382,7 +533,7 @@ describe("objective-aligned trip generation", () => {
           name: expect.any(String),
           coordinates: expect.any(Object)
         });
-        expect(variant.itinerary.days[0].activities[0].estimatedActivityCostMinor).toBe(9200);
+        expect(variant.itinerary.days[0].activities[0].estimatedActivityCostMinor).toBe(5000);
         expect(variant.itinerary.days[0].startPoint).toMatchObject({
           locationType: "HOTEL",
           coordinates: expect.any(Object),
@@ -412,7 +563,7 @@ describe("objective-aligned trip generation", () => {
     expect(result.variants[0].summary.categoriesMinor).not.toHaveProperty("outboundTransport");
   });
 
-  it("rejects a five-day request when the provider supplies only one chargeable day", async () => {
+  it("repairs a five-day request when the provider supplies only one draft day", async () => {
     const provider = draftProvider();
     const generate = provider.generateStructured;
     provider.generateStructured = vi.fn(async (request) => {
@@ -428,15 +579,13 @@ describe("objective-aligned trip generation", () => {
       budgetMinor: 1_000_000
     }), dependencies({ llmProvider: provider }));
 
-    expect(result.state).toBe("FAILED");
-    expect(result.variants.every(({ validation }) => validation.issues
-      .some(({ code }) => code === "SCHEDULE_DATE_MISSING"))).toBe(true);
-    expect(result.variants.map(({ summary }) => summary.categoriesMinor.accommodation))
-      .toEqual([66_000]);
-    expect(result.variants.map(({ summary }) => summary.categoriesMinor.localTransportation))
-      .toEqual([1_900]);
-    expect(result.variants.map(({ summary }) => summary.categoriesMinor.foodAndBeverages))
-      .toEqual([47_500]);
+    expect(result.state).toBe("FINAL_VALIDATED");
+    expect(result.itineraryRun.validation.issues
+      .some(({ code, severity }) => code === "SCHEDULE_DATE_MISSING" && severity === "ERROR")).toBe(false);
+    expect(result.itineraryRun.itinerary.days.map(({ date }) => date))
+      .toEqual(["2026-10-10", "2026-10-11", "2026-10-12", "2026-10-13", "2026-10-14"]);
+    expect(result.itineraryRun.itinerary.days.every((day) =>
+      day.activities.some(({ xid }) => xid))).toBe(true);
   });
 
   it("returns and records a safe failure when the budget is impossible", async () => {
@@ -554,12 +703,21 @@ describe("objective-aligned trip generation", () => {
       destination: "singapore",
       budgetMinor: 500000
     }));
-    expect(await repository.getTrip("objective-trip")).toMatchObject({
+    expect(response.body.trip).toMatchObject({ persistenceScope: "PREVIEW", revision: 0 });
+    expect(response.body.previewToken).toMatch(/^[a-f0-9]{64}$/);
+    expect(await repository.getTrip("objective-trip")).toBeUndefined();
+    const saved = await request(app).post("/api/trips/save-preview")
+      .set("Authorization", `Bearer ${auth.body.token}`)
+      .send({ preview: response.body.preview, previewToken: response.body.previewToken })
+      .expect(201);
+    expect(saved.body.trip).toMatchObject({
       id: "objective-trip",
       ownerId: auth.body.user.id,
       objectiveAligned: true,
-      destination: "singapore"
+      destination: "singapore",
+      persistenceScope: "PERSISTENT"
     });
+    expect(await repository.getTrip("objective-trip")).toMatchObject({ ownerId: auth.body.user.id });
     await request(app).post("/api/trips/objective-trip/select-variant")
       .set("Authorization", `Bearer ${auth.body.token}`)
       .send({ variantId: "BALANCED", expectedRevision: 0 })

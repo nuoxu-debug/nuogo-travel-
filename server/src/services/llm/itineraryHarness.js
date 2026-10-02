@@ -3,7 +3,7 @@ import { buildItineraryPrompt } from "./buildItineraryPrompt.js";
 import { DraftBoundaryError, parseDraft } from "./parseDraft.js";
 
 function normalizeInternalEndpoints(draft, allowedCandidateIds) {
-  const allowed = new Set(["hotel", "origin", "destination", ...allowedCandidateIds]);
+  const allowed = new Set(["hotel", "origin", "destination"]);
   const hotel = { locationId: "hotel", locationType: "HOTEL" };
   const endpoint = (point) => allowed.has(point.locationId) ? point : hotel;
   return {

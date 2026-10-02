@@ -20,10 +20,12 @@ export function buildProfileBudgetContext(preferences, references) {
   return { userBudgetMinor, baselineMandatoryCostMinor, allocatableBudgetMinor: Math.max(0, userBudgetMinor - baselineMandatoryCostMinor), baselineCategoriesMinor, dimensions: { days, nights, rooms, meals: days * 3, travellers } };
 }
 
-export function summarizeProfileSpend({ budgetContext, categoriesMinor }) {
+export function summarizeProfileSpend({ budgetContext, categoriesMinor, exactCategories = [] }) {
+  const exact = new Set(exactCategories);
   const categoryComponentsMinor = Object.fromEntries(categories.map((category) => {
     const baselineMinor = budgetContext.baselineCategoriesMinor[category] ?? 0;
-    const finalMinor = Math.max(baselineMinor, Math.round(categoriesMinor[category] ?? 0));
+    const calculatedMinor = Math.round(categoriesMinor[category] ?? 0);
+    const finalMinor = exact.has(category) ? calculatedMinor : Math.max(baselineMinor, calculatedMinor);
     return [category, { baselineMinor, profileUpliftMinor: finalMinor - baselineMinor, finalMinor }];
   }));
   const finalCategoriesMinor = Object.fromEntries(categories.map((category) => [category, categoryComponentsMinor[category].finalMinor]));

@@ -2,6 +2,7 @@ import { tripLegSchema } from "@nuogo/shared/schemas";
 import { estimateTravelLeg } from "../travel/estimateTravelTime.js";
 import { estimateOneMapPublicTransportLeg } from "../travel/oneMapPublicTransport.js";
 import { estimateSingaporeMrtLeg } from "../travel/singaporeMrtGraph.js";
+import { estimateTransportCostMinor } from "../travel/transportCostEstimator.js";
 
 function pointSequence(day) {
   return [
@@ -15,6 +16,8 @@ export async function buildTripLegs(itinerary, {
   locations,
   mode,
   destination,
+  references = [],
+  travellerCount = itinerary.trip?.travellerCount ?? 1,
   publicTransportEstimator = estimateOneMapPublicTransportLeg
 }) {
   const destinationId = destination ?? itinerary.trip?.destination;
@@ -40,6 +43,12 @@ export async function buildTripLegs(itinerary, {
           ? oneMapEstimate ?? estimateSingaporeMrtLeg({ from, to, mode: resolvedMode })
           : null;
         const estimate = mrtEstimate ?? estimateTravelLeg({ from, to, mode: resolvedMode });
+        const estimatedCostMinor = estimateTransportCostMinor({
+          mode: resolvedMode,
+          distanceMeters: estimate.distanceMeters,
+          travellerCount,
+          references
+        }) ?? estimate.estimatedCostMinor;
         const leg = tripLegSchema.parse({
           id: `${itinerary.travelStyle}:${day.dayNumber}:leg:${index + 1}`,
           fromLocationId,
@@ -47,10 +56,10 @@ export async function buildTripLegs(itinerary, {
           mode: resolvedMode,
           distanceMeters: estimate.distanceMeters,
           durationMinutes: estimate.durationMinutes,
-          estimatedCostMinor: estimate.estimatedCostMinor,
-          routeSource: "ESTIMATED",
+          estimatedCostMinor,
+          routeSource: estimate.routeSource ?? "ESTIMATED",
           sourceType: estimate.sourceType,
-          ...(estimate.mrtRoute ? { mrtRoute: estimate.mrtRoute } : {})
+          ...(estimate.mrtRoute ? { mrtRoute: { ...estimate.mrtRoute, fareMinor: estimatedCostMinor } } : {})
         });
         legs.push(leg);
       } catch (error) {

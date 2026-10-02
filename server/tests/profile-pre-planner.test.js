@@ -12,6 +12,23 @@ describe("profile pre-planner", () => {
   it("keeps selected attractions first and grounded", () => { const plan = buildProfilePlan({ ...base, profile: "BALANCED" }); expect(plan.selectedCandidateIds[0]).toBe("N-SUMMER"); expect(plan.allowedCandidateIds).toContain("N-SUMMER"); expect(plan.structurallyExcludedSelected).toEqual([]); });
   it("preserves structural failures separately", () => { const plan = buildProfilePlan({ ...base, profile: "BALANCED", resolvedPreferences: { supported: [], unresolved: [{ xid: "UNKNOWN", displayName: "Unknown", reason: "UNAVAILABLE_ATTRACTION" }] } }); expect(plan.structurallyExcludedSelected).toEqual([{ xid: "UNKNOWN", displayName: "Unknown", reason: "UNAVAILABLE_ATTRACTION" }]); });
   it("defers approximate feasibility without removing a supported selection", () => { const deferred = { ...candidates[0], estimatedCostMinor: 200000 }; const plan = buildProfilePlan({ ...base, profile: "BUDGET_SAVING", candidatePool: { candidates: [deferred], candidateIds: [deferred.xid] }, resolvedPreferences: { supported: [deferred], unresolved: [] } }); expect(plan.provisionallyDeferredSelected).toHaveLength(1); expect(plan.allowedCandidateIds).toContain(deferred.xid); });
+  it("uses the traveller's daily attraction target for day targets and capacity", () => {
+    const extraCandidates = Array.from({ length: 24 }, (_, index) => ({
+      xid: `EXTRA-${index}`,
+      candidateId: `EXTRA-${index}`,
+      category: "CULTURE",
+      estimatedCostMinor: 1000,
+      coordinates: { latitude: 1.3 + index / 1000, longitude: 103.8 + index / 1000 }
+    }));
+    const plan = buildProfilePlan({
+      ...base,
+      profile: "BALANCED",
+      preferences: { ...base.preferences, dailyAttractionTarget: 12 },
+      candidatePool: { candidates: [candidates[0], ...extraCandidates], candidateIds: [candidates[0], ...extraCandidates].map(({ xid }) => xid) }
+    });
+    expect(plan.dayTargets).toEqual([{ dayNumber: 1, activityTarget: 12 }, { dayNumber: 2, activityTarget: 12 }]);
+    expect(plan.allowedCandidateIds).toHaveLength(24);
+  });
   it("produces evidence-based profile differences without ungrounded ids", () => {
     const plans = Object.fromEntries(["BUDGET_SAVING", "BALANCED", "COMFORT_FOCUSED"].map((profile) => [profile, buildProfilePlan({ ...base, profile })]));
     expect(plans.BUDGET_SAVING.rankedSupplementalIds[0]).toBe("CHEAP-FAR");

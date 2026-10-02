@@ -2,8 +2,10 @@ import { z } from "zod";
 import {
   attractionSelectionModes,
   localTransportModes,
+  preferredTransportModes,
   spendingProfiles,
-  supportedDestinationIds
+  supportedDestinationIds,
+  transportPreferenceModes
 } from "./constants.js";
 
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
@@ -105,7 +107,10 @@ export const travelPreferenceSchema = z.object({
   budgetMinor: z.number().int().min(1_000).max(100_000_000),
   currency: z.literal("SGD"),
   interests: z.array(z.enum(["CULTURE", "HISTORY", "FOOD", "NATURE", "SHOPPING", "ENTERTAINMENT", "FAMILY"])).min(1).max(7),
+  dailyAttractionTarget: z.number().int().min(1).max(12).optional(),
   preferredSights: z.array(z.string().trim().min(1).max(120)).max(12),
+  transportPreferenceMode: z.enum(transportPreferenceModes).default("AUTO_CHEAPEST"),
+  preferredTransportModes: z.array(z.enum(preferredTransportModes)).max(3).default([]),
   travelStyle: z.enum(spendingProfiles),
   rainyDayBackupEnabled: z.boolean(),
   attractionSelectionMode: z.enum(attractionSelectionModes),
@@ -123,6 +128,13 @@ export const travelPreferenceSchema = z.object({
   }
   if (preferences.attractionSelectionMode === "AUTO" && ids.length) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["selectedAttractions"], message: "Automatic recommendation cannot contain manual selections." });
+  }
+  const transportModes = preferences.preferredTransportModes ?? [];
+  if (new Set(transportModes).size !== transportModes.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["preferredTransportModes"], message: "Preferred transport modes must be unique." });
+  }
+  if (preferences.transportPreferenceMode === "MANUAL" && !transportModes.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["preferredTransportModes"], message: "Manual transport preference requires at least one transport mode." });
   }
   if (preferences.endDate < preferences.startDate) {
     context.addIssue({
@@ -162,7 +174,7 @@ export const tripLegSchema = z.object({
   distanceMeters: z.number().int().nonnegative(),
   durationMinutes: z.number().int().positive(),
   estimatedCostMinor: z.number().int().nonnegative(),
-  routeSource: z.enum(["USER_PROVIDED", "REFERENCE", "DEMO", "ESTIMATED"]),
+  routeSource: z.enum(["USER_PROVIDED", "REFERENCE", "DEMO", "ESTIMATED", "ONEMAP", "STATIC_REFERENCE"]),
   sourceType: z.enum(["ESTIMATED"]).optional(),
   routeRetrievedAt: z.string().datetime().optional(),
   mrtRoute: mrtRouteSchema.optional()

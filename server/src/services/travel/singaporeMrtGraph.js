@@ -201,6 +201,7 @@ export function estimateSingaporeMrtLeg({ from, to, mode }) {
     distanceMeters: directDistanceMeters,
     durationMinutes: route.durationMinutes + walkTotal,
     estimatedCostMinor: BASE_PUBLIC_TRANSPORT_COST_MINOR,
+    routeSource: "STATIC_REFERENCE",
     sourceType: "ESTIMATED",
     mrtRoute: {
       accessStation: { ...access.station, distanceMeters: access.distanceMeters, walkMinutes: access.walkMinutes },

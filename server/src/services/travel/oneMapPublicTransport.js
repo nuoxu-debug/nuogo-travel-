@@ -134,6 +134,7 @@ export function parseOneMapPublicTransportRoute(payload) {
     distanceMeters,
     durationMinutes: Math.max(1, durationMinutes),
     estimatedCostMinor: fareMinor ?? 0,
+    routeSource: "ONEMAP",
     sourceType: "ESTIMATED",
     mrtRoute: {
       accessStation: stations[0],

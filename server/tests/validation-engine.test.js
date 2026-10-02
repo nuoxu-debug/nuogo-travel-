@@ -300,6 +300,330 @@ describe("validation engine", () => {
     }));
   });
 
+  it("uses the requested daily attraction target when a full day has enough candidates", () => {
+    const result = validateItinerary({
+      preferences: {
+        ...preferences,
+        startDate: "2026-10-10",
+        endDate: "2026-10-10",
+        arrivalDateTime: "2026-10-10T08:00:00+08:00",
+        departureDateTime: "2026-10-10T20:00:00+08:00",
+        dailyAttractionTarget: 4
+      },
+      itinerary: {
+        ...itinerary(),
+        days: [itinerary().days[0]]
+      },
+      candidatePool: { candidateIds: ["Q-B001", "Q-B002", "Q-B003", "Q-B004", "Q-B005"] }
+    });
+
+    expect(result.issues).toContainEqual(expect.objectContaining({
+      code: "DAILY_DENSITY_TOO_LOW",
+      metadata: expect.objectContaining({
+        availableMinutes: 720,
+        attractionEntries: 1,
+        requiredAttractionEntries: 4,
+        requestedDailyAttractionTarget: 4,
+        reason: "DAILY_ATTRACTION_TARGET_NOT_MET"
+      })
+    }));
+  });
+
+  it("counts database POI categories as attraction candidates for density", () => {
+    const issues = validateDailyDensity({
+      preferences: {
+        ...preferences,
+        startDate: "2026-10-10",
+        endDate: "2026-10-10",
+        arrivalDateTime: "2026-10-10T08:00:00+08:00",
+        departureDateTime: "2026-10-10T20:00:00+08:00",
+        dailyAttractionTarget: 3
+      },
+      itinerary: {
+        ...itinerary(),
+        days: [itinerary().days[0]]
+      },
+      candidatePool: {
+        candidateIds: ["Q-B001", "Q-B002", "Q-B003", "Q-B004"],
+        candidates: [
+          { xid: "Q-B001", category: "CULTURE" },
+          { xid: "Q-B002", category: "HISTORY" },
+          { xid: "Q-B003", category: "NATURE" },
+          { xid: "Q-B004", category: "ENTERTAINMENT" }
+        ]
+      }
+    });
+
+    expect(issues).toContainEqual(expect.objectContaining({
+      code: "DAILY_DENSITY_TOO_LOW",
+      metadata: expect.objectContaining({
+        requiredAttractionEntries: 3,
+        attractionEntries: 1
+      })
+    }));
+  });
+
+  it("rejects generic filler before the first grounded attraction", () => {
+    const invalid = itinerary();
+    invalid.days = [{
+      ...invalid.days[0],
+      activities: [
+        {
+          sequence: 1,
+          activityType: "REST",
+          sourceType: "AI_GENERATED",
+          plannedStartTime: "09:00",
+          plannedDurationMinutes: 60,
+          reason: "Start with a rest stop."
+        },
+        {
+          sequence: 2,
+          activityType: "MEAL",
+          sourceType: "AI_GENERATED",
+          plannedStartTime: "10:00",
+          plannedDurationMinutes: 45,
+          reason: "Breakfast before sightseeing."
+        },
+        activity(3, "Q-B001", "11:00", 90),
+        activity(4, "Q-B002", "14:00", 90)
+      ]
+    }];
+
+    const result = validateItinerary({ preferences, itinerary: invalid, candidatePool });
+
+    expect(result.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: "GENERIC_PREFIX_TOO_LONG",
+        path: ["days", 0, "activities"],
+        severity: "ERROR",
+        metadata: expect.objectContaining({ firstAttractionIndex: 2 })
+      }),
+      expect.objectContaining({
+        code: "DAY_STARTS_WITH_WEAK_GENERIC_ENTRY",
+        path: ["days", 0, "activities", 0],
+        severity: "ERROR",
+        metadata: expect.objectContaining({ activityType: "REST" })
+      })
+    ]));
+  });
+
+  it("rejects transfer activities because transport belongs to route legs", () => {
+    const invalid = itinerary();
+    invalid.days = [{
+      ...invalid.days[0],
+      activities: [
+        activity(1, "Q-B001", "09:00", 90),
+        {
+          sequence: 2,
+          activityType: "TRANSFER",
+          sourceType: "AI_GENERATED",
+          plannedStartTime: "11:00",
+          plannedDurationMinutes: 30,
+          reason: "Move to the next area."
+        },
+        activity(3, "Q-B002", "12:00", 90)
+      ]
+    }];
+
+    const result = validateItinerary({ preferences, itinerary: invalid, candidatePool });
+
+    expect(result.issues).toContainEqual(expect.objectContaining({
+      code: "GENERIC_TRANSFER_ACTIVITY",
+      path: ["days", 0, "activities", 1],
+      severity: "ERROR"
+    }));
+  });
+
+  it("rejects a day that contains only generic meals and no grounded POI activity", () => {
+    const invalid = itinerary();
+    invalid.days = [{
+      ...invalid.days[0],
+      activities: [
+        {
+          sequence: 1,
+          activityType: "MEAL",
+          sourceType: "AI_GENERATED",
+          plannedStartTime: "09:00",
+          plannedDurationMinutes: 45,
+          reason: "Breakfast at a hawker centre."
+        },
+        {
+          sequence: 2,
+          activityType: "MEAL",
+          sourceType: "AI_GENERATED",
+          plannedStartTime: "12:30",
+          plannedDurationMinutes: 60,
+          reason: "Lunch between museum visits."
+        },
+        {
+          sequence: 3,
+          activityType: "MEAL",
+          sourceType: "AI_GENERATED",
+          plannedStartTime: "18:30",
+          plannedDurationMinutes: 75,
+          reason: "Dinner at a historic food centre."
+        }
+      ]
+    }];
+
+    const result = validateItinerary({ preferences, itinerary: invalid, candidatePool });
+
+    expect(result.issues).toContainEqual(expect.objectContaining({
+      code: "DAY_HAS_NO_GROUNDED_POI_ACTIVITY",
+      path: ["days", 0, "activities"],
+      severity: "ERROR",
+      metadata: expect.objectContaining({ genericActivityCount: 3 })
+    }));
+  });
+
+  it("rejects broad destination-area fixtures as scheduled attraction stops", () => {
+    const invalid = itinerary();
+    invalid.days = [{
+      ...invalid.days[0],
+      activities: [
+        activity(1, "demo-sg-sentosa", "09:00", 120),
+        activity(2, "demo-sg-universal-studios", "11:45", 240)
+      ]
+    }];
+
+    const result = validateItinerary({
+      preferences,
+      itinerary: invalid,
+      candidatePool: {
+        candidateIds: ["demo-sg-sentosa", "demo-sg-universal-studios"],
+        candidates: [
+          {
+            xid: "demo-sg-sentosa",
+            name: "Sentosa",
+            coordinates: { latitude: 1.2540, longitude: 103.8238 }
+          },
+          {
+            xid: "demo-sg-universal-studios",
+            name: "Universal Studios Singapore",
+            coordinates: { latitude: 1.2543, longitude: 103.8238 }
+          }
+        ]
+      }
+    });
+
+    expect(result.issues).toContainEqual(expect.objectContaining({
+      code: "BROAD_AREA_USED_AS_ATTRACTION",
+      path: ["days", 0, "activities", 0, "xid"],
+      severity: "ERROR",
+      metadata: expect.objectContaining({ xid: "demo-sg-sentosa" })
+    }));
+  });
+
+  it("allows distinct address-level sub-attractions that share the same coordinates", () => {
+    const valid = itinerary();
+    valid.days = [{
+      ...valid.days[0],
+      activities: [
+        activity(1, "sg-flower-dome-cloud-forest", "09:00", 120),
+        activity(2, "sg-ocbc-skyway", "11:45", 60),
+        activity(3, "sg-supertree-observatory", "13:00", 60)
+      ]
+    }];
+
+    const result = validateItinerary({
+      preferences,
+      itinerary: valid,
+      candidatePool: {
+        candidateIds: ["sg-flower-dome-cloud-forest", "sg-ocbc-skyway", "sg-supertree-observatory"],
+        candidates: [
+          {
+            xid: "sg-flower-dome-cloud-forest",
+            name: "Flower Dome & Cloud Forest",
+            coordinates: { latitude: 1.284588588663125, longitude: 103.8646565996385 }
+          },
+          {
+            xid: "sg-ocbc-skyway",
+            name: "OCBC Skyway",
+            coordinates: { latitude: 1.284588588663125, longitude: 103.8646565996385 }
+          },
+          {
+            xid: "sg-supertree-observatory",
+            name: "Supertree Observatory",
+            coordinates: { latitude: 1.284588588663125, longitude: 103.8646565996385 }
+          }
+        ]
+      }
+    });
+
+    expect(result.issues.some(({ code }) => code === "NEAR_DUPLICATE_ADJACENT_POI")).toBe(false);
+  });
+
+  it("rejects repeated use of the same canonical attraction stop", () => {
+    const invalid = itinerary();
+    invalid.days = [{
+      ...invalid.days[0],
+      activities: [
+        activity(1, "sg-ocbc-skyway", "09:00", 60),
+        activity(2, "sg-ocbc-skyway", "11:00", 60)
+      ]
+    }];
+
+    const result = validateItinerary({
+      preferences,
+      itinerary: invalid,
+      candidatePool: {
+        candidateIds: ["sg-ocbc-skyway"],
+        candidates: [{
+          xid: "sg-ocbc-skyway",
+          name: "OCBC Skyway",
+          coordinates: { latitude: 1.284588588663125, longitude: 103.8646565996385 }
+        }]
+      }
+    });
+
+    expect(result.issues).toContainEqual(expect.objectContaining({
+      code: "DUPLICATE_ATTRACTION_XID",
+      path: ["days", 0, "activities", 1, "xid"],
+      severity: "ERROR"
+    }));
+  });
+
+  it("rejects consecutive near-duplicate attraction stops only when duplicate name evidence exists", () => {
+    const invalid = itinerary();
+    invalid.days = [{
+      ...invalid.days[0],
+      activities: [
+        activity(1, "demo-sg-gallery-a", "09:00", 120),
+        activity(2, "demo-sg-gallery-b", "11:45", 120)
+      ]
+    }];
+
+    const result = validateItinerary({
+      preferences,
+      itinerary: invalid,
+      candidatePool: {
+        candidateIds: ["demo-sg-gallery-a", "demo-sg-gallery-b"],
+        candidates: [
+          {
+            xid: "demo-sg-gallery-a",
+            name: "Duplicate Gallery",
+            coordinates: { latitude: 1.2540, longitude: 103.8238 }
+          },
+          {
+            xid: "demo-sg-gallery-b",
+            name: "duplicate gallery",
+            coordinates: { latitude: 1.2543, longitude: 103.8238 }
+          }
+        ]
+      }
+    });
+
+    expect(result.issues).toContainEqual(expect.objectContaining({
+      code: "NEAR_DUPLICATE_ADJACENT_POI",
+      path: ["days", 0, "activities", 1, "xid"],
+      severity: "ERROR",
+      metadata: expect.objectContaining({
+        xid: "demo-sg-gallery-b",
+        previousXid: "demo-sg-gallery-a"
+      })
+    }));
+  });
+
   it("reports an under-filled medium day", () => {
     const result = validateItinerary({
       preferences: {

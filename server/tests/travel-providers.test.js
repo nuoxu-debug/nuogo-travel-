@@ -172,6 +172,7 @@ describe("OpenTripMap and demo travel providers", () => {
       "demo-sg-national-gallery",
       "demo-sg-sentosa"
     ]));
+    expect(new Set(candidates.map(({ estimatedCostMinor }) => estimatedCostMinor)).size).toBeGreaterThan(1);
     expect(candidates.every(({ xid }) => xid.startsWith("demo-sg-"))).toBe(true);
   });
 
@@ -188,5 +189,28 @@ describe("OpenTripMap and demo travel providers", () => {
       expect(candidates.some(({ kinds }) => /natural|parks|gardens|viewpoints/.test(kinds))).toBe(true);
       expect(candidates.some(({ kinds }) => /museums|cultural|historic|architecture/.test(kinds))).toBe(true);
     }
+  });
+
+  it("covers the main Singapore visitor attraction catalogue in demo mode", async () => {
+    const provider = new DemoTravelProvider({ now: () => "2026-08-14T00:00:00.000Z" });
+    const candidates = await provider.listAttractions({
+      city: "singapore",
+      coordinates: { longitude: 103.8198, latitude: 1.3521 },
+      radiusMeters: 20_000
+    });
+
+    expect(candidates.length).toBeGreaterThanOrEqual(35);
+    expect(candidates.map(({ name }) => name)).toEqual(expect.arrayContaining([
+      "Jewel Changi Airport",
+      "Universal Studios Singapore",
+      "Singapore Zoo",
+      "Night Safari",
+      "River Wonders",
+      "Bird Paradise",
+      "Haw Par Villa",
+      "National Museum of Singapore",
+      "Sultan Mosque",
+      "East Coast Park"
+    ]));
   });
 });

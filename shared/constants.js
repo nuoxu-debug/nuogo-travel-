@@ -9,6 +9,8 @@ export const supportedDestinations = Object.freeze([{
 export const supportedDestinationIds = supportedDestinations.map(({ id }) => id);
 export const spendingProfiles = ["BUDGET_SAVING", "BALANCED", "COMFORT_FOCUSED"];
 export const localTransportModes = ["WALK", "PUBLIC_TRANSIT", "TAXI", "MIXED"];
+export const transportPreferenceModes = ["MANUAL", "AUTO_CHEAPEST"];
+export const preferredTransportModes = ["PUBLIC_TRANSIT", "WALK", "TAXI"];
 export const supportedCurrencies = ["SGD"];
 export const attractionSelectionModes = ["MANUAL", "AUTO"];
 export const sourceTypes = [

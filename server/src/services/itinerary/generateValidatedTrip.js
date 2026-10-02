@@ -3,6 +3,7 @@ import { getDestinationDiscoveryContent } from "@nuogo/shared/destination-discov
 import { buildCandidatePool } from "../poi/buildCandidatePool.js";
 import { resolveAttractionPreferences } from "../poi/resolveAttractionPreferences.js";
 import { calculateItineraryBudget } from "../budget/budgetEngine.js";
+import { resolveAttractionActivityCostMinor } from "../budget/attractionPriceResolver.js";
 import { buildProfileBudgetContext, countAvailableMeals } from "../budget/profileBudget.js";
 import { getSpendingProfile } from "../budget/spendingProfiles.js";
 import { planDraft } from "../llm/itineraryHarness.js";
@@ -17,6 +18,9 @@ import { buildRainyDayBackups } from "./rainyDayBackup.js";
 import { reconcileSelectedAttractions } from "./reconcileSelectedAttractions.js";
 import { buildSelectedAttractionOutcome } from "./selectedAttractionOutcome.js";
 import { enrichItineraryPresentation } from "./enrichItineraryPresentation.js";
+import { resolveActivityOperatingHours } from "../operatingHours/operatingHoursService.js";
+import { estimateTravelLeg } from "../travel/estimateTravelTime.js";
+import { estimateTransportCostMinor } from "../travel/transportCostEstimator.js";
 
 function issueFor(error) {
   return {
@@ -36,7 +40,14 @@ async function candidatePoolFor(preferences, dependencies) {
     destination: preferences.destination,
     settings
   });
-  return buildCandidatePool(preferences, candidates);
+  const pool = buildCandidatePool(preferences, candidates);
+  if (dependencies.getOperatingHours) {
+    pool.operatingHours = await dependencies.getOperatingHours({
+      destination: preferences.destination,
+      poiIds: pool.candidates.map(({ canonicalPoiId }) => canonicalPoiId)
+    });
+  }
+  return pool;
 }
 
 function requestedDayCount(preferences) {
@@ -73,6 +84,13 @@ function activityEstimateMinor(activityType, references, travellerCount) {
     : 0;
 }
 
+function activityEstimateMinorFor(activity, poi, references, travellerCount) {
+  if (["CULTURE", "HISTORY", "NATURE", "FAMILY"].includes(activity.activityType)) {
+    return resolveAttractionActivityCostMinor({ activity, poi, references, travellerCount });
+  }
+  return activityEstimateMinor(activity.activityType, references, travellerCount);
+}
+
 function directDistanceMeters(from, to) {
   const radians = (value) => value * Math.PI / 180;
   const latitudeDelta = radians(to.latitude - from.latitude);
@@ -84,10 +102,74 @@ function directDistanceMeters(from, to) {
   return 6371000 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
 }
 
-function routeModeFor(profile, preferences) {
+export const transportModeSelectionConfig = Object.freeze({
+  maxWalkingRouteMeters: 1500,
+  maxWalkingRouteMinutes: 25
+});
+
+const selectableTransportModes = ["WALK", "PUBLIC_TRANSIT", "TAXI"];
+const modeTieBreak = { WALK: 0, PUBLIC_TRANSIT: 1, TAXI: 2 };
+
+function isWalkFeasible(estimate) {
+  return estimate.distanceMeters <= transportModeSelectionConfig.maxWalkingRouteMeters &&
+    estimate.durationMinutes <= transportModeSelectionConfig.maxWalkingRouteMinutes;
+}
+
+function estimateModeCandidate({ mode, from, to, references, travellerCount }) {
+  const estimate = estimateTravelLeg({ from, to, mode });
+  if (mode === "WALK" && !isWalkFeasible(estimate)) return null;
+  const estimatedCostMinor = estimateTransportCostMinor({
+    mode,
+    distanceMeters: estimate.distanceMeters,
+    travellerCount,
+    references
+  }) ?? estimate.estimatedCostMinor;
+  return { mode, estimatedCostMinor, durationMinutes: estimate.durationMinutes };
+}
+
+function cheapestFeasibleMode({ modes, from, to, references, travellerCount }) {
+  const candidates = modes
+    .map((mode) => estimateModeCandidate({ mode, from, to, references, travellerCount }))
+    .filter(Boolean)
+    .sort((left, right) =>
+      left.estimatedCostMinor - right.estimatedCostMinor ||
+      modeTieBreak[left.mode] - modeTieBreak[right.mode] ||
+      left.durationMinutes - right.durationMinutes);
+  return candidates[0]?.mode;
+}
+
+export function routeModeFor(profile, preferences, { references = [] } = {}) {
   const strategy = getSpendingProfile(profile);
   if (["WALK", "PUBLIC_TRANSIT", "MIXED", "TAXI"].includes(preferences.localTransportPreference)) {
     return () => preferences.localTransportPreference;
+  }
+  if (preferences.transportPreferenceMode === "MANUAL") {
+    const selectedModes = [...new Set(preferences.preferredTransportModes ?? [])]
+      .filter((mode) => selectableTransportModes.includes(mode));
+    return ({ from, to }) => {
+      const mode = cheapestFeasibleMode({
+        modes: selectedModes,
+        from,
+        to,
+        references,
+        travellerCount: preferences.travellerCount
+      });
+      if (!mode) {
+        throw Object.assign(new Error("No selected transport mode is feasible for this route leg."), {
+          code: "TRANSPORT_PREFERENCE_UNAVAILABLE"
+        });
+      }
+      return mode;
+    };
+  }
+  if (preferences.transportPreferenceMode === "AUTO_CHEAPEST") {
+    return ({ from, to }) => cheapestFeasibleMode({
+      modes: selectableTransportModes,
+      from,
+      to,
+      references,
+      travellerCount: preferences.travellerCount
+    }) ?? "PUBLIC_TRANSIT";
   }
   return ({ day, legIndex, from, to }) => {
     const preferred = strategy.routeModes[
@@ -136,7 +218,7 @@ export function buildVariantProvenance(itinerary, summary, rainyDayBackups = [])
         provenance.push({
           path: `${path}.poi`,
           source: {
-            sourceType: record?.provider === "DEMO" ? "DEMO_FIXTURE" : "OPENTRIPMAP_API",
+            sourceType: provenanceSourceType(record),
             xid: activity.xid,
             provider: record?.provider,
             sourceUrl: record?.sourceUrl,
@@ -171,7 +253,7 @@ export function buildVariantProvenance(itinerary, summary, rainyDayBackups = [])
     provenance.push({
       path: `rainyDayBackups.${index}.alternative`,
       source: {
-        sourceType: record?.provider === "DEMO" ? "DEMO_FIXTURE" : "OPENTRIPMAP_API",
+        sourceType: provenanceSourceType(record),
         xid: candidate.xid ?? candidate.candidateId,
         provider: record?.provider,
         sourceUrl: record?.sourceUrl,
@@ -183,6 +265,31 @@ export function buildVariantProvenance(itinerary, summary, rainyDayBackups = [])
     });
   });
   return provenance;
+}
+
+function provenanceSourceType(record) {
+  if (record?.provider === "DEMO") return "DEMO_FIXTURE";
+  if (record?.provider === "OPENTRIPMAP") return "OPENTRIPMAP_API";
+  return "DATABASE_BACKED";
+}
+
+function operatingHoursMetadata(activity, day, candidatePool) {
+  if (!activity.xid || !candidatePool.operatingHours) return undefined;
+  const result = resolveActivityOperatingHours({ activity, day, candidatePool });
+  return {
+    state: result.state,
+    source: result.source,
+    ...(result.record?.id ? { recordId: result.record.id } : {}),
+    ...(result.record?.sourceName ? { sourceName: result.record.sourceName } : {}),
+    ...(result.record?.sourceUrl ? { sourceUrl: result.record.sourceUrl } : {}),
+    ...(result.record?.sourceType ? { sourceType: result.record.sourceType } : {}),
+    ...(result.record?.lastReviewedDate ? { lastReviewedDate: result.record.lastReviewedDate } : {}),
+    ...(result.record?.status ? { status: result.record.status } : {}),
+    ...(result.record?.verificationStatus ? { verificationStatus: result.record.verificationStatus } : {}),
+    ...(result.record?.opensAt ? { opensAt: result.record.opensAt } : {}),
+    ...(result.record?.closesAt ? { closesAt: result.record.closesAt } : {}),
+    ...(result.record?.isClosed !== undefined ? { isClosed: result.record.isClosed } : {})
+  };
 }
 
 function attachPoiFacts(itinerary, candidatePool, { anchors, references, preferences }) {
@@ -201,9 +308,11 @@ function attachPoiFacts(itinerary, candidatePool, { anchors, references, prefere
       endPoint: attachAnchor(day.endPoint),
       activities: day.activities.map((activity) => {
         const poi = activity.xid ? byId.get(activity.xid) : undefined;
+        const hours = operatingHoursMetadata(activity, day, candidatePool);
         return poi ? {
           ...activity,
-          estimatedActivityCostMinor: activityEstimateMinor(activity.activityType, references, preferences.travellerCount),
+          estimatedActivityCostMinor: activityEstimateMinorFor(activity, poi, references, preferences.travellerCount),
+          ...(hours ? { operatingHoursVerification: hours } : {}),
           poi: {
             canonicalPoiId: poi.canonicalPoiId,
             name: poi.name,
@@ -234,7 +343,9 @@ async function evaluateDraft(draft, { preferences, candidatePool, anchors, refer
   const routed = await buildTripLegs(draft, {
     locations,
     destination: preferences.destination,
-    mode: routeModeFor(draft.travelStyle, preferences)
+    mode: routeModeFor(draft.travelStyle, preferences, { references }),
+    references,
+    travellerCount: preferences.travellerCount
   });
   const scheduled = {
     ...routed,
@@ -247,7 +358,8 @@ async function evaluateDraft(draft, { preferences, candidatePool, anchors, refer
     preferences,
     itinerary: measurable,
     references,
-    profile: draft.travelStyle
+    profile: draft.travelStyle,
+    candidatePool
   });
   const itinerary = { ...measurable, budgetSummary };
   return {
@@ -271,10 +383,11 @@ async function generateVariant(profile, context) {
       preferences: context.preferences,
       candidatePool,
       evaluate: (itinerary) => evaluateDraft(itinerary, variantContext),
-      semanticRepair: ({ itinerary, issues, allowedCandidateIds }) => targetedLlmRepair({
+      semanticRepair: ({ itinerary, issues, allowedCandidateIds, candidates }) => targetedLlmRepair({
         itinerary,
         issues,
         allowedCandidateIds,
+        candidates,
         provider: context.dependencies.llmProvider
       })
     });
@@ -299,8 +412,9 @@ async function generateVariant(profile, context) {
       itinerary,
       candidatePool: context.candidatePool,
       remainingBudgetMinor: reconciled.summary.remainingMinor,
-      estimateCostMinor: (candidate) => activityEstimateMinor(
-        candidate.category,
+      estimateCostMinor: (candidate) => activityEstimateMinorFor(
+        { xid: candidate.xid ?? candidate.candidateId, activityType: candidate.category },
+        candidate,
         context.references,
         context.preferences.travellerCount
       )

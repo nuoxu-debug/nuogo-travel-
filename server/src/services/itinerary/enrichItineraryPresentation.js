@@ -25,7 +25,17 @@ const mealStyles = Object.freeze({
   COMFORT: { en: "Comfort-focused meal", zh: "舒适型餐食" }
 });
 
+const genericActivityNames = Object.freeze({
+  TRANSFER: { en: "Transfer", zh: "交通" },
+  ACCOMMODATION: { en: "Accommodation", zh: "住宿" },
+  REST: { en: "Rest stop", zh: "休息" },
+  DEPARTURE: { en: "Departure", zh: "出发" }
+});
+
 function localizedName(activity) {
+  if (!activity.xid && genericActivityNames[activity.activityType]) {
+    return genericActivityNames[activity.activityType];
+  }
   const source = activity.poi?.displayName;
   const fallback = activity.poi?.name ?? "Attraction";
   return {

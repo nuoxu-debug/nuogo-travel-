@@ -99,6 +99,18 @@ describe("fixed itinerary LLM boundary", () => {
     expect(JSON.stringify(itineraryDraftJsonSchema)).not.toContain("coordinates");
   });
 
+  it("tells the drafting model the exact itinerary dates that must be covered", () => {
+    const prompt = buildItineraryPrompt({
+      ...preferences,
+      startDate: "2026-10-10",
+      endDate: "2026-10-12"
+    }, candidatePool);
+    const data = JSON.parse(prompt.user).UNTRUSTED_USER_DATA;
+
+    expect(data.requiredDates).toEqual(["2026-10-10", "2026-10-11", "2026-10-12"]);
+    expect(prompt.system).toContain("exactly one day object for every requiredDates value");
+  });
+
   it("uses the fixed schema, low temperature, and local Zod parsing", async () => {
     const provider = {
       generateStructured: vi.fn().mockResolvedValue(JSON.stringify(draft()))
@@ -119,6 +131,20 @@ describe("fixed itinerary LLM boundary", () => {
     invalidEndpoints.days[0].endPoint = { locationId: "unknown-hotel", locationType: "HOTEL" };
     const provider = {
       generateStructured: vi.fn().mockResolvedValue(JSON.stringify(invalidEndpoints))
+    };
+
+    const result = await planDraft({ preferences, candidatePool }, { provider });
+
+    expect(result.days[0].startPoint).toEqual({ locationId: "hotel", locationType: "HOTEL" });
+    expect(result.days[0].endPoint).toEqual({ locationId: "hotel", locationType: "HOTEL" });
+  });
+
+  it("normalizes candidate endpoints to hotel because POIs belong in activities", async () => {
+    const candidateEndpoints = draft();
+    candidateEndpoints.days[0].startPoint = { locationId: "Q-B002", locationType: "POI" };
+    candidateEndpoints.days[0].endPoint = { locationId: "Q-B001", locationType: "POI" };
+    const provider = {
+      generateStructured: vi.fn().mockResolvedValue(JSON.stringify(candidateEndpoints))
     };
 
     const result = await planDraft({ preferences, candidatePool }, { provider });

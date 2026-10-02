@@ -137,6 +137,45 @@ describe("localized itinerary presentation enrichment", () => {
     expect(`${meal.presentation.name.en} ${meal.presentation.name.zh}`).not.toMatch(/restaurant|餐厅/i);
   });
 
+  it("labels generic non-POI activities by their actual purpose instead of Attraction", () => {
+    const input = context();
+    input.itinerary.days[0].activities = [{
+      sequence: 1,
+      activityType: "TRANSFER",
+      sourceType: "AI_GENERATED",
+      plannedStartTime: "09:00",
+      plannedDurationMinutes: 30,
+      scheduledStartTime: "09:00",
+      scheduledEndTime: "09:30",
+      reason: "Move from the hotel toward the first area."
+    }, {
+      sequence: 2,
+      activityType: "REST",
+      sourceType: "AI_GENERATED",
+      plannedStartTime: "11:00",
+      plannedDurationMinutes: 20,
+      scheduledStartTime: "11:00",
+      scheduledEndTime: "11:20",
+      reason: "Leave time for a short break."
+    }, {
+      sequence: 3,
+      activityType: "ACCOMMODATION",
+      sourceType: "ESTIMATED",
+      plannedStartTime: "21:00",
+      plannedDurationMinutes: 60,
+      scheduledStartTime: "21:00",
+      scheduledEndTime: "22:00",
+      reason: "Return to the accommodation."
+    }];
+    input.itinerary.days[0].legs = [];
+
+    const names = enrichItineraryPresentation(input).days[0].activities
+      .map((activity) => activity.presentation.name.en);
+
+    expect(names).toEqual(["Transfer", "Rest stop", "Accommodation"]);
+    expect(names).not.toContain("Attraction");
+  });
+
   it("adds localized estimated transport rows and next transport", () => {
     const day = enrichItineraryPresentation(context()).days[0];
     expect(day.presentation.transport[0]).toMatchObject({
