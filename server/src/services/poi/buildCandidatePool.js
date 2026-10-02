@@ -20,8 +20,20 @@ const attractionCandidateSchema = z.object({
   previewUrl: z.string().url().optional(),
   city: z.string().min(1),
   sourceUrl: z.string().url().optional(),
-  providerMode: z.enum(["DEMO", "LIVE"]).optional(),
-  sourceType: z.enum(["DEMO_FIXTURE", "OPENTRIPMAP_API"]).optional(),
+  estimatedCostMinor: z.number().int().nonnegative().optional(),
+  providerMode: z.enum(["DEMO", "LIVE", "DATABASE"]).optional(),
+  sourceType: z.enum(["DEMO_FIXTURE", "OPENTRIPMAP_API", "DATABASE_BACKED"]).optional(),
+  canonicalPoiId: z.string().min(1).optional(),
+  primarySource: z.string().min(1).optional(),
+  sourceRecords: z.array(z.object({
+    provider: z.string().min(1),
+    sourceId: z.string().min(1),
+    sourceName: z.string().min(1).optional(),
+    sourceType: z.string().min(1).optional(),
+    sourceUrl: z.string().url().optional(),
+    retrievedAt: z.string().datetime(),
+    expiresAt: z.string().datetime().optional()
+  }).strict()).optional(),
   retrievedAt: z.string().datetime(),
   matchStatus: z.string().min(1)
 }).strict();
@@ -58,12 +70,12 @@ export function buildCandidatePool(preferences, attractionCandidates) {
       ...poi,
       candidateId: poi.xid,
       category: poi.category ?? "CULTURE",
-      canonicalPoiId: poi.sourceType === "DEMO_FIXTURE" ? `demo:${poi.city}:${poi.xid}` : `opentripmap:${poi.city}:${poi.xid}`,
-      primarySource: poi.sourceType === "DEMO_FIXTURE" ? "DEMO_FIXTURE" : "OPENTRIPMAP",
-      ...(poi.sourceType === "DEMO_FIXTURE" ? {} : { openTripMapXid: poi.xid }),
+      canonicalPoiId: poi.canonicalPoiId ?? (poi.sourceType === "DEMO_FIXTURE" ? `demo:${poi.city}:${poi.xid}` : `opentripmap:${poi.city}:${poi.xid}`),
+      primarySource: poi.primarySource ?? (poi.sourceType === "DEMO_FIXTURE" ? "DEMO_FIXTURE" : "OPENTRIPMAP"),
+      ...(poi.sourceType === "OPENTRIPMAP_API" ? { openTripMapXid: poi.xid } : {}),
       matchStatus: poi.matchStatus,
       verificationStatus: poi.verificationStatus ?? "SUPPORTING_ONLY",
-      sourceRecords: [{
+      sourceRecords: poi.sourceRecords ?? [{
         provider: poi.sourceType === "DEMO_FIXTURE" ? "DEMO" : "OPENTRIPMAP",
         sourceId: poi.xid,
         ...(poi.sourceUrl ? { sourceUrl: poi.sourceUrl } : {}),

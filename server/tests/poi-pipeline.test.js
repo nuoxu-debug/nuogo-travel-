@@ -96,7 +96,7 @@ describe("OpenTripMap candidate retrieval", () => {
       listAttractions: vi.fn(async () => [
         otm(),
         otm({ xid: "Q2", name: "", point: { lon: 116.41, lat: 39.91 } }),
-        otm({ xid: "Q3", name: "List-only place", point: { lon: 116.42, lat: 39.92 } }),
+        otm({ xid: "Q3", name: "List-only place", point: { lon: 116.42, lat: 39.92 }, estimatedCostMinor: 1800 }),
         { xid: "BROKEN", name: "No coordinates" }
       ]),
       getAttractionDetails: vi.fn(async ({ xid }) => xid === "Q2"
@@ -135,6 +135,7 @@ describe("OpenTripMap candidate retrieval", () => {
         coordinates: { longitude: 116.42, latitude: 39.92, coordinateSystem: "WGS84" },
         city: "singapore",
         sourceUrl: "https://opentripmap.com/en/card/Q3",
+        estimatedCostMinor: 1800,
         retrievedAt,
         matchStatus: "MATCHED",
         description: { en: "Description unavailable", zh: "暂无景点介绍" }

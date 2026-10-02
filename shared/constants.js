@@ -13,7 +13,7 @@ export const supportedCurrencies = ["SGD"];
 export const attractionSelectionModes = ["MANUAL", "AUTO"];
 export const sourceTypes = [
   "USER_PROVIDED", "OPENTRIPMAP_API", "DATABASE_BACKED", "AI_GENERATED",
-  "ESTIMATED", "DEMO_FIXTURE", "APPLICATION_CONTENT", "UNAVAILABLE"
+  "ESTIMATED", "ONEMAP", "STATIC_REFERENCE", "DEMO_FIXTURE", "APPLICATION_CONTENT", "UNAVAILABLE"
 ];
 
 export function getCity(id) {

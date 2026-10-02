@@ -2,6 +2,7 @@ import { resolveAttractionDisplay } from "@nuogo/shared/destination-discovery";
 
 export function buildDiscoveryResponse(destination, candidates, { runtimeMode }) {
   const isDemo = runtimeMode === "demo";
+  const isDatabase = runtimeMode === "database";
   return candidates.map((candidate) => {
     const english = resolveAttractionDisplay({
       destination,
@@ -30,8 +31,8 @@ export function buildDiscoveryResponse(destination, candidates, { runtimeMode })
         english.suggestedVisitDurationMinutes,
       coordinates: candidate.coordinates,
       source: {
-        provider: isDemo ? "DEMO" : "OPENTRIPMAP",
-        sourceType: isDemo ? "DEMO_FIXTURE" : "OPENTRIPMAP_API",
+        provider: isDemo ? "DEMO" : isDatabase ? "DATABASE" : "OPENTRIPMAP",
+        sourceType: isDemo ? "DEMO_FIXTURE" : isDatabase ? "DATABASE_BACKED" : "OPENTRIPMAP_API",
         ...(candidate.sourceUrl ? { sourceUrl: candidate.sourceUrl } : {}),
         retrievedAt: candidate.retrievedAt,
         matchStatus: candidate.matchStatus,

@@ -9,6 +9,7 @@ import { resolveCostReferences } from "./services/budget/costReferenceService.js
 import { generateValidatedTrip } from "./services/itinerary/generateValidatedTrip.js";
 import { createLogger, createRepositoryLogSink } from "./services/logger.js";
 import { createOpenTripMapCandidateService } from "./services/poi/openTripMapCandidateService.js";
+import { createDatabaseCandidateService } from "./services/poi/databaseCandidateService.js";
 import { buildDiscoveryResponse } from "./services/poi/buildDiscoveryResponse.js";
 import { getCity } from "@nuogo/shared/constants";
 import { initializeDemoRuntime } from "./runtime/initializeDemoRuntime.js";
@@ -27,15 +28,14 @@ const planProvider = config.aiProvider === "openrouter"
 const demoTravelProvider = config.travelDataProvider === "demo"
   ? new DemoTravelProvider()
   : undefined;
-const attractionProvider = demoTravelProvider ?? new OpenTripMapProvider({
+const attractionProvider = config.travelDataProvider === "live" ? new OpenTripMapProvider({
   apiKey: config.openTripMapKey,
   timeoutMs: config.travelProviderTimeoutMs
-});
+}) : demoTravelProvider;
 const now = () => new Date().toISOString();
-const retrieveAttractionCandidates = createOpenTripMapCandidateService({
-  provider: attractionProvider,
-  now
-});
+const retrieveAttractionCandidates = config.travelDataProvider === "database"
+  ? createDatabaseCandidateService({ repository, now })
+  : createOpenTripMapCandidateService({ provider: attractionProvider, now });
 const objectivePlanner = (preferences) => generateValidatedTrip(preferences, {
   retrieveAttractionCandidates,
   getDestinationSettings: async ({ destination }) => {
@@ -51,6 +51,10 @@ const objectivePlanner = (preferences) => generateValidatedTrip(preferences, {
     await repository.listCostReferences(destination),
     { city: destination }
   ),
+  getOperatingHours: async ({ destination }) => ({
+    weeklyHours: await repository.listPoiOperatingHours(destination),
+    exceptions: await repository.listPoiOperatingHourExceptions(destination)
+  }),
   resolveAnchors: async ({ destination }) => {
     const [longitude, latitude] = getCity(destination).center;
     const anchor = { longitude, latitude };
@@ -87,4 +91,5 @@ app.listen(config.port, () => {
     `Nuogo API listening on http://localhost:${config.port} ` +
     `(${config.runtimeMode} runtime, ${config.aiProvider} AI)`
   );
+  console.log(`Travel data provider: ${config.travelDataProvider}`);
 });

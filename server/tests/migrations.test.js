@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { listMigrationFiles } from "../src/repositories/migrations.js";
 
 const migrationDirectory = new URL("../../database/migrations/", import.meta.url);
+const supabaseDirectory = new URL("../../database/supabase/", import.meta.url);
 
 describe("objective-aligned migration ordering", () => {
   it("lists every migration in numeric order", async () => {
@@ -64,7 +65,9 @@ describe("objective-aligned migration ordering", () => {
     expect(sql).toMatch(/guest_expires_at/i);
     expect(sql).toMatch(/persistence_scope ENUM\('SESSION', 'PERSISTENT'\)/i);
     expect(sql).toMatch(/guest_claim_token_hash CHAR\(64\)/i);
-    for (const value of [6800, 16500, 66000, 128, 190, 257, 2750, 4750, 8000, 4600, 7600, 1000, 2000, 3000]) {
+    expect(sql).toMatch(/PUBLIC_TRANSPORT_DISTANCE_FARE/i);
+    expect(sql).toMatch(/TAXI_OR_RIDE_HAIL_ESTIMATE/i);
+    for (const value of [6800, 16500, 66000, 128, 190, 257, 109, 119, 130, 150, 420, 85, 2750, 4750, 8000, 3550, 5050, 7600, 1000, 2000, 3000]) {
       expect(sql).toMatch(new RegExp(`\\b${value}\\b`));
     }
   });
@@ -131,5 +134,23 @@ describe("objective-aligned migration ordering", () => {
 
     expect(source).not.toMatch(/demoReferences|accommodationRoomNightFen\s*:\s*\d+/);
     expect(source).toMatch(/repository\.listCostReferences\(destination\)/);
+  });
+
+  it("adds source-backed POI operating hours and date exceptions for the Singapore pilot", async () => {
+    const sql = await readFile(new URL("003_poi_operating_hours.sql", supabaseDirectory), "utf8");
+
+    expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS poi_operating_hours/i);
+    expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS poi_operating_hour_exceptions/i);
+    expect(sql).toMatch(/poi_id text NOT NULL REFERENCES canonical_pois\(id\)/i);
+    expect(sql).toMatch(/day_of_week integer NOT NULL/i);
+    expect(sql).toMatch(/exception_date date NOT NULL/i);
+    expect(sql).toMatch(/source_name text NOT NULL/i);
+    expect(sql).toMatch(/last_reviewed_date date NOT NULL/i);
+    expect(sql).toMatch(/verification_status text NOT NULL DEFAULT 'PENDING_REVIEW'/i);
+    expect(sql).toMatch(/verified_at timestamptz NULL/i);
+    expect(sql).toMatch(/verified_by_user_id/i);
+    expect(sql).toMatch(/verification_status IN \('PENDING_REVIEW', 'VERIFIED', 'REJECTED'\)/i);
+    expect(sql).toMatch(/status IN \('ACTIVE', 'OUTDATED', 'UNAVAILABLE'\)/i);
+    expect(sql).toMatch(/idx_poi_operating_hour_exceptions_lookup/i);
   });
 });

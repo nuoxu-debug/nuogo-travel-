@@ -26,8 +26,8 @@ export function loadConfig() {
   if (openRouterTimeoutMs < 1000 || openRouterTimeoutMs > 120000) {
     throw new Error("OPENROUTER_TIMEOUT_MS must be between 1000 and 120000.");
   }
-  if (!["demo", "live"].includes(travelDataProvider)) {
-    throw new Error("TRAVEL_DATA_PROVIDER must be either demo or live.");
+  if (!["demo", "live", "database"].includes(travelDataProvider)) {
+    throw new Error("TRAVEL_DATA_PROVIDER must be demo, live, or database.");
   }
   if (travelProviderTimeoutMs < 1000 || travelProviderTimeoutMs > 30000) {
     throw new Error("TRAVEL_PROVIDER_TIMEOUT_MS must be between 1000 and 30000.");
