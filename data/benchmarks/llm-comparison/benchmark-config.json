@@ -1,0 +1,95 @@
+{
+  "benchmarkTimestamp": "2026-10-03T07:23:31.881Z",
+  "gitCommitHead": "03dd655c559a393c759f9fec5506323708dd95b0",
+  "models": {
+    "deepseek": "deepseek/deepseek-v4.1-flash",
+    "gemini": "google/gemini-3.1-flash-lite"
+  },
+  "aiProvider": "openrouter",
+  "travelDataProvider": "database",
+  "candidateCount": 25,
+  "destination": "singapore",
+  "trip": {
+    "startDate": "2026-10-10",
+    "endDate": "2026-10-12",
+    "arrivalDateTime": "2026-10-10T08:00:00+08:00",
+    "departureDateTime": "2026-10-12T20:00:00+08:00"
+  },
+  "travellers": 2,
+  "budgetPackageProfile": {
+    "travelStyle": "BALANCED",
+    "budgetMinor": 565000,
+    "currency": "SGD"
+  },
+  "interests": [
+    "CULTURE",
+    "HISTORY",
+    "NATURE",
+    "ENTERTAINMENT",
+    "FAMILY"
+  ],
+  "dailyAttractionTarget": 6,
+  "runsPerModel": 5,
+  "samePromptUsed": true,
+  "sameCandidatePoolUsed": true,
+  "onlyChangedVariable": "model ID",
+  "promptVersion": {
+    "version": "buildItineraryPrompt.js",
+    "files": [
+      {
+        "path": "server/src/services/llm/buildItineraryPrompt.js",
+        "sha256": "922b51b9aa14041b5a2ea865ae89bbf0fe6cab293256f45cc07c3853345f139f"
+      }
+    ]
+  },
+  "promptRequestHash": "a4fdee77f95625b0fe839a29d69588172c68a115aabdc758d395c142e1b0c06b",
+  "validatorVersion": {
+    "version": "03dd655c559a393c759f9fec5506323708dd95b0",
+    "files": [
+      {
+        "path": "server/src/services/validation/validationEngine.js",
+        "sha256": "c6038530f11c7fd5800ccbae3c437b3b85267d7ae9c32fcd34e739e2dbbe043f"
+      },
+      {
+        "path": "server/src/services/validation/validators/poiValidator.js",
+        "sha256": "d5c4ccd236597ee7f35e4e03fbe3c92e2b871aacca0be5f95eba67e7ed011422"
+      },
+      {
+        "path": "server/src/services/validation/validators/scheduleValidator.js",
+        "sha256": "b26e6a62691efaf6265b37d9462adfcb5900844bcd28deae15c0e9a9b33e62e6"
+      },
+      {
+        "path": "server/src/services/validation/validators/dailyDensityValidator.js",
+        "sha256": "c80474aafa337841f5c5383a2e29eb5c13be477f6d48270799ea329338b01f3f"
+      },
+      {
+        "path": "server/src/services/validation/validators/genericActivityQualityValidator.js",
+        "sha256": "f1f46d463b28720e4c0055eb4dac0e81f3c866c1757a2bd55f2967da98e55141"
+      }
+    ]
+  },
+  "repairPipelineVersion": {
+    "version": "03dd655c559a393c759f9fec5506323708dd95b0",
+    "files": [
+      {
+        "path": "server/src/services/repair/repairLoop.js",
+        "sha256": "d83de60b4fcd140ce07737aefa6c75bbeafce6fbd6118a281adf82424fbc25db"
+      },
+      {
+        "path": "server/src/services/repair/deterministicRepair.js",
+        "sha256": "064dfb995a0df145b459106c4c8bfb8973d2cf7b157005fbd8dffd9f7b1945a7"
+      },
+      {
+        "path": "server/src/services/repair/targetedLlmRepair.js",
+        "sha256": "f265434a9673dd9ca670be97d05175886ead65317c89921e3c4d4a3d519f41f6"
+      }
+    ]
+  },
+  "openRouterUsageCapture": {
+    "requestedWhenSupported": true,
+    "unavailableValue": null,
+    "note": "If OpenRouter does not return usage or cost metadata for a run, the run evidence records those fields as null. Nuogo does not fabricate API cost."
+  },
+  "liveRunsExecuted": false,
+  "productionItineraryLogicModified": false
+}

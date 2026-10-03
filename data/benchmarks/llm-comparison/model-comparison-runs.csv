@@ -1,0 +1,1 @@
+model,run,success,rawValid,rawIssueCount,repairCount,finalValidated,requestedAttractions,scheduledAttractions,groundedPoiRate,mealCompliance,travelConflictCount,openingHoursConflictCount,duplicateErrorCount,latencyMs,promptTokens,completionTokens,totalTokens,costUsd

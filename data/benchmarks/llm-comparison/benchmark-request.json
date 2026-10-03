@@ -1,0 +1,30 @@
+{
+  "destination": "singapore",
+  "departurePoint": "Changi Airport",
+  "arrivalPoint": "Hotel in Singapore",
+  "startDate": "2026-10-10",
+  "endDate": "2026-10-12",
+  "arrivalDateTime": "2026-10-10T08:00:00+08:00",
+  "departureDateTime": "2026-10-12T20:00:00+08:00",
+  "travellerCount": 2,
+  "budgetMinor": 565000,
+  "currency": "SGD",
+  "interests": [
+    "CULTURE",
+    "HISTORY",
+    "NATURE",
+    "ENTERTAINMENT",
+    "FAMILY"
+  ],
+  "preferredSights": [],
+  "transportPreferenceMode": "AUTO_CHEAPEST",
+  "preferredTransportModes": [],
+  "attractionSelectionMode": "AUTO",
+  "selectedAttractions": [],
+  "travelStyle": "BALANCED",
+  "dailyAttractionTarget": 6,
+  "rainyDayBackupEnabled": true,
+  "otherPreferences": "",
+  "language": "en",
+  "consentToLlmProcessing": true
+}

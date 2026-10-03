@@ -1,0 +1,1 @@
+model,runs,rawValidCount,rawValidRate,finalValidatedCount,finalValidatedRate,averageRawIssueCount,averageRepairCount,averageScheduledAttractionCount,groundedPoiRate,mealComplianceRate,averageLatencyMs,medianLatencyMs,totalTokens,totalActualReportedApiCostUsd
