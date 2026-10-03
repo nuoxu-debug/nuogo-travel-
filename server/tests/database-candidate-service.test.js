@@ -164,4 +164,25 @@ describe("database-backed Singapore candidate retrieval", () => {
       "sg-supertree-observatory"
     ]);
   });
+
+  it("assigns category-aware planning durations instead of using 90 minutes for every POI", async () => {
+    const repository = {
+      listCanonicalPois: async () => [
+        poi(1, { id: "sg-fort-canning-park", category: "NATURE" }),
+        poi(2, { id: "sg-universal-studios", category: "ENTERTAINMENT" }),
+        poi(3, { id: "sg-national-gallery", category: "CULTURE" })
+      ]
+    };
+
+    const candidates = await retrieveDatabaseAttractionCandidates({
+      destination: "singapore"
+    }, { repository, now: () => retrievedAt });
+    const durations = Object.fromEntries(candidates.map(({ xid, suggestedVisitDurationMinutes }) =>
+      [xid, suggestedVisitDurationMinutes]));
+
+    expect(durations["sg-fort-canning-park"]).toBe(75);
+    expect(durations["sg-universal-studios"]).toBe(240);
+    expect(durations["sg-national-gallery"]).toBe(120);
+    expect(new Set(Object.values(durations)).size).toBeGreaterThan(1);
+  });
 });

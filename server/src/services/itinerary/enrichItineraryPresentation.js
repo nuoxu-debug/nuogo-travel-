@@ -125,6 +125,36 @@ function dayTheme(activities) {
   };
 }
 
+const DAY_LIMIT_MINUTES = 12 * 60;
+const MINUTES_PER_ADDITIONAL_ATTRACTION = 90;
+
+function attractionTargetPresentation({ preferences, day }) {
+  const requested = Number(preferences.dailyAttractionTarget);
+  if (!Number.isInteger(requested)) return undefined;
+  const scheduled = (day.activities ?? []).filter(({ xid }) => xid).length;
+  const targetSatisfied = scheduled >= requested;
+  const totalMinutes = (day.activities ?? [])
+    .reduce((total, activity) => total + (Number(activity.plannedDurationMinutes) || 0), 0) +
+    (day.legs ?? []).reduce((total, leg) => total + (Number(leg.durationMinutes) || 0), 0);
+  const omissionReasons = targetSatisfied
+    ? []
+    : [{
+        code: totalMinutes + MINUTES_PER_ADDITIONAL_ATTRACTION > DAY_LIMIT_MINUTES
+          ? "INSUFFICIENT_USABLE_TIME_AFTER_MEALS_AND_TRAVEL"
+          : "REQUESTED_ATTRACTION_TARGET_NOT_FULLY_SCHEDULED",
+        requestedAttractionCount: requested,
+        scheduledAttractionCount: scheduled,
+        dailyLimitMinutes: DAY_LIMIT_MINUTES,
+        plannedMinutes: totalMinutes
+      }];
+  return {
+    requestedAttractionCount: requested,
+    scheduledAttractionCount: scheduled,
+    targetSatisfied,
+    omissionReasons
+  };
+}
+
 export function enrichItineraryPresentation({ itinerary, preferences = {}, summary = {} }) {
   const language = preferences.language === "en" ? "en" : "zh";
   const travellerCount = Math.max(1, Number(preferences.travellerCount) || 1);
@@ -165,6 +195,7 @@ export function enrichItineraryPresentation({ itinerary, preferences = {}, summa
         total + (activity.presentation.estimatedCostMinor ?? 0), 0);
       const transportSpend = transport.reduce((total, leg) =>
         total + (leg.estimatedCostMinor ?? 0), 0);
+      const attractionTarget = attractionTargetPresentation({ preferences, day: { ...day, activities } });
       return {
         ...day,
         activities,
@@ -177,6 +208,7 @@ export function enrichItineraryPresentation({ itinerary, preferences = {}, summa
           transportLegCount: transport.length,
           estimatedDailyCostMinor: activitySpend + transportSpend,
           costSourceType: "ESTIMATED",
+          ...(attractionTarget ? { attractionTarget } : {}),
           transport
         }
       };

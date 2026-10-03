@@ -94,6 +94,11 @@ function repairBudget(itinerary, issues) {
 }
 
 const attractionTypes = new Set(["CULTURE", "HISTORY", "NATURE", "SHOPPING", "ENTERTAINMENT", "FAMILY"]);
+const MEAL_DURATION_MINUTES = 60;
+const MEAL_WINDOWS = Object.freeze({
+  LUNCH: { start: 11 * 60 + 30, end: 14 * 60, fallback: 12 * 60 + 30, reason: "Lunch opportunity between sightseeing activities." },
+  DINNER: { start: 17 * 60 + 30, end: 20 * 60, fallback: 18 * 60 + 30, reason: "Dinner opportunity after evening sightseeing." }
+});
 
 function dayLocation(issue) {
   const dayMarker = issue.path.indexOf("days");
@@ -111,6 +116,11 @@ function candidateName(candidate) {
     ?? candidate?.displayName?.en
     ?? candidate?.displayName?.zh
     ?? candidateId(candidate);
+}
+
+function candidateDuration(candidate, fallback = 90) {
+  const duration = Number(candidate?.suggestedVisitDurationMinutes);
+  return Number.isFinite(duration) && duration > 0 ? duration : fallback;
 }
 
 function usableCandidates(candidatePool) {
@@ -286,9 +296,7 @@ function repairUngroundedDays(itinerary, issues, { candidatePool } = {}) {
     usedIds.add(id);
     const firstActivity = day.activities?.[0];
     const plannedStartTime = firstActivity?.plannedStartTime ?? "09:00";
-    const plannedDurationMinutes = Number.isFinite(Number(selected.suggestedVisitDurationMinutes))
-      ? Number(selected.suggestedVisitDurationMinutes)
-      : 90;
+    const plannedDurationMinutes = candidateDuration(selected);
 
     day.activities = [
       {
@@ -311,7 +319,7 @@ function hasVerifiedHours(candidate, day, candidatePool) {
 }
 
 function backfillStartTime(day, candidate, candidatePool) {
-  const duration = Number(candidate.suggestedVisitDurationMinutes) || 90;
+  const duration = candidateDuration(candidate);
   const interval = intervalForDuration(
     verifiedHourRecordsFor({ xid: candidateId(candidate) }, day, candidatePool),
     duration
@@ -377,11 +385,106 @@ function backfillSparseDays(itinerary, issues, { candidatePool } = {}) {
         xid: id,
         activityType: selected.candidate.category,
         plannedStartTime: selected.startTime,
-        plannedDurationMinutes: Number(selected.candidate.suggestedVisitDurationMinutes) || 90,
+        plannedDurationMinutes: candidateDuration(selected.candidate),
         reason: `Visit ${candidateName(selected.candidate)} as an additional grounded Nuogo POI for this day.`
       });
       changed = true;
     }
+  }
+  return changed;
+}
+
+function mealStart(activity) {
+  return toMinutes(activity?.plannedStartTime);
+}
+
+function activityEnd(activity) {
+  const start = toMinutes(activity?.plannedStartTime);
+  return start === undefined ? undefined : start + (Number(activity.plannedDurationMinutes) || 0);
+}
+
+function hasMealInWindow(day, window) {
+  return (day.activities ?? []).some((activity) => {
+    if (activity.activityType !== "MEAL") return false;
+    const start = mealStart(activity);
+    return start !== undefined && start >= window.start && start <= window.end;
+  });
+}
+
+function mealWindowKey(activity) {
+  if (activity?.activityType !== "MEAL") return undefined;
+  const start = mealStart(activity);
+  if (start === undefined) return undefined;
+  if (start >= MEAL_WINDOWS.LUNCH.start && start <= MEAL_WINDOWS.LUNCH.end) return "LUNCH";
+  if (start >= MEAL_WINDOWS.DINNER.start && start <= MEAL_WINDOWS.DINNER.end) return "DINNER";
+  return undefined;
+}
+
+function chooseMealStart(day, window) {
+  const busy = (day.activities ?? [])
+    .filter((activity) => activity.xid)
+    .map((activity) => ({ start: toMinutes(activity.plannedStartTime), end: activityEnd(activity) }))
+    .filter(({ start, end }) => start !== undefined && end !== undefined)
+    .sort((left, right) => left.start - right.start);
+  let cursor = window.start;
+  for (const block of busy) {
+    if (cursor + MEAL_DURATION_MINUTES <= Math.min(block.start, window.end)) return cursor;
+    if (block.end > cursor) cursor = block.end;
+  }
+  if (cursor <= window.end) return cursor;
+  return Math.min(window.fallback, window.end);
+}
+
+function repairMealCadence(itinerary, issues) {
+  const mealIssues = issues
+    .filter(({ code }) => code === "MEAL_CADENCE_MISSING")
+    .map((issue) => ({ issue, dayIndex: dayLocation(issue) }))
+    .filter(({ dayIndex }) => Number.isInteger(dayIndex));
+  if (!mealIssues.length) return false;
+
+  let changed = false;
+  for (const { issue, dayIndex } of mealIssues) {
+    const day = itinerary.days[dayIndex];
+    if (!day?.activities?.length) continue;
+    const availableMinutes = Number(issue.metadata?.availableMinutes);
+    if (Number.isFinite(availableMinutes) && availableMinutes < 5 * 60) continue;
+    const meal = issue.metadata?.meal === "DINNER" ? "DINNER" : "LUNCH";
+    const window = MEAL_WINDOWS[meal];
+    if (hasMealInWindow(day, window)) continue;
+    const start = chooseMealStart(day, window);
+    day.activities.push({
+      sequence: day.activities.length + 1,
+      activityType: "MEAL",
+      sourceType: "AI_GENERATED",
+      plannedStartTime: toTime(start),
+      plannedDurationMinutes: MEAL_DURATION_MINUTES,
+      reason: window.reason
+    });
+    day.activities.sort((left, right) =>
+      (toMinutes(left.plannedStartTime) ?? 0) - (toMinutes(right.plannedStartTime) ?? 0));
+    changed = true;
+  }
+  return changed;
+}
+
+function reduceOverlongSightseeingDays(itinerary, issues) {
+  const affectedDays = issueDayIndexes(issues, new Set(["DAILY_DURATION_EXCEEDED"]));
+  let changed = false;
+  for (const dayIndex of affectedDays) {
+    const day = itinerary.days[dayIndex];
+    if (!day?.activities?.length) continue;
+    const plannedMinutes = (day.activities ?? []).reduce((sum, activity) =>
+      sum + (Number(activity.plannedDurationMinutes) || 0), 0) +
+      (day.legs ?? []).reduce((sum, leg) =>
+        sum + (Number(leg.durationMinutes) || 0), 0);
+    if (plannedMinutes <= 12 * 60) continue;
+    const grounded = day.activities
+      .map((activity, index) => ({ activity, index, start: toMinutes(activity.plannedStartTime) ?? 0 }))
+      .filter(({ activity }) => activity.xid)
+      .sort((left, right) => right.start - left.start || right.index - left.index);
+    if (grounded.length <= 1) continue;
+    day.activities.splice(grounded[0].index, 1);
+    changed = true;
   }
   return changed;
 }
@@ -404,12 +507,16 @@ function trimGenericFiller(itinerary, issues) {
     const groundedCount = day.activities.filter(({ xid }) => xid).length;
     if (groundedCount < 2) continue;
 
-    const lastMealIndex = day.activities.findLastIndex(({ xid, activityType }) =>
-      !xid && activityType === "MEAL");
+    const keptMealWindows = new Set();
     const next = day.activities.filter((activity, index) => {
       if (activity.xid) return true;
       if (removableGenericTypes.has(activity.activityType)) return false;
-      if (activity.activityType === "MEAL") return index === lastMealIndex;
+      if (activity.activityType === "MEAL") {
+        const windowKey = mealWindowKey(activity);
+        if (!windowKey || keptMealWindows.has(windowKey)) return false;
+        keptMealWindows.add(windowKey);
+        return true;
+      }
       return true;
     });
     if (next.length !== day.activities.length) {
@@ -428,7 +535,7 @@ function earliestVerifiedOpening(activity, day, candidatePool) {
   return interval ?? { opens: 9 * 60, closes: 20 * 60 };
 }
 
-function compactDenseDaySchedules(itinerary, issues, { candidatePool } = {}) {
+function compactDenseDaySchedules(itinerary, issues, { candidatePool, preferences } = {}) {
   const compactTriggerCodes = new Set([
     "TRAVEL_TIME_CONFLICT",
     "TIME_OVERLAP",
@@ -473,7 +580,7 @@ function compactDenseDaySchedules(itinerary, issues, { candidatePool } = {}) {
     const legDurations = legMatchesOrder
       ? day.legs.map(({ durationMinutes }) => Number(durationMinutes) || 45)
       : [];
-    let cursor = 9 * 60 + (legDurations[0] ?? 0);
+    let cursor = dayStartMinutes(dayIndex, preferences) + (legDurations[0] ?? 0);
     const scheduledGrounded = orderedGrounded.map((activity, index) => {
       const interval = earliestVerifiedOpening(activity, day, candidatePool);
       const duration = Number(activity.plannedDurationMinutes) || 90;
@@ -482,17 +589,14 @@ function compactDenseDaySchedules(itinerary, issues, { candidatePool } = {}) {
       return { ...activity, plannedStartTime: toTime(start), plannedDurationMinutes: duration };
     });
 
-    const meal = day.activities.findLast(({ xid, activityType }) => !xid && activityType === "MEAL");
-    const nextActivities = meal
-      ? [
-          ...scheduledGrounded,
-          {
-            ...meal,
-            plannedStartTime: toTime(Math.min(Math.max(cursor, 12 * 60), 19 * 60)),
-            plannedDurationMinutes: Math.min(Number(meal.plannedDurationMinutes) || 60, 60)
-          }
-        ]
-      : scheduledGrounded;
+    const meals = day.activities
+      .filter((activity) => !activity.xid && activity.activityType === "MEAL" && mealWindowKey(activity))
+      .map((meal) => ({
+        ...meal,
+        plannedDurationMinutes: Math.min(Number(meal.plannedDurationMinutes) || 60, 60)
+      }));
+    const nextActivities = [...scheduledGrounded, ...meals]
+      .sort((left, right) => (toMinutes(left.plannedStartTime) ?? 0) - (toMinutes(right.plannedStartTime) ?? 0));
 
     if (JSON.stringify(day.activities.map(({ xid, activityType, plannedStartTime }) => [xid, activityType, plannedStartTime])) !==
       JSON.stringify(nextActivities.map(({ xid, activityType, plannedStartTime }) => [xid, activityType, plannedStartTime]))) {
@@ -525,10 +629,21 @@ function activityScheduleSignature(day) {
   ]));
 }
 
-function rebuildDaySchedule(day, candidatePool) {
+function preferenceTimeMinutes(value) {
+  const match = /T(\d{2}):(\d{2})/.exec(value ?? "");
+  return match ? Number(match[1]) * 60 + Number(match[2]) : undefined;
+}
+
+function dayStartMinutes(dayIndex, preferences = {}) {
+  const base = 9 * 60;
+  if (dayIndex !== 0) return base;
+  return Math.max(base, preferenceTimeMinutes(preferences.arrivalDateTime) ?? base);
+}
+
+function rebuildDaySchedule(day, candidatePool, { dayStart = 9 * 60 } = {}) {
   const before = activityScheduleSignature(day);
   const legDurations = routeLegDurationsForCurrentOrder(day);
-  let cursor = 9 * 60;
+  let cursor = dayStart;
   let legIndex = 0;
 
   day.activities = (day.activities ?? []).map((activity) => {
@@ -573,7 +688,7 @@ function rebuildDaySchedule(day, candidatePool) {
   return activityScheduleSignature(day) !== before;
 }
 
-function rebuildAffectedDaySchedules(itinerary, issues, { candidatePool } = {}) {
+function rebuildAffectedDaySchedules(itinerary, issues, { candidatePool, preferences } = {}) {
   const scheduleTriggerCodes = new Set([
     "TRAVEL_TIME_CONFLICT",
     "TIME_OVERLAP",
@@ -585,7 +700,9 @@ function rebuildAffectedDaySchedules(itinerary, issues, { candidatePool } = {}) 
   for (const dayIndex of affectedDays) {
     const day = itinerary.days[dayIndex];
     if (!day?.activities?.length) continue;
-    changed = rebuildDaySchedule(day, candidatePool) || changed;
+    changed = rebuildDaySchedule(day, candidatePool, {
+      dayStart: dayStartMinutes(dayIndex, preferences)
+    }) || changed;
   }
   return changed;
 }
@@ -721,6 +838,18 @@ function resequence(itinerary) {
   }
 }
 
+function syncDayTitles(itinerary, candidatePool) {
+  const candidates = candidateById(candidatePool);
+  for (const day of itinerary.days ?? []) {
+    const names = (day.activities ?? [])
+      .filter(({ xid }) => xid)
+      .map((activity) => candidateName(candidates.get(activity.xid)) ?? activity.poi?.name)
+      .filter(Boolean);
+    if (!names.length) continue;
+    day.title = names.length === 1 ? names[0] : `${names[0]} and ${names[1]}`;
+  }
+}
+
 export function deterministicRepair(input, issues, options = {}) {
   const itinerary = clone(input);
   const semanticRepairCodes = new Set([
@@ -743,13 +872,16 @@ export function deterministicRepair(input, issues, options = {}) {
     repairContinuity(itinerary, issues),
     repairClosedPois(itinerary, issues, options),
     backfillSparseDays(itinerary, issues, options),
+    repairMealCadence(itinerary, issues),
     trimGenericFiller(itinerary, issues),
+    reduceOverlongSightseeingDays(itinerary, issues),
     compactDenseDaySchedules(itinerary, issues, options),
     rebuildAffectedDaySchedules(itinerary, issues, options),
     repairBudget(itinerary, issues)
   ].some(Boolean);
   if (changed) {
     resequence(itinerary);
+    syncDayTitles(itinerary, options.candidatePool);
     invalidateDerived(itinerary);
   }
   return {

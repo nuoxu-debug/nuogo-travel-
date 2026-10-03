@@ -418,8 +418,26 @@ describe("objective-aligned trip generation", () => {
     const selectedXid = "singapore-xid-2";
     const candidates = attractionCandidates("singapore").map((item, index) => index === 0
       ? { ...item, category: "CULTURE", kinds: "museums,cultural" }
-      : index === 1 ? { ...item, category: "NATURE", kinds: "gardens,natural" } : item);
+      : index === 1 ? { ...item, category: "NATURE", kinds: "gardens,natural" }
+      : item);
+    for (let index = 1; index <= 3; index += 1) {
+      candidates.push({
+        ...candidates[0],
+        xid: `singapore-xid-rainy-backup-${index}`,
+        name: `Rainy-day museum backup ${index}`,
+        category: "CULTURE",
+        kinds: "museums,indoor",
+        coordinates: {
+          longitude: centres.singapore.longitude + 0.15 + index * 0.002,
+          latitude: centres.singapore.latitude + 0.15 + index * 0.002,
+          coordinateSystem: "WGS84"
+        },
+        sourceUrl: `https://opentripmap.com/en/card/singapore-xid-rainy-backup-${index}`
+      });
+    }
     const result = await generateValidatedTrip(preferences("singapore", {
+      endDate: "2026-10-10",
+      dailyAttractionTarget: 2,
       rainyDayBackupEnabled: true
     }), dependencies({ retrieveAttractionCandidates: vi.fn(async () => candidates) }));
     const variant = result.variants[0];
@@ -427,12 +445,18 @@ describe("objective-aligned trip generation", () => {
     expect(variant.state).toBe("FINAL_VALIDATED");
     expect(variant.rainyDayBackups).toEqual([expect.objectContaining({
       replacesXid: selectedXid,
-      alternative: expect.objectContaining({ xid: "singapore-xid-1", city: "singapore" })
+      alternative: expect.objectContaining({ city: "singapore", kinds: "museums,indoor" })
     })]);
+    const usedIds = new Set(variant.itinerary.days.flatMap((day) =>
+      day.activities.flatMap(({ xid }) => xid ? [xid] : [])));
+    expect(usedIds.has(variant.rainyDayBackups[0].alternative.xid)).toBe(false);
     expect(variant.summary.totalMinor).toBe(variant.itinerary.budgetSummary.totalMinor);
     expect(variant.provenance).toContainEqual(expect.objectContaining({
       path: "rainyDayBackups.0.alternative",
-      source: expect.objectContaining({ sourceType: "OPENTRIPMAP_API", xid: "singapore-xid-1" })
+      source: expect.objectContaining({
+        sourceType: "OPENTRIPMAP_API",
+        xid: variant.rainyDayBackups[0].alternative.xid
+      })
     }));
   });
 
@@ -514,6 +538,47 @@ describe("objective-aligned trip generation", () => {
     expect(result.variants[0].itinerary.days.map((day) =>
       day.activities.filter(({ xid }) => xid).length
     )).toEqual([5, 5, 5]);
+  });
+
+  it("records transparent target metadata when six attractions are infeasible but five validate", async () => {
+    const input = preferences("singapore", {
+      startDate: "2026-10-10",
+      endDate: "2026-10-12",
+      budgetMinor: 2_000_000,
+      dailyAttractionTarget: 6
+    });
+    const result = await generateValidatedTrip(input, demoTravelDependencies());
+
+    expect(result.state, JSON.stringify(result.validation)).toBe("FINAL_VALIDATED");
+    expect(result.validation.issues).toEqual([]);
+    expect(result.variants[0].itinerary.days.map((day) =>
+      day.presentation.attractionTarget
+    )).toEqual([
+      expect.objectContaining({
+        requestedAttractionCount: 6,
+        scheduledAttractionCount: 5,
+        targetSatisfied: false,
+        omissionReasons: [expect.objectContaining({
+          code: "INSUFFICIENT_USABLE_TIME_AFTER_MEALS_AND_TRAVEL"
+        })]
+      }),
+      expect.objectContaining({
+        requestedAttractionCount: 6,
+        scheduledAttractionCount: 5,
+        targetSatisfied: false,
+        omissionReasons: [expect.objectContaining({
+          code: "INSUFFICIENT_USABLE_TIME_AFTER_MEALS_AND_TRAVEL"
+        })]
+      }),
+      expect.objectContaining({
+        requestedAttractionCount: 6,
+        scheduledAttractionCount: 5,
+        targetSatisfied: false,
+        omissionReasons: [expect.objectContaining({
+          code: "INSUFFICIENT_USABLE_TIME_AFTER_MEALS_AND_TRAVEL"
+        })]
+      })
+    ]);
   });
 
   for (const city of ["singapore"]) {

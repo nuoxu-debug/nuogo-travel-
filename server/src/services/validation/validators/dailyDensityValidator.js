@@ -3,7 +3,7 @@ const DAY_END_MINUTES = 20 * 60;
 const FULL_DAY_MINUTES = 8 * 60;
 const MEDIUM_DAY_MINUTES = 5 * 60;
 const LONG_ATTRACTION_MINUTES = 4 * 60;
-const MINUTES_PER_TARGET_ATTRACTION = 150;
+const MINUTES_PER_TARGET_ATTRACTION = 90;
 const attractionCategories = new Set(["ATTRACTION", "CULTURE", "HISTORY", "NATURE", "SHOPPING", "ENTERTAINMENT", "FAMILY"]);
 
 function timeMinutes(value) {
@@ -27,6 +27,13 @@ function isSlowPace(preferences, itinerary) {
 function attractionEntries(day, candidatePool) {
   const allowed = new Set(candidatePool.candidateIds);
   return day.activities.filter(({ xid }) => xid && allowed.has(xid));
+}
+
+function plannedDayMinutes(day) {
+  return (day.activities ?? []).reduce((sum, activity) =>
+    sum + (Number(activity.plannedDurationMinutes) || 0), 0) +
+    (day.legs ?? []).reduce((sum, leg) =>
+      sum + (Number(leg.durationMinutes) || 0), 0);
 }
 
 function requestedDailyTarget(preferences) {
@@ -105,8 +112,13 @@ export function validateDailyDensity({ preferences, itinerary, candidatePool }) 
   return days.flatMap(({ day, dayIndex, available, requirements }) => {
     if (!requirements) return [];
     const attractions = attractionEntries(day, candidatePool);
-    const meaningfulEntries = day.activities.length;
+    const meaningfulEntries = attractions.length;
     if (meaningfulEntries >= requirements.meaningfulEntries && attractions.length >= requirements.attractionEntries) return [];
+    if (requirements.requestedDailyAttractionTarget &&
+      attractions.length > 0 &&
+      plannedDayMinutes(day) + MINUTES_PER_TARGET_ATTRACTION > available) {
+      return [];
+    }
     if (!requirements.requestedDailyAttractionTarget &&
       attractions.some(({ plannedDurationMinutes }) => plannedDurationMinutes >= LONG_ATTRACTION_MINUTES)) return [];
     const metadata = {

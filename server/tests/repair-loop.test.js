@@ -126,7 +126,35 @@ const candidatePool = {
   }
 };
 
-const issue = (code, path = []) => ({ code, path, severity: "ERROR", metadata: {} });
+function sixCandidatePool() {
+  const ids = ["Q-B001", "Q-B002", "Q-B003", "Q-B004", "Q-B005", "Q-B006"];
+  return {
+    candidateIds: ids,
+    candidates: ids.map((id, index) => ({
+      xid: id,
+      candidateId: id,
+      name: `Grounded POI ${index + 1}`,
+      displayName: { en: `Grounded POI ${index + 1}`, zh: `Grounded POI ${index + 1}` },
+      category: ["CULTURE", "HISTORY", "NATURE", "ENTERTAINMENT", "CULTURE", "HISTORY"][index],
+      coordinates: { latitude: 1.29 + index * 0.002, longitude: 103.85 + index * 0.002 },
+      suggestedVisitDurationMinutes: [45, 75, 120, 90, 60, 105][index]
+    })),
+    operatingHours: {
+      weeklyHours: ids.map((id, index) => ({
+        poiId: id,
+        dayOfWeek: 6,
+        opensAt: index === 5 ? "14:00:00" : "09:00:00",
+        closesAt: "20:00:00",
+        isClosed: false,
+        status: "ACTIVE",
+        verificationStatus: "VERIFIED"
+      })),
+      exceptions: []
+    }
+  };
+}
+
+const issue = (code, path = [], metadata = {}) => ({ code, path, severity: "ERROR", metadata });
 
 describe("deterministic itinerary repair", () => {
   it("removes later duplicate and unknown POIs then resequences the day", () => {
@@ -470,6 +498,152 @@ describe("deterministic itinerary repair", () => {
     expect(grounded.every(({ xid, activityType }) =>
       candidatePool.candidates.some((candidate) =>
         candidate.xid === xid && candidate.category === activityType))).toBe(true);
+  });
+
+  it("backfills toward the requested six sightseeing activities without counting meals", () => {
+    const pool = sixCandidatePool();
+    const input = itinerary();
+    input.days = [{
+      ...input.days[0],
+      title: "Grounded POI 1 day",
+      activities: [
+        { ...activity("Q-B001", 1), activityType: "CULTURE", plannedDurationMinutes: 45 },
+        {
+          sequence: 2,
+          activityType: "MEAL",
+          sourceType: "AI_GENERATED",
+          plannedStartTime: "12:00",
+          plannedDurationMinutes: 60,
+          reason: "Lunch break."
+        }
+      ]
+    }];
+
+    const result = deterministicRepair(input, [{
+      code: "DAILY_DENSITY_TOO_LOW",
+      path: ["days", 0, "activities"],
+      severity: "ERROR",
+      metadata: {
+        requiredAttractionEntries: 6,
+        requestedDailyAttractionTarget: 6,
+        attractionEntries: 1,
+        availableMinutes: 720
+      }
+    }], { candidatePool: pool });
+
+    const day = result.itinerary.days[0];
+    const grounded = day.activities.filter(({ xid }) => xid);
+    const meals = day.activities.filter(({ activityType }) => activityType === "MEAL");
+    expect(grounded).toHaveLength(6);
+    expect(new Set(grounded.map(({ xid }) => xid)).size).toBe(6);
+    expect(meals.length).toBeGreaterThanOrEqual(1);
+    expect(grounded.map(({ plannedDurationMinutes }) => plannedDurationMinutes))
+      .toEqual(expect.arrayContaining([45, 75, 120, 90, 60, 105]));
+  });
+
+  it("adds lunch to a full sightseeing day crossing midday and keeps it in the midday window", () => {
+    const input = itinerary();
+    input.days = [{
+      ...input.days[0],
+      activities: [
+        { ...activity("Q-B001", 1), plannedStartTime: "09:00", plannedDurationMinutes: 90 },
+        { ...activity("Q-B002", 2), plannedStartTime: "11:00", plannedDurationMinutes: 90 },
+        { ...activity("Q-B004", 3), activityType: "CULTURE", plannedStartTime: "14:00", plannedDurationMinutes: 90 }
+      ]
+    }];
+
+    const result = deterministicRepair(input, [
+      issue("MEAL_CADENCE_MISSING", ["days", 0, "activities"], { meal: "LUNCH" })
+    ], { candidatePool });
+
+    const lunch = result.itinerary.days[0].activities.find(({ activityType, plannedStartTime }) =>
+      activityType === "MEAL" && plannedStartTime >= "11:30" && plannedStartTime <= "14:00");
+    expect(lunch).toMatchObject({
+      activityType: "MEAL",
+      plannedDurationMinutes: expect.any(Number)
+    });
+  });
+
+  it("adds dinner when a sightseeing day continues into the evening", () => {
+    const input = itinerary();
+    input.days = [{
+      ...input.days[0],
+      activities: [
+        { ...activity("Q-B001", 1), plannedStartTime: "10:00", plannedDurationMinutes: 90 },
+        { ...activity("Q-B004", 2), activityType: "CULTURE", plannedStartTime: "18:00", plannedDurationMinutes: 90 }
+      ]
+    }];
+
+    const result = deterministicRepair(input, [
+      issue("MEAL_CADENCE_MISSING", ["days", 0, "activities"], { meal: "DINNER" })
+    ], { candidatePool });
+
+    const dinner = result.itinerary.days[0].activities.find(({ activityType, plannedStartTime }) =>
+      activityType === "MEAL" && plannedStartTime >= "17:30" && plannedStartTime <= "20:00");
+    expect(dinner).toBeTruthy();
+  });
+
+  it("keeps lunch and dinner in their windows when meal repair runs with travel-time repair", () => {
+    const input = itinerary();
+    input.days = [{
+      ...input.days[0],
+      activities: [
+        { ...activity("Q-B001", 1), activityType: "CULTURE", plannedStartTime: "09:00", plannedDurationMinutes: 90 },
+        { ...activity("Q-B002", 2), plannedStartTime: "11:00", plannedDurationMinutes: 90 },
+        { ...activity("Q-B003", 3), activityType: "NATURE", plannedStartTime: "13:00", plannedDurationMinutes: 90 },
+        { ...activity("Q-B004", 4), activityType: "CULTURE", plannedStartTime: "15:00", plannedDurationMinutes: 90 }
+      ]
+    }];
+
+    const result = deterministicRepair(input, [
+      issue("TRAVEL_TIME_CONFLICT", ["days", 0, "activities", 1, "plannedStartTime"]),
+      issue("MEAL_CADENCE_MISSING", ["days", 0, "activities"], { meal: "LUNCH" }),
+      issue("MEAL_CADENCE_MISSING", ["days", 0, "activities"], { meal: "DINNER" })
+    ], { candidatePool });
+
+    const meals = result.itinerary.days[0].activities
+      .filter(({ activityType }) => activityType === "MEAL")
+      .map(({ plannedStartTime }) => plannedStartTime);
+    expect(meals.some((time) => time >= "11:30" && time <= "14:00")).toBe(true);
+    expect(meals.some((time) => time >= "17:30" && time <= "20:00")).toBe(true);
+  });
+
+  it("does not force meals into a short arrival or departure day", () => {
+    const input = itinerary();
+    input.days = [{
+      ...input.days[0],
+      activities: [
+        { ...activity("Q-B001", 1), plannedStartTime: "15:00", plannedDurationMinutes: 90 }
+      ]
+    }];
+
+    const result = deterministicRepair(input, [
+      issue("MEAL_CADENCE_MISSING", ["days", 0, "activities"], {
+        availableMinutes: 240
+      })
+    ], { candidatePool });
+
+    expect(result.itinerary.days[0].activities.some(({ activityType }) => activityType === "MEAL"))
+      .toBe(false);
+  });
+
+  it("synchronizes a stale day title after final activities change", () => {
+    const input = itinerary();
+    input.days = [{
+      ...input.days[0],
+      title: "Visit Removed Museum",
+      activities: [
+        { ...activity("Q-B001", 1), activityType: "CULTURE" },
+        { ...activity("Q-B002", 2), activityType: "HISTORY" }
+      ]
+    }];
+
+    const result = deterministicRepair(input, [
+      issue("DAILY_DENSITY_TOO_LOW", ["days", 0, "activities"])
+    ], { candidatePool });
+
+    expect(result.itinerary.days[0].title).not.toContain("Removed Museum");
+    expect(result.itinerary.days[0].title).toMatch(/National Gallery Singapore|Asian Civilisations Museum/);
   });
 
   it("creates missing requested days before backfilling grounded POIs", () => {

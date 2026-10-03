@@ -48,6 +48,48 @@ function categoryFor(poi) {
   return categoryByPoiId[poi.id] ?? "CULTURE";
 }
 
+const durationByPoiId = Object.freeze({
+  "demo-sg-merlion-park": 45,
+  "sg-ocbc-skyway": 45,
+  "sg-supertree-observatory": 60,
+  "sg-mbs-skypark": 60,
+  "sg-singapore-flyer": 60,
+  "sg-buddha-tooth-relic-temple": 60,
+  "sg-sri-mariamman-temple": 45,
+  "sg-sultan-mosque": 45,
+  "sg-singapore-city-gallery": 75,
+  "sg-asian-civilisations-museum": 90,
+  "sg-national-gallery": 120,
+  "sg-artscience-museum": 90,
+  "sg-indian-heritage-centre": 75,
+  "sg-botanic-gardens": 150,
+  "sg-national-orchid-garden": 90,
+  "sg-fort-canning-park": 75,
+  "sg-sungei-buloh": 120,
+  "sg-universal-studios": 240,
+  "sg-adventure-cove": 180,
+  "sg-night-safari": 180,
+  "sg-singapore-zoo": 240,
+  "sg-river-wonders": 180,
+  "sg-bird-paradise": 180,
+  "sg-singapore-oceanarium": 150,
+  "sg-flower-dome-cloud-forest": 150
+});
+
+const durationByCategory = Object.freeze({
+  CULTURE: 75,
+  HISTORY: 90,
+  NATURE: 120,
+  SHOPPING: 90,
+  ENTERTAINMENT: 90,
+  FAMILY: 150
+});
+
+function durationFor(poi) {
+  const category = categoryFor(poi);
+  return durationByPoiId[poi.id] ?? durationByCategory[category] ?? 90;
+}
+
 function sourceUrlFor(sources = []) {
   return sources.find(({ sourceUrl }) => sourceUrl)?.sourceUrl;
 }
@@ -75,7 +117,7 @@ function toCandidate(poi, { destination, retrievedAt }) {
     descriptionSourceType: "DATABASE_BACKED",
     kinds: categoryFor(poi).toLowerCase(),
     category: categoryFor(poi),
-    suggestedVisitDurationMinutes: 90,
+    suggestedVisitDurationMinutes: durationFor(poi),
     durationSourceType: "ESTIMATED",
     coordinates: { latitude, longitude, coordinateSystem: "WGS84" },
     ...(poi.address ? { address: poi.address } : {}),

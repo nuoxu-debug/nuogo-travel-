@@ -200,4 +200,80 @@ describe("localized itinerary presentation enrichment", () => {
     expect(input.itinerary.days[0].activities[0].poi).toEqual(original);
     expect(JSON.stringify(enriched.days[0].presentation)).not.toContain("BALANCED");
   });
+
+  it("reports requested versus scheduled attraction target using sightseeing activities only", () => {
+    const input = context();
+    input.preferences.dailyAttractionTarget = 6;
+    input.itinerary.days[0].activities = [
+      ...Array.from({ length: 5 }, (_, index) => ({
+        sequence: index + 1,
+        xid: `Q${index + 1}`,
+        activityType: "CULTURE",
+        plannedStartTime: `${String(9 + index).padStart(2, "0")}:00`,
+        plannedDurationMinutes: 60,
+        scheduledStartTime: `${String(9 + index).padStart(2, "0")}:00`,
+        scheduledEndTime: `${String(10 + index).padStart(2, "0")}:00`,
+        estimatedActivityCostMinor: 0,
+        reason: "Sightseeing.",
+        poi: {
+          name: `POI ${index + 1}`,
+          displayName: { en: `POI ${index + 1}`, zh: `POI ${index + 1}` },
+          primarySource: "OPENTRIPMAP",
+          verificationStatus: "SUPPORTING_ONLY"
+        }
+      })),
+      {
+        sequence: 6,
+        activityType: "MEAL",
+        sourceType: "AI_GENERATED",
+        plannedStartTime: "12:30",
+        plannedDurationMinutes: 60,
+        scheduledStartTime: "12:30",
+        scheduledEndTime: "13:30",
+        reason: "Lunch."
+      }
+    ];
+
+    const day = enrichItineraryPresentation(input).days[0];
+
+    expect(day.presentation.attractionTarget).toMatchObject({
+      requestedAttractionCount: 6,
+      scheduledAttractionCount: 5,
+      targetSatisfied: false,
+      omissionReasons: [expect.objectContaining({
+        code: "REQUESTED_ATTRACTION_TARGET_NOT_FULLY_SCHEDULED"
+      })]
+    });
+  });
+
+  it("marks the attraction target satisfied when the requested sightseeing count is scheduled", () => {
+    const input = context();
+    input.preferences.dailyAttractionTarget = 6;
+    input.itinerary.days[0].activities = Array.from({ length: 6 }, (_, index) => ({
+      sequence: index + 1,
+      xid: `Q${index + 1}`,
+      activityType: "CULTURE",
+      plannedStartTime: `${String(9 + index).padStart(2, "0")}:00`,
+      plannedDurationMinutes: 60,
+      scheduledStartTime: `${String(9 + index).padStart(2, "0")}:00`,
+      scheduledEndTime: `${String(10 + index).padStart(2, "0")}:00`,
+      estimatedActivityCostMinor: 0,
+      reason: "Sightseeing.",
+      poi: {
+        name: `POI ${index + 1}`,
+        displayName: { en: `POI ${index + 1}`, zh: `POI ${index + 1}` },
+        primarySource: "OPENTRIPMAP",
+        verificationStatus: "SUPPORTING_ONLY"
+      }
+    }));
+
+    const day = enrichItineraryPresentation(input).days[0];
+
+    expect(day.presentation.attractionTarget).toEqual({
+      requestedAttractionCount: 6,
+      scheduledAttractionCount: 6,
+      targetSatisfied: true,
+      omissionReasons: []
+    });
+  });
 });

@@ -329,6 +329,124 @@ describe("validation engine", () => {
     }));
   });
 
+  it("does not silently cap a requested six-attraction day to four", () => {
+    const result = validateItinerary({
+      preferences: {
+        ...preferences,
+        startDate: "2026-10-10",
+        endDate: "2026-10-10",
+        arrivalDateTime: "2026-10-10T08:00:00+08:00",
+        departureDateTime: "2026-10-10T20:00:00+08:00",
+        dailyAttractionTarget: 6
+      },
+      itinerary: {
+        ...itinerary(),
+        days: [{
+          ...itinerary().days[0],
+          activities: [
+            activity(1, "Q-B001", "09:00", 90),
+            activity(2, "Q-B002", "10:45", 90),
+            activity(3, "Q-B003", "12:30", 90),
+            activity(4, "Q-B004", "14:15", 90),
+            {
+              sequence: 5,
+              activityType: "MEAL",
+              plannedStartTime: "17:30",
+              plannedDurationMinutes: 60,
+              reason: "Dinner."
+            }
+          ]
+        }]
+      },
+      candidatePool: {
+        candidateIds: ["Q-B001", "Q-B002", "Q-B003", "Q-B004", "Q-B005", "Q-B006"],
+        candidates: [
+          { xid: "Q-B001", category: "CULTURE" },
+          { xid: "Q-B002", category: "HISTORY" },
+          { xid: "Q-B003", category: "NATURE" },
+          { xid: "Q-B004", category: "ENTERTAINMENT" },
+          { xid: "Q-B005", category: "CULTURE" },
+          { xid: "Q-B006", category: "HISTORY" }
+        ]
+      }
+    });
+
+    expect(result.issues).toContainEqual(expect.objectContaining({
+      code: "DAILY_DENSITY_TOO_LOW",
+      metadata: expect.objectContaining({
+        requestedDailyAttractionTarget: 6,
+        requiredAttractionEntries: 6,
+        attractionEntries: 4
+      })
+    }));
+  });
+
+  it("does not count meals or transport toward the requested sightseeing target", () => {
+    const issues = validateDailyDensity({
+      preferences: {
+        ...preferences,
+        startDate: "2026-10-10",
+        endDate: "2026-10-10",
+        arrivalDateTime: "2026-10-10T08:00:00+08:00",
+        departureDateTime: "2026-10-10T20:00:00+08:00",
+        dailyAttractionTarget: 6
+      },
+      itinerary: {
+        ...itinerary(),
+        days: [{
+          ...itinerary().days[0],
+          activities: [
+            activity(1, "Q-B001", "09:00", 90),
+            activity(2, "Q-B002", "10:45", 90),
+            activity(3, "Q-B003", "12:30", 90),
+            activity(4, "Q-B004", "14:15", 90),
+            {
+              sequence: 5,
+              activityType: "MEAL",
+              plannedStartTime: "16:00",
+              plannedDurationMinutes: 60,
+              reason: "Late lunch."
+            },
+            {
+              sequence: 6,
+              activityType: "TRANSFER",
+              plannedStartTime: "17:00",
+              plannedDurationMinutes: 30,
+              reason: "Move across town."
+            },
+            {
+              sequence: 7,
+              activityType: "MEAL",
+              plannedStartTime: "18:00",
+              plannedDurationMinutes: 60,
+              reason: "Dinner."
+            }
+          ]
+        }]
+      },
+      candidatePool: {
+        candidateIds: ["Q-B001", "Q-B002", "Q-B003", "Q-B004", "Q-B005", "Q-B006"],
+        candidates: [
+          { xid: "Q-B001", category: "CULTURE" },
+          { xid: "Q-B002", category: "HISTORY" },
+          { xid: "Q-B003", category: "NATURE" },
+          { xid: "Q-B004", category: "ENTERTAINMENT" },
+          { xid: "Q-B005", category: "CULTURE" },
+          { xid: "Q-B006", category: "HISTORY" }
+        ]
+      }
+    });
+
+    expect(issues).toContainEqual(expect.objectContaining({
+      code: "DAILY_DENSITY_TOO_LOW",
+      metadata: expect.objectContaining({
+        meaningfulEntries: 4,
+        attractionEntries: 4,
+        requestedDailyAttractionTarget: 6
+      })
+    }));
+  });
+
   it("counts database POI categories as attraction candidates for density", () => {
     const issues = validateDailyDensity({
       preferences: {

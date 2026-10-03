@@ -84,6 +84,21 @@ function activityEstimateMinor(activityType, references, travellerCount) {
     : 0;
 }
 
+function preferenceTimeMinutes(value) {
+  const match = /T(\d{2}):(\d{2})/.exec(value ?? "");
+  return match ? Number(match[1]) * 60 + Number(match[2]) : undefined;
+}
+
+function dayStartTime(preferences, dayIndex) {
+  const base = 9 * 60;
+  const start = dayIndex === 0
+    ? Math.max(base, preferenceTimeMinutes(preferences.arrivalDateTime) ?? base)
+    : base;
+  const hours = Math.floor(start / 60);
+  const minutes = start % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
 function activityEstimateMinorFor(activity, poi, references, travellerCount) {
   if (["CULTURE", "HISTORY", "NATURE", "FAMILY"].includes(activity.activityType)) {
     return resolveAttractionActivityCostMinor({ activity, poi, references, travellerCount });
@@ -349,8 +364,8 @@ async function evaluateDraft(draft, { preferences, candidatePool, anchors, refer
   });
   const scheduled = {
     ...routed,
-    days: routed.days.map((day) => propagateSchedule(day, {
-      dayStartTime: "09:00"
+    days: routed.days.map((day, dayIndex) => propagateSchedule(day, {
+      dayStartTime: dayStartTime(preferences, dayIndex)
     }))
   };
   const measurable = enrichedDimensions(preferences, scheduled);
