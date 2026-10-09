@@ -15,6 +15,7 @@ function sourceLabel(attraction, language) {
   if (source === "OPENTRIPMAP_API") return chinese ? "OpenTripMap 支持" : "OpenTripMap-supported";
   if (source === "DEMO_FIXTURE") return chinese ? "演示资料" : "Demo data";
   if (source === "DATABASE") return chinese ? "本地资料" : "Local data";
+  if (source === "APPLICATION_CONTENT") return chinese ? "Nuogo \u516c\u5f00\u6d4f\u89c8\u8d44\u6599" : "Nuogo public browsing data";
   return chinese ? "来源暂不可用" : "Source unavailable";
 }
 

@@ -5,6 +5,7 @@ import { apiRequest } from "../api/client.js";
 import AttractionCard, { categoryLabel } from "../components/AttractionCard.jsx";
 import AttractionDiscoveryMap from "../components/AttractionDiscoveryMap.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { getStaticSingaporeDiscovery } from "../data/staticSingaporeDiscovery.js";
 import AppShell from "../layout/AppShell.jsx";
 import { writeAttractionDraft } from "../planning/attractionDraft.js";
 
@@ -61,6 +62,12 @@ export default function DestinationDiscoveryPage() {
       setResult(data);
       setFocusedXid(data.attractions.find((item) => item.coordinates?.coordinateSystem === "WGS84")?.xid ?? null);
     } catch {
+      const fallback = getStaticSingaporeDiscovery(destination);
+      if (fallback) {
+        setResult(fallback);
+        setFocusedXid(fallback.attractions.find((item) => item.coordinates?.coordinateSystem === "WGS84")?.xid ?? null);
+        return;
+      }
       setError(true);
     }
   }, [destination]);

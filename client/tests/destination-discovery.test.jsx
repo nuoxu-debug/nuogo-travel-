@@ -99,9 +99,19 @@ describe("destination discovery", () => {
 
   it("shows a controlled empty state", async () => { respond({ ...discovery, attractions: [], candidateCount: 0 }); render(<App initialPath="/discover/singapore" />); expect(await screen.findByText("No matching attractions found.")).toBeVisible(); });
 
-  it("offers retry after a discovery error", async () => {
-    fetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({ error: { message: "Unavailable" } }) }).mockResolvedValueOnce({ ok: true, status: 200, json: async () => discovery });
-    render(<App initialPath="/discover/singapore" />); const alert = await screen.findByRole("alert"); expect(within(alert).getByText("We couldn't load attraction information right now. Please try again.")).toBeVisible(); await userEvent.click(within(alert).getByRole("button", { name: "Try again" })); expect(await screen.findByRole("radio", { name: /Choose Attractions Myself/ })).toBeVisible();
+  it("shows an error for unsupported discovery destinations", async () => {
+    render(<App initialPath="/discover/beijing" />);
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByText("We couldn't load attraction information right now. Please try again.")).toBeVisible();
+  });
+
+  it("falls back to public Singapore browsing data when the static GitHub Pages site has no API", async () => {
+    localStorage.setItem("nuogo-language", "en");
+    fetch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    render(<App initialPath="/discover/singapore" />);
+    expect(await screen.findByRole("button", { name: "View Gardens by the Bay on map" })).toBeVisible();
+    expect(screen.getAllByText("Nuogo public browsing data").length).toBeGreaterThan(0);
+    expect(screen.queryByText("We couldn't load attraction information right now. Please try again.")).not.toBeInTheDocument();
   });
 
   it("honours reduced motion for the map", async () => { window.matchMedia.mockImplementation((query) => ({ matches: query === "(prefers-reduced-motion: reduce)", media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() })); respond(); render(<App initialPath="/discover/singapore" />); expect(await screen.findByTestId("discovery-map")).toHaveAttribute("data-motion", "reduced"); });
