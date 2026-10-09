@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: nuogo-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm --workspace server run build
+    startCommand: npm --workspace server run start
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: APP_RUNTIME_MODE
+        value: live
+      - key: CLIENT_ORIGIN
+        value: https://nuoxu-debug.github.io
+      - key: DATABASE_PROVIDER
+        value: supabase
+      - key: TRAVEL_DATA_PROVIDER
+        value: database
+      - key: AI_PROVIDER
+        value: openrouter
+      - key: OPENROUTER_MODEL
+        value: google/gemini-3.1-flash-lite
+      - key: OPENROUTER_STRUCTURED_OUTPUT
+        value: "true"
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: ONEMAP_ACCESS_TOKEN
+        sync: false
+      - key: ONEMAP_API_EMAIL
+        sync: false
+      - key: ONEMAP_API_PASSWORD
+        sync: false
