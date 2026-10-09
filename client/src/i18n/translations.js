@@ -1,7 +1,7 @@
 export const translations = {
   en: {
-    nav: { plan: "Plan a trip", archive: "My trips", profile: "Profile", administration: "System Administrator", signIn: "Sign in", register: "Create account", signOut: "Sign out" },
-    shell: { skipContent: "Skip to content", home: "Nuogo home", country: "Singapore", studio: "travel studio", openMenu: "Open menu", closeMenu: "Close menu" },
+    nav: { home: "Home", discover: "Discover", plan: "Plan a trip", about: "About", help: "Help", archive: "My trips", profile: "Profile", administration: "Admin Dashboard", signIn: "Login", register: "Create account", signOut: "Sign out" },
+    shell: { skipContent: "Skip to content", home: "Nuogo home", country: "AI-assisted", studio: "travel platform", openMenu: "Open menu", closeMenu: "Close menu" },
     landing: {
       eyebrow: "Singapore travel, thoughtfully structured",
       title: "Plan Singapore, your way.",
@@ -23,11 +23,11 @@ export const translations = {
       noAccount: "New to Nuogo?", hasAccount: "Already have an account?", invalidEmail: "Enter a valid email address.",
       passwordRule: "Use at least 8 characters.", nameRule: "Enter at least 2 characters.", showPassword: "Show password", hidePassword: "Hide password",
       demoNote: "Demo mode stores your account only while the server is running.", accountLabel: "Nuogo account",
-      continueAsGuest: "Continue as guest", guestBody: "No email or password. Try the complete planner immediately.", accountDivider: "or use your account",
+      browseAsGuest: "Browse Singapore", guestBody: "Browse public Singapore destination information without creating an account.", accountDivider: "or use your account",
       signInImageAlt: "Singapore waterfront skyline", signInJourneyLabel: "Continue your route", signInJourneyBody: "Your saved plans, budgets, and maps are waiting.",
       registerImageAlt: "Singapore city gardens", registerJourneyLabel: "Build your first route", registerJourneyBody: "Choose a Travel Style and generate a trip that feels like yours.",
       invalidCredentialsError: "Email or password is incorrect. Please try again.", emailExistsError: "This email is already registered. Sign in or use another email.",
-      sessionExpiredError: "Your session has expired. Please sign in again.", invalidSubmissionError: "Please review the submitted details and try again.",
+      sessionExpiredError: "Your session has expired. Please sign in again.", loginRequiredError: "Please sign in or create an account to plan your trip.", invalidSubmissionError: "Please review the submitted details and try again.",
       serviceUnavailableError: "This sign-in option is currently unavailable.", serverError: "Nuogo is temporarily unavailable. Please try again shortly.",
       requestError: "Nuogo could not complete the request. Check your connection and try again."
     },
@@ -49,8 +49,8 @@ export const translations = {
     common: { demo: "Demo mode", loading: "Loading", retry: "Try again", unavailable: "Information unavailable", descriptionUnavailable: "Description unavailable" }
   },
   zh: {
-    nav: { plan: "规划行程", archive: "我的行程", profile: "个人资料", administration: "系统管理员", signIn: "登录", register: "创建账户", signOut: "退出登录" },
-    shell: { skipContent: "跳至主要内容", home: "Nuogo 首页", country: "新加坡", studio: "旅行工作室", openMenu: "打开菜单", closeMenu: "关闭菜单" },
+    nav: { home: "首页", discover: "景点探索", plan: "定制行程", about: "关于", help: "帮助", archive: "我的行程", profile: "个人资料", administration: "系统管理员", signIn: "登录", register: "创建账户", signOut: "退出登录" },
+    shell: { skipContent: "跳至主要内容", home: "Nuogo 首页", country: "AI 辅助", studio: "旅行平台", openMenu: "打开菜单", closeMenu: "关闭菜单" },
     landing: {
       eyebrow: "专注新加坡旅行的结构化规划", title: "用你的方式，探索新加坡。", subtitle: "根据你选择的旅行风格，生成一份有来源支持的 AI 辅助行程。",
       primary: "开始规划新加坡之旅", secondary: "了解规划流程", routeLabel: "路线预览", routeTitle: "新加坡 / 一段连贯旅程",
@@ -62,12 +62,12 @@ export const translations = {
       welcome: "欢迎回来", welcomeBody: "继续完善你的新加坡旅行计划。", createTitle: "创建 Nuogo 账户", createBody: "保存行程，并随时回来继续完善。",
       name: "姓名", email: "电子邮箱", password: "密码", signIn: "登录", register: "创建账户", noAccount: "第一次使用 Nuogo？", hasAccount: "已有账户？",
       invalidEmail: "请输入有效的电子邮箱。", passwordRule: "密码至少需要 8 个字符。", nameRule: "姓名至少需要 2 个字符。", showPassword: "显示密码", hidePassword: "隐藏密码",
-      demoNote: "演示模式中的账户仅在服务器运行期间保存。", accountLabel: "Nuogo 账户", continueAsGuest: "以访客身份继续",
-      guestBody: "无需邮箱或密码，直接体验完整规划功能。", accountDivider: "或使用账户", signInImageAlt: "新加坡滨海天际线",
+      demoNote: "演示模式中的账户仅在服务器运行期间保存。", accountLabel: "Nuogo 账户", browseAsGuest: "浏览新加坡",
+      guestBody: "无需创建账户即可浏览新加坡公开目的地资料。", accountDivider: "或使用账户", signInImageAlt: "新加坡滨海天际线",
       signInJourneyLabel: "继续你的路线", signInJourneyBody: "已保存的行程、预算和地图正在等你。", registerImageAlt: "新加坡城市花园",
       registerJourneyLabel: "创建第一条路线", registerJourneyBody: "选择旅行风格，生成真正适合你的旅程。",
       invalidCredentialsError: "邮箱或密码不正确，请重试。", emailExistsError: "该邮箱已注册，请直接登录或使用其他邮箱。",
-      sessionExpiredError: "登录状态已过期，请重新登录。", invalidSubmissionError: "请检查填写的信息后重试。", serviceUnavailableError: "当前登录服务暂不可用。",
+      sessionExpiredError: "登录状态已过期，请重新登录。", loginRequiredError: "请登录或创建账户后再规划行程。", invalidSubmissionError: "请检查填写的信息后重试。", serviceUnavailableError: "当前登录服务暂不可用。",
       serverError: "Nuogo 服务暂时不可用，请稍后重试。", requestError: "暂时无法完成请求，请检查网络后重试。"
     },
     archive: { eyebrow: "Nuogo 行程资料库", loadingTrips: "正在加载已保存行程", tripsLoadFailed: "暂时无法加载已保存行程。" },

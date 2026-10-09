@@ -20,9 +20,9 @@ function ApplicationRoutes() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/planner" element={<PlannerPage />} />
+        <Route path="/planner" element={<RegisteredRoute><PlannerPage /></RegisteredRoute>} />
         <Route path="/discover/:destination" element={<DestinationDiscoveryPage />} />
-        <Route path="/trip/:tripId" element={<ProtectedRoute><TripWorkspacePage /></ProtectedRoute>} />
+        <Route path="/trip/:tripId" element={<RegisteredRoute><TripWorkspacePage /></RegisteredRoute>} />
         <Route path="/archive" element={<RegisteredRoute><ArchivePage /></RegisteredRoute>} />
         <Route path="/profile" element={<RegisteredRoute><ProfilePage /></RegisteredRoute>} />
         <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
@@ -41,18 +41,6 @@ function SessionExpiryRedirect() {
   return <Navigate to="/login?reason=session-expired" replace state={{ reason: "session-expired" }} />;
 }
 
-function ProtectedRoute({ children }) {
-  const { ready, sessionReason, user } = useAuth();
-  const location = useLocation();
-  if (!ready) return null;
-  if (user) return children;
-  if (sessionReason === "expired") {
-    return <Navigate to="/login?reason=session-expired" replace state={{ reason: "session-expired" }} />;
-  }
-  const returnTo = `${location.pathname}${location.search}${location.hash}`;
-  return <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
-}
-
 function AdminRoute({ children }) {
   const { ready, sessionReason, user } = useAuth();
   if (!ready) return null;
@@ -68,14 +56,18 @@ function AdminRoute({ children }) {
 
 function RegisteredRoute({ children }) {
   const { ready, sessionReason, user } = useAuth();
+  const location = useLocation();
   if (!ready) return null;
+  const returnTo = `${location.pathname}${location.search}${location.hash}`;
   if (!user) {
     if (sessionReason === "expired") {
       return <Navigate to="/login?reason=session-expired" replace state={{ reason: "session-expired" }} />;
     }
-    return <Navigate to="/login" replace />;
+    return <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   }
-  if (user.accountType === "GUEST") return <Navigate to="/planner" replace />;
+  if (user.accountType === "GUEST") {
+    return <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}&reason=login-required`} replace state={{ reason: "login-required" }} />;
+  }
   return children;
 }
 

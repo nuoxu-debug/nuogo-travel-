@@ -3,7 +3,7 @@ import { ExternalServiceError, ExternalServiceTimeoutError } from "../errors.js"
 export class OpenRouterProvider {
   constructor({
     apiKey,
-    model = "deepseek/deepseek-chat-v3.1",
+    model = "google/gemini-3.1-flash-lite",
     timeoutMs = 30000,
     fetchImpl = fetch,
     supportsStructuredOutput = true

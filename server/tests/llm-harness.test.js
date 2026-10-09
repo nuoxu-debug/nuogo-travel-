@@ -111,6 +111,17 @@ describe("fixed itinerary LLM boundary", () => {
     expect(prompt.system).toContain("exactly one day object for every requiredDates value");
   });
 
+  it("tells Gemini the exact Nuogo draft contract instead of a simplified activity shape", () => {
+    const prompt = buildItineraryPrompt(preferences, candidatePool);
+
+    expect(prompt.system).toContain("Root object keys must be exactly travelStyle, trip, days");
+    expect(prompt.system).toContain("Every day must contain dayNumber, date, startPoint, activities, endPoint");
+    expect(prompt.system).toContain("Grounded POI activity shape: sequence, xid, activityType, plannedStartTime, plannedDurationMinutes, reason");
+    expect(prompt.system).toContain("Generic activity shape: sequence, activityType, sourceType, plannedStartTime, plannedDurationMinutes, reason");
+    expect(prompt.system).toContain("Never use FOOD as an activityType");
+    expect(prompt.system).toContain("Never emit simplified activity objects");
+  });
+
   it("uses the fixed schema, low temperature, and local Zod parsing", async () => {
     const provider = {
       generateStructured: vi.fn().mockResolvedValue(JSON.stringify(draft()))
@@ -184,6 +195,14 @@ describe("fixed itinerary LLM boundary", () => {
     delete missing.days[0].activities[0].xid;
     expect(() => parseDraft(JSON.stringify(missing), candidatePool.candidateIds))
       .toThrow(expect.objectContaining({ code: "MISSING_ATTRACTION_XID" }));
+  });
+
+  it("rejects Gemini's previously simplified activity objects", () => {
+    const simplified = draft();
+    simplified.days[0].activities = [{ type: "CULTURE", xid: "Q-B001" }];
+
+    expect(() => parseDraft(JSON.stringify(simplified), candidatePool.candidateIds))
+      .toThrow(expect.objectContaining({ code: "INVALID_ITINERARY_DRAFT" }));
   });
 
   it("accepts explicitly ungrounded generic entries without provider identity", () => {

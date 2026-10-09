@@ -5,6 +5,7 @@ import {
   preferredTransportModes,
   spendingProfiles,
   supportedDestinationIds,
+  supportedLanguageCodesWithLegacy,
   transportPreferenceModes
 } from "./constants.js";
 
@@ -116,7 +117,7 @@ export const travelPreferenceSchema = z.object({
   attractionSelectionMode: z.enum(attractionSelectionModes),
   selectedAttractions: z.array(selectedAttractionPreferenceSchema).max(12),
   otherPreferences: z.string().trim().max(500).optional(),
-  language: z.enum(["en", "zh"]).default("zh"),
+  language: z.enum(supportedLanguageCodesWithLegacy).default("zh-CN"),
   consentToLlmProcessing: z.literal(true)
 }).strict().superRefine((preferences, context) => {
   const ids = preferences.selectedAttractions.map(({ xid }) => xid);

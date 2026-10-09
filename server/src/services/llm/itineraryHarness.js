@@ -2,7 +2,7 @@ import { itineraryDraftJsonSchema } from "@nuogo/shared/itinerary-draft-schema";
 import { buildItineraryPrompt } from "./buildItineraryPrompt.js";
 import { DraftBoundaryError, parseDraft } from "./parseDraft.js";
 
-function normalizeInternalEndpoints(draft, allowedCandidateIds) {
+function normalizeInternalEndpoints(draft) {
   const allowed = new Set(["hotel", "origin", "destination"]);
   const hotel = { locationId: "hotel", locationType: "HOTEL" };
   const endpoint = (point) => allowed.has(point.locationId) ? point : hotel;
@@ -27,8 +27,7 @@ export async function planDraft({ preferences, profilePlan, candidatePool }, { p
     temperature: 0.2
   });
   const draft = normalizeInternalEndpoints(
-    parseDraft(raw, effectivePlan.allowedCandidateIds),
-    effectivePlan.allowedCandidateIds
+    parseDraft(raw, effectivePlan.allowedCandidateIds)
   );
   const mismatched = draft.travelStyle !== profile ||
     draft.trip.destination !== preferences.destination ||

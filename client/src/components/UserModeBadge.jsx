@@ -1,7 +1,7 @@
 const labels = {
   en: {
     guest: "Guest Mode",
-    registered: "Registered User",
+    registered: "Registered Traveller",
     administrator: "System Administrator"
   },
   zh: {

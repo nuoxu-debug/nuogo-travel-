@@ -15,9 +15,21 @@ const passwordChangeSchema = z.object({
   newPassword: passwordSchema
 }).strict();
 
+function requireRegisteredAccount(req, _res, next) {
+  if (req.user.accountType === "GUEST") {
+    const error = new Error("A registered account is required for profile access.");
+    error.code = "REGISTERED_ACCOUNT_REQUIRED";
+    error.status = 403;
+    next(error);
+    return;
+  }
+  next();
+}
+
 export function createProfileRouter({ authService, authenticate }) {
   const router = Router();
   router.use(authenticate);
+  router.use(requireRegisteredAccount);
 
   router.get("/", async (req, res, next) => {
     try {

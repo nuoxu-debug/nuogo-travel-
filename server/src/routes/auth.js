@@ -2,7 +2,7 @@ import { Router } from "express";
 import { loginRequest, registrationRequest } from "../validation/requestValidators.js";
 import { validateRequest } from "../validation/validateRequest.js";
 
-export function createAuthRouter({ authService, authenticate, demoMode = false }) {
+export function createAuthRouter({ authService, authenticate }) {
   const router = Router();
 
   router.post("/register", registrationRequest, validateRequest, async (req, res, next) => {
@@ -21,18 +21,13 @@ export function createAuthRouter({ authService, authenticate, demoMode = false }
     }
   });
 
-  router.post("/guest", async (_req, res, next) => {
-    try {
-      if (!demoMode) {
-        const error = new Error("Route was not found.");
-        error.code = "NOT_FOUND";
-        error.status = 404;
-        throw error;
+  router.post("/guest", (_req, res) => {
+    res.status(410).json({
+      error: {
+        code: "GUEST_AUTH_DEPRECATED",
+        message: "Guest browsing no longer creates an account. Please sign in or create an account to plan your trip."
       }
-      res.json(await authService.guest());
-    } catch (error) {
-      next(error);
-    }
+    });
   });
 
   router.get("/me", authenticate, async (req, res, next) => {

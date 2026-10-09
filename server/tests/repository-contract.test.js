@@ -112,6 +112,41 @@ function objectiveResult() {
   };
 }
 
+function databaseObjectiveResult() {
+  const result = objectiveResult();
+  const activity = result.variants[0].itinerary.days[0].activities[0];
+  activity.xid = "sg-asian-civilisations-museum";
+  activity.poi = {
+    canonicalPoiId: "sg-asian-civilisations-museum",
+    primarySource: "DATABASE",
+    city: "singapore",
+    matchStatus: "MATCHED",
+    verificationStatus: "SOURCE_BACKED",
+    sourceRecords: [{
+      provider: "DATABASE",
+      sourceId: "sg-asian-civilisations-museum",
+      sourceName: "National Heritage Board — Asian Civilisations Museum",
+      sourceType: "OFFICIAL",
+      sourceUrl: "https://www.nhb.gov.sg/acm/visit/admissions",
+      retrievedAt: "2026-09-30T00:00:00.000Z"
+    }]
+  };
+  result.variants[0].provenance[1] = {
+    path: "days.1.activities.1.poi",
+    source: {
+      sourceType: "DATABASE_BACKED",
+      xid: "sg-asian-civilisations-museum",
+      provider: "DATABASE",
+      sourceUrl: "https://www.nhb.gov.sg/acm/visit/admissions",
+      retrievedAt: "2026-09-30T00:00:00.000Z",
+      city: "singapore",
+      matchStatus: "MATCHED",
+      verificationStatus: "SOURCE_BACKED"
+    }
+  };
+  return result;
+}
+
 describe("repository adapters", () => {
   it("expose the same controller-facing method contract", () => {
     for (const method of requiredMethods) {
@@ -313,6 +348,32 @@ describe("repository adapters", () => {
       summary: { totalMinor: 10000 },
       rainyDayBackups: [expect.objectContaining({ estimatedCostMinor: 10000 })]
     });
+  });
+
+  it("stores database-backed canonical POI provenance for saved previews", async () => {
+    const repository = new MemoryRepository();
+    const result = databaseObjectiveResult();
+
+    await repository.saveObjectiveTrip("owner-1", result);
+
+    expect((await repository.getTrip(result.trip.id)).variants[0].itinerary.days[0].activities[0])
+      .toMatchObject({
+        xid: "sg-asian-civilisations-museum",
+        poi: {
+          primarySource: "DATABASE",
+          canonicalPoiId: "sg-asian-civilisations-museum"
+        }
+      });
+  });
+
+  it("rejects mismatched database-backed canonical POI provenance", async () => {
+    const repository = new MemoryRepository();
+    const result = databaseObjectiveResult();
+    result.variants[0].provenance[1].source.xid = "sg-other-poi";
+
+    await expect(repository.saveObjectiveTrip("owner-1", result))
+      .rejects.toThrow(/complete database-backed provenance/i);
+    expect(await repository.getTrip("objective-trip-1")).toBeUndefined();
   });
 
   it("rejects malformed current selection outcomes while archived records remain optional", async () => {

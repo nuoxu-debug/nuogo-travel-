@@ -1,6 +1,5 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { randomUUID } from "node:crypto";
 import { authLoginSchema, authRegistrationSchema } from "@nuogo/shared/schemas";
 
 const BCRYPT_ROUNDS = 12;
@@ -68,21 +67,6 @@ export class AuthService {
       error.status = 401;
       throw error;
     }
-    return { user: sessionUser(user), token: this.createToken(user) };
-  }
-
-  async guest() {
-    const guestId = randomUUID();
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    const user = await this.repository.createUser({
-      name: "Nuogo Guest",
-      email: `guest+${guestId}@nuogo.local`,
-      passwordHash: await bcrypt.hash(randomUUID(), BCRYPT_ROUNDS),
-      preferredLanguage: "zh",
-      accountType: "GUEST",
-      guestLastActivityAt: new Date().toISOString(),
-      guestExpiresAt: expiresAt
-    });
     return { user: sessionUser(user), token: this.createToken(user) };
   }
 

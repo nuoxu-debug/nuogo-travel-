@@ -25,7 +25,7 @@ export function createApp({
 
   app.use(helmet({ crossOriginResourcePolicy: false }));
   app.use(cors({ origin: config.clientOrigin }));
-  app.use(express.json({ limit: "100kb" }));
+  app.use(express.json({ limit: "1mb" }));
   app.use(rateLimit({
     windowMs: 60_000,
     limit: process.env.NODE_ENV === "test" ? 5000 : 240,
@@ -56,7 +56,8 @@ export function createApp({
   app.use("/api/trips", createTripsRouter({
     repository,
     objectivePlanner,
-    authenticate
+    authenticate,
+    config
   }));
   app.use("/api/profile", createProfileRouter({ authService, authenticate }));
   app.use("/api/privacy", createPrivacyRouter({ repository, authService, authenticate }));

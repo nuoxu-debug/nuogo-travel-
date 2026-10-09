@@ -52,6 +52,39 @@ const costReference = {
   status: "ACTIVE"
 };
 
+const operatingHour = {
+  id: "hours-gallery-saturday",
+  poiId: "poi-singapore-palace",
+  dayOfWeek: 6,
+  opensAt: "10:00",
+  closesAt: "19:00",
+  isClosed: false,
+  sourceName: "Official gallery hours",
+  sourceUrl: "https://example.edu/gallery-hours",
+  sourceType: "OFFICIAL",
+  lastReviewedDate: "2026-09-27",
+  verificationStatus: "VERIFIED",
+  status: "ACTIVE",
+  notes: "Pilot source-backed weekly hours."
+};
+
+const operatingHourException = {
+  id: "hours-gallery-christmas",
+  poiId: "poi-singapore-palace",
+  exceptionDate: "2026-12-25",
+  opensAt: null,
+  closesAt: null,
+  isClosed: true,
+  reason: "Christmas closure",
+  sourceName: "Official gallery hours",
+  sourceUrl: "https://example.edu/gallery-hours",
+  sourceType: "OFFICIAL",
+  lastReviewedDate: "2026-09-27",
+  verificationStatus: "VERIFIED",
+  status: "ACTIVE",
+  notes: "Pilot source-backed exception."
+};
+
 describe("administration API", () => {
   let app;
   let repository;
@@ -162,6 +195,212 @@ describe("administration API", () => {
       .set("Authorization", `Bearer ${adminToken}`)
       .expect(200);
     expect(listed.body.costReferences).toEqual([persisted]);
+  });
+
+  it("maintains source-backed POI-specific attraction price references", async () => {
+    const sourceBackedReference = {
+      ...costReference,
+      id: "sg-poi-singapore-zoo-exact",
+      city: "singapore",
+      destinationId: "singapore",
+      poiId: "demo-sg-singapore-zoo",
+      category: "ATTRACTION_PERSON_ENTRY",
+      tier: null,
+      minMinor: 4900,
+      representativeMinor: 4900,
+      maxMinor: 4900,
+      referenceType: "EXACT",
+      unitType: "PER_PERSON_ENTRY",
+      priceBasis: "Non-Resident Adult",
+      sourceType: "OFFICIAL",
+      sourceName: "Mandai Wildlife Reserve",
+      sourceUrl: "https://www.mandai.com/en/tickets-and-passes/single-attractions/singapore-zoo.html",
+      lastReviewedDate: "2026-09-24",
+      notes: "Planning price reference, not a guaranteed live ticket price."
+    };
+
+    await request(app).put(`/api/admin/cost-references/${sourceBackedReference.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(sourceBackedReference)
+      .expect(200, { costReference: sourceBackedReference });
+
+    const listed = await request(app).get("/api/admin/cost-references?city=singapore")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+    expect(listed.body.costReferences).toEqual([sourceBackedReference]);
+
+    const reviewedReference = {
+      ...sourceBackedReference,
+      representativeMinor: 5200,
+      minMinor: 5200,
+      maxMinor: 5200,
+      priceBasis: "Non-Resident Adult, reviewed planning reference",
+      sourceType: "OFFICIAL",
+      lastReviewedDate: "2026-09-27",
+      notes: "Reviewed by the system administrator."
+    };
+    await request(app).put(`/api/admin/cost-references/${reviewedReference.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(reviewedReference)
+      .expect(200, { costReference: reviewedReference });
+
+    const reloaded = await request(app).get("/api/admin/cost-references?city=singapore")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+    expect(reloaded.body.costReferences).toEqual([reviewedReference]);
+  });
+
+  it("does not let normal travellers modify source-backed cost references", async () => {
+    const userToken = await register(app, repository, "price-maintenance-user");
+
+    await request(app).put(`/api/admin/cost-references/${costReference.id}`)
+      .set("Authorization", `Bearer ${userToken}`)
+      .send(costReference)
+      .expect(403);
+  });
+
+  it("maintains source-backed POI operating hours and exceptions", async () => {
+    await repository.upsertCanonicalPoi(poi);
+
+    await request(app).put(`/api/admin/poi-operating-hours/${operatingHour.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(operatingHour)
+      .expect(200, { operatingHour });
+    await request(app).put(`/api/admin/poi-operating-hour-exceptions/${operatingHourException.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(operatingHourException)
+      .expect(200, { operatingHourException });
+
+    const listed = await request(app).get("/api/admin/poi-operating-hours?destinationId=singapore")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+    expect(listed.body).toEqual({
+      operatingHours: [operatingHour],
+      operatingHourExceptions: [operatingHourException],
+      coverage: {
+        canonicalPoiCount: 1,
+        activeOperatingHoursPoiCount: 1,
+        activeOperatingHoursPoiPercentage: 100
+      }
+    });
+
+    const reviewed = { ...operatingHour, closesAt: "18:00", lastReviewedDate: "2026-10-01" };
+    await request(app).put(`/api/admin/poi-operating-hours/${operatingHour.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(reviewed)
+      .expect(200, { operatingHour: reviewed });
+
+    await request(app).delete(`/api/admin/poi-operating-hour-exceptions/${operatingHourException.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200, {
+        operatingHourException: { ...operatingHourException, status: "UNAVAILABLE" }
+      });
+  });
+
+  it("preserves operating-hour date-only fields through the admin API", async () => {
+    await repository.upsertCanonicalPoi(poi);
+    const reviewedHour = {
+      ...operatingHour,
+      id: "hours-gallery-date-only",
+      lastReviewedDate: "2026-09-28"
+    };
+    const reviewedException = {
+      ...operatingHourException,
+      id: "hours-gallery-exception-date-only",
+      exceptionDate: "2026-09-28",
+      lastReviewedDate: "2026-09-28"
+    };
+
+    await request(app).put(`/api/admin/poi-operating-hours/${reviewedHour.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(reviewedHour)
+      .expect(200, { operatingHour: reviewedHour });
+    await request(app).put(`/api/admin/poi-operating-hour-exceptions/${reviewedException.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(reviewedException)
+      .expect(200, { operatingHourException: reviewedException });
+
+    const listed = await request(app).get("/api/admin/poi-operating-hours?destinationId=singapore")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+    expect(listed.body.operatingHours).toContainEqual(reviewedHour);
+    expect(listed.body.operatingHourExceptions).toContainEqual(reviewedException);
+  });
+
+  it("lets admins verify pending operating-hour records and excludes pending records from coverage", async () => {
+    await repository.upsertCanonicalPoi(poi);
+    const pending = {
+      ...operatingHour,
+      verificationStatus: "PENDING_REVIEW"
+    };
+
+    await request(app).put(`/api/admin/poi-operating-hours/${pending.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(pending)
+      .expect(200, { operatingHour: pending });
+
+    const pendingCoverage = await request(app).get("/api/admin/poi-operating-hours?destinationId=singapore")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+    expect(pendingCoverage.body.coverage).toEqual({
+      canonicalPoiCount: 1,
+      activeOperatingHoursPoiCount: 0,
+      activeOperatingHoursPoiPercentage: 0
+    });
+
+    const verified = await request(app).patch(`/api/admin/poi-operating-hours/${pending.id}/verification`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ verificationStatus: "VERIFIED" })
+      .expect(200);
+    expect(verified.body.operatingHour).toMatchObject({
+      id: pending.id,
+      verificationStatus: "VERIFIED",
+      verifiedByUserId: expect.any(String)
+    });
+    expect(verified.body.operatingHour.verifiedAt).toEqual(expect.any(String));
+
+    const verifiedCoverage = await request(app).get("/api/admin/poi-operating-hours?destinationId=singapore")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+    expect(verifiedCoverage.body.coverage.activeOperatingHoursPoiCount).toBe(1);
+  });
+
+  it("does not let normal travellers modify POI operating hours", async () => {
+    const userToken = await register(app, repository, "hours-maintenance-user");
+
+    await request(app).put(`/api/admin/poi-operating-hours/${operatingHour.id}`)
+      .set("Authorization", `Bearer ${userToken}`)
+      .send(operatingHour)
+      .expect(403);
+    await request(app).put(`/api/admin/poi-operating-hour-exceptions/${operatingHourException.id}`)
+      .set("Authorization", `Bearer ${userToken}`)
+      .send(operatingHourException)
+      .expect(403);
+    await request(app).delete(`/api/admin/poi-operating-hour-exceptions/${operatingHourException.id}`)
+      .set("Authorization", `Bearer ${userToken}`)
+      .expect(403);
+    await request(app).patch(`/api/admin/poi-operating-hours/${operatingHour.id}/verification`)
+      .set("Authorization", `Bearer ${userToken}`)
+      .send({ verificationStatus: "VERIFIED" })
+      .expect(403);
+  });
+
+  it("accepts public transport fare-band cost references", async () => {
+    const fareBand = {
+      ...costReference,
+      id: "cost-singapore-public-transport-km-0-32",
+      category: "PUBLIC_TRANSPORT_DISTANCE_FARE",
+      tier: "KM_0_32",
+      minMinor: 109,
+      maxMinor: 109,
+      representativeMinor: 109,
+      sourceName: "Public Transport Council fare table",
+      sourceUrl: "https://www.ptc.gov.sg/fare-regulation/bus-rail/fare-structure"
+    };
+    await request(app).put(`/api/admin/cost-references/${fareBand.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(fareBand)
+      .expect(200, { costReference: fareBand });
   });
 
   it("rejects incoherent ranges, tiers, statuses, and missing evidence", async () => {

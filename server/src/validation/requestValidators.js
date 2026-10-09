@@ -1,4 +1,5 @@
 import { body, checkExact } from "express-validator";
+import { supportedLanguageCodesWithLegacy } from "@nuogo/shared/constants";
 
 const supportedDestinations = ["singapore"];
 const activityPreferences = ["CULTURE", "HISTORY", "FOOD", "NATURE", "SHOPPING", "ENTERTAINMENT", "FAMILY"];
@@ -58,6 +59,6 @@ export const travelPreferenceRequest = [checkExact([
   body("travelStyle").isIn(["BUDGET_SAVING", "BALANCED", "COMFORT_FOCUSED"]),
   body("rainyDayBackupEnabled").isBoolean({ strict: true }),
   body("otherPreferences").optional({ values: "falsy" }).isString().trim().isLength({ max: 500 }),
-  body("language").optional().isIn(["en", "zh"]),
+  body("language").optional().isIn(supportedLanguageCodesWithLegacy),
   body("consentToLlmProcessing").custom((value) => value === true)
 ])];

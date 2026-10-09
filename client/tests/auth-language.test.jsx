@@ -13,7 +13,8 @@ describe("Nuogo language and authentication UI", () => {
     expect(screen.getByRole("button", { name: "\u4e2d\u6587" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
     expect(screen.getByTestId("singapore-attraction-story")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "\u4ee5\u8bbf\u5ba2\u8eab\u4efd\u7ee7\u7eed - \u8fdb\u5165\u8bbf\u5ba2\u6a21\u5f0f" })).toHaveAttribute("href", "/login?returnTo=%2Fdiscover%2Fsingapore");
+    expect(screen.queryByRole("link", { name: "\u4ee5\u8bbf\u5ba2\u8eab\u4efd\u7ee7\u7eed - \u8fdb\u5165\u8bbf\u5ba2\u6a21\u5f0f" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "\u5f00\u59cb\u89c4\u5212" }).at(0)).toHaveAttribute("href", "/discover/singapore");
     screen.getAllByRole("link", { name: "\u767b\u5f55", exact: true }).forEach((link) => expect(link).toHaveAttribute("href", "/login"));
     screen.getAllByRole("link", { name: "\u521b\u5efa\u8d26\u6237", exact: true }).forEach((link) => expect(link).toHaveAttribute("href", "/register"));
     expect(document.documentElement.lang).toBe("zh-CN");
@@ -30,7 +31,7 @@ describe("Nuogo language and authentication UI", () => {
   it("explains Guest Mode and registered itinerary management in human terms", () => {
     localStorage.setItem("nuogo-language", "en");
     render(<App initialPath="/login" />);
-    expect(screen.getByText("Plan a Singapore itinerary without creating an account. Your current planning session is available without long-term saved-trip management.")).toBeInTheDocument();
+    expect(screen.getByText("Browse public Singapore destination information without creating an account. Preference submission, generation and itinerary management require sign-in.")).toBeInTheDocument();
     expect(screen.getByText("Sign in to save and manage your itineraries across sessions.")).toBeInTheDocument();
     expect(screen.queryByText(/JWT|token|GUEST|REGISTERED/)).not.toBeInTheDocument();
   });
@@ -42,12 +43,19 @@ describe("Nuogo language and authentication UI", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("keeps guest credentials in session storage only", async () => {
-    fetch.mockResolvedValueOnce(response({ user: { id: "guest-1", name: "Nuogo Guest", accountType: "GUEST" }, token: "guest-token" }));
+  it("keeps public Guest browsing anonymous instead of creating guest credentials", async () => {
+    fetch.mockImplementation(async (url) => {
+      if (String(url).endsWith("/meta/destinations/singapore/attractions")) {
+        return response({ attractions: [] });
+      }
+      return response({});
+    });
     render(<App initialPath="/login" />);
-    await userEvent.click(screen.getByRole("button", { name: "Continue as guest" }));
-    expect(await screen.findByText("Travel brief")).toBeInTheDocument();
-    expect(sessionStorage.getItem("nuogo-token")).toBe("guest-token");
+    expect(screen.queryByRole("button", { name: "Continue as guest" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("link", { name: "Browse Singapore" }));
+    expect(await screen.findByRole("heading", { name: "Discover Destinations" })).toBeInTheDocument();
+    expect(fetch.mock.calls.find(([url]) => String(url).endsWith("/auth/guest"))).toBeUndefined();
+    expect(sessionStorage.getItem("nuogo-token")).toBeNull();
     expect(localStorage.getItem("nuogo-token")).toBeNull();
     expect(screen.queryByRole("link", { name: "My trips" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Profile" })).not.toBeInTheDocument();

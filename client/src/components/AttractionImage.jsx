@@ -1,6 +1,7 @@
 import { ImageOff, MapPin } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { getAttractionImageUrl } from "../utils/attractionAssets.js";
 
 export default function AttractionImage({
   activity,
@@ -9,10 +10,11 @@ export default function AttractionImage({
 }) {
   const { language } = useLanguage();
   const [failed, setFailed] = useState(false);
+  const imageUrl = activity?.imageUrl || getAttractionImageUrl(activity);
 
-  useEffect(() => setFailed(false), [activity?.imageUrl]);
+  useEffect(() => setFailed(false), [imageUrl]);
 
-  if (!activity?.imageUrl || failed) {
+  if (!imageUrl || failed) {
     return (
       <div
         className={`grid place-items-center bg-[#dfe8df] text-ink/55 ${className}`}
@@ -35,8 +37,8 @@ export default function AttractionImage({
   return (
     <div className={`overflow-hidden bg-[#dfe8df] ${className}`}>
       <img
-        src={activity.imageUrl}
-        alt={activity.name[language]}
+        src={imageUrl}
+        alt={activity?.name?.[language] || activity?.displayName?.[language] || (typeof activity?.name === "string" ? activity.name : (language === "zh" ? "景点图片" : "Attraction image"))}
         loading={eager ? "eager" : "lazy"}
         referrerPolicy="no-referrer"
         onError={() => setFailed(true)}

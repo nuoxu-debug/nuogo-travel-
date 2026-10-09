@@ -32,7 +32,7 @@ describe("OpenRouterProvider", () => {
 
     await provider.generateStructured(structuredRequest);
 
-    expect(requestBody).toMatchObject({ model: "deepseek/deepseek-chat-v3.1" });
+    expect(requestBody).toMatchObject({ model: "google/gemini-3.1-flash-lite" });
     expect(requestBody).not.toHaveProperty("provider");
     expect(requestBody).not.toHaveProperty("models");
   });

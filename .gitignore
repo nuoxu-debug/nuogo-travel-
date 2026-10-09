@@ -8,6 +8,7 @@ coverage/
 *.log
 .DS_Store
 database/local/
+.data/
 server/.cache/
 server/storage/attractions/
 /artifacts/

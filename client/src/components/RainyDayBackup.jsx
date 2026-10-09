@@ -24,17 +24,17 @@ export default function RainyDayBackup({ backups = [] }) {
           </p>
         </div>
       </div>
-      <ul className="mt-4 grid gap-3">
+      <ul className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {backups.map((backup) => {
           const alternative = backup.alternative ?? backup;
           return (
           <li key={`${backup.dayNumber}-${alternative.xid}`} className="border-l-2 border-sky bg-white px-4 py-3">
-            <p className="text-xs font-bold uppercase text-sky">{zh ? `第 ${backup.dayNumber} 天 · 未启用` : `Day ${backup.dayNumber} · Inactive`}</p>
+            <p className="text-xs font-bold uppercase text-sky">{zh ? "未启用 · 室内备选" : "Inactive indoor backup"}</p>
             <h3 className="mt-1 font-display text-base font-bold">{localizedText(alternative.displayName ?? alternative.name, language)}</h3>
             {backup.replacesDisplayName && <p className="mt-1 text-sm text-ink/55">{zh ? "可替代" : "Alternative to"}: {localizedText(backup.replacesDisplayName, language)}</p>}
             <p className="mt-2 flex flex-wrap gap-4 text-xs font-semibold text-ink/55">
               <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />{zh ? "来源：" : "Source: "}{displayLabel(language, "source", alternative.primarySource ?? alternative.sourceType)}</span>
-              <span className="flex items-center gap-1"><WalletCards className="h-3.5 w-3.5" aria-hidden="true" />{zh ? "替换后估算" : "Estimated if used"}: {sgd(backup.estimatedCostMinor ?? backup.estimatedActivityCostMinor)}</span>
+              <span className="flex items-center gap-1"><WalletCards className="h-3.5 w-3.5" aria-hidden="true" />{zh ? "参考估算" : "Planning estimate"}: {sgd(backup.estimatedCostMinor ?? backup.estimatedActivityCostMinor)}</span>
             </p>
           </li>
           );

@@ -79,6 +79,30 @@ function sameOpenTripMapFacts(activity, source) {
     source.verificationStatus === poi.verificationStatus;
 }
 
+function sameDatabaseFacts(activity, source) {
+  const poi = activity.poi;
+  const records = poi?.sourceRecords ?? [];
+  if (poi?.primarySource !== "DATABASE" ||
+      source.sourceType !== "DATABASE_BACKED" ||
+      source.xid !== activity.xid ||
+      poi.canonicalPoiId !== activity.xid ||
+      !supportedCities.has(source.city) ||
+      source.city !== poi.city ||
+      source.matchStatus !== poi.matchStatus ||
+      source.verificationStatus !== poi.verificationStatus ||
+      !Array.isArray(records) ||
+      records.length < 1) {
+    return false;
+  }
+  return records.some((record) =>
+    source.provider === record.provider &&
+    (!source.sourceUrl || source.sourceUrl === record.sourceUrl) &&
+    (!source.retrievedAt || (
+      source.retrievedAt === record.retrievedAt &&
+      validIsoTimestamp(source.retrievedAt)
+    )));
+}
+
 function validateAttractionMappings(variant, provenance) {
   const grounded = new Map();
   for (const day of variant.itinerary?.days ?? []) {
@@ -102,6 +126,14 @@ function validateAttractionMappings(variant, provenance) {
         if (demoSources.length !== 1) throw new TypeError("Demo attractions require explicit fixture provenance.");
         continue;
       }
+      if (activity.poi?.primarySource === "DATABASE") {
+        const databaseSources = provenance.filter((item) =>
+          item.path === path && item.source.sourceType === "DATABASE_BACKED");
+        if (databaseSources.length !== 1 || !sameDatabaseFacts(activity, databaseSources[0].source)) {
+          throw new TypeError("Database attractions require complete database-backed provenance.");
+        }
+        continue;
+      }
       const providerSources = provenance.filter((item) =>
         item.path === path && item.source.sourceType === "OPENTRIPMAP_API");
       if (providerSources.length !== 1 || !sameOpenTripMapFacts(activity, providerSources[0].source)) {
@@ -116,6 +148,14 @@ function validateAttractionMappings(variant, provenance) {
     if (activity.poi?.primarySource === "DEMO_FIXTURE") {
       const demoSources = provenance.filter((item) => item.path === path && item.source.sourceType === "DEMO_FIXTURE");
       if (demoSources.length !== 1) throw new TypeError("Demo rainy-day alternatives require explicit fixture provenance.");
+      continue;
+    }
+    if (activity.poi?.primarySource === "DATABASE") {
+      const databaseSources = provenance.filter((item) =>
+        item.path === path && item.source.sourceType === "DATABASE_BACKED");
+      if (databaseSources.length !== 1 || !sameDatabaseFacts(activity, databaseSources[0].source)) {
+        throw new TypeError("Database rainy-day alternatives require complete database-backed provenance.");
+      }
       continue;
     }
     const providerSources = provenance.filter((item) =>

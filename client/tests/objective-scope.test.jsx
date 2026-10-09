@@ -17,7 +17,7 @@ function renderLocalized(ui, language = "zh") {
 describe("assessed MVP scope", () => {
   it.each(["/shared/legacy-token", "/invite/legacy-token"])("does not expose the removed route %s", async (path) => {
     render(<App initialPath={path} />);
-    expect(await screen.findByRole("heading", { name: /Let Singapore unfold at your pace/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /Plan Smarter\. Travel Your Way\./i })).toBeInTheDocument();
     expect(screen.queryByLabelText("Shared trip workspace")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /invitation/i })).not.toBeInTheDocument();
   });

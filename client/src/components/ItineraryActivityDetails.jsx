@@ -1,6 +1,7 @@
 import { Clock3, Coins, MapPin } from "lucide-react";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { displayLabel, localizedText } from "../i18n/display.js";
+import { getAttractionImageUrl } from "../utils/attractionAssets.js";
 
 const sgd = (minor) => `S$ ${(Number(minor ?? 0) / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 
@@ -9,8 +10,22 @@ export default function ItineraryActivityDetails({ activity }) {
   const zh = language === "zh";
   const data = activity?.presentation;
   if (!data || activity.activityType === "MEAL") return null;
+  const imageUrl = getAttractionImageUrl(activity);
+  const name = localizedText(data.name, language);
+
   return <section className="mt-4 border-t border-ink/10 pt-4">
-    <h3 className="font-display text-xl font-bold">{localizedText(data.name, language)}</h3>
+    {imageUrl && (
+      <div className="mb-3.5 h-36 w-full overflow-hidden rounded-lg sm:h-44 bg-paper shadow-sm">
+        <img
+          src={imageUrl}
+          alt={name}
+          loading="lazy"
+          className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+          onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
+        />
+      </div>
+    )}
+    <h3 className="font-display text-xl font-bold">{name}</h3>
     <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-ink/55"><span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" />{data.startTime}–{data.endTime} · {data.durationMinutes} {zh ? "分钟" : "min"}</span><span>{displayLabel(language, "activity", activity.activityType)}</span><span className="flex items-center gap-1"><Coins className="h-3.5 w-3.5" />{sgd(data.estimatedCostMinor)} · {displayLabel(language, "source", data.costSourceType)}</span></p>
     <p className="mt-3 leading-7 text-ink/65">{localizedText(data.description, language, "common.descriptionUnavailable")}</p>
     {data.descriptionSourceType && <p className="mt-2 text-xs font-bold text-jade">{displayLabel(language, "source", data.descriptionSourceType)}</p>}

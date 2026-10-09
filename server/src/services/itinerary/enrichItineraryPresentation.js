@@ -88,7 +88,7 @@ function activityPresentation(activity, context) {
     durationMinutes: activity.plannedDurationMinutes,
     durationSourceType: activity.poi?.durationSourceType ?? "ESTIMATED",
     estimatedCostMinor: activity.estimatedActivityCostMinor ?? 0,
-    costSourceType: "ESTIMATED",
+    costSourceType: activity.priceReference?.sourceType ?? "ESTIMATED",
     ...(activity.reason ? {
       reason: { [context.language]: activity.reason },
       reasonSourceType: "AI_GENERATED"

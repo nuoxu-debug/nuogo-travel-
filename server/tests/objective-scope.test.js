@@ -27,7 +27,9 @@ describe("assessed MVP scope", () => {
       "/api/attractions/legacy-attraction/image",
       "/api/destinations"
     ];
-    const session = await request(app).post("/api/auth/guest").expect(200);
+    const session = await request(app).post("/api/auth/register")
+      .send({ name: "Scope Tester", email: "scope@example.test", password: "Nuogo123!" })
+      .expect(201);
     for (const path of paths) {
       const response = await request(app).get(path)
         .set("Authorization", `Bearer ${session.body.token}`)

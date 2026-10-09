@@ -12,8 +12,11 @@ export class DemoPlanProvider {
     const data = payload.UNTRUSTED_USER_DATA ?? payload.UNTRUSTED_REPAIR_DATA;
     const source = data.preferences ? data.preferences : data.draft.trip;
     const profile = data.profile ?? data.draft.travelStyle;
-    const candidates = (data.allowedCandidates ?? data.allowedCandidateIds.map((candidateId) => ({ candidateId })))
+    const rawCandidates = (data.allowedCandidates ?? data.allowedCandidateIds.map((candidateId) => ({ candidateId })))
       .filter(({ candidateId }) => data.allowedCandidateIds.includes(candidateId));
+    const broadAreaIds = new Set(["demo-sg-sentosa"]);
+    const specificCandidates = rawCandidates.filter(({ candidateId }) => !broadAreaIds.has(candidateId));
+    const candidates = specificCandidates.length >= 2 ? specificCandidates : rawCandidates;
     const strategy = getSpendingProfile(profile);
     const dayCount = Math.round(
       (new Date(`${source.endDate}T00:00:00Z`) - new Date(`${source.startDate}T00:00:00Z`)) / 86_400_000
@@ -34,10 +37,22 @@ export class DemoPlanProvider {
       const latitude = left.coordinates.latitude - right.coordinates.latitude;
       return longitude * longitude + latitude * latitude;
     };
-    const take = (near) => {
-      const available = queue.filter(({ candidateId }) => !used.has(candidateId));
+    const tooClose = (left, right) => distance(left, right) < 0.0000005;
+    const eveningIds = new Set([
+      "demo-sg-clarke-quay",
+      "demo-sg-marina-bay-sands",
+      "demo-sg-singapore-flyer",
+      "demo-sg-wings-of-time",
+      "demo-sg-skyhelix-sentosa"
+    ]);
+    const isEvening = ({ candidateId, name }) =>
+      eveningIds.has(candidateId) || /clarke quay|marina bay sands|singapore flyer|wings of time|skyhelix/i.test(String(name));
+    const take = (near, { evening = false } = {}) => {
+      const available = queue.filter((candidate) => !used.has(candidate.candidateId) && (evening ? isEvening(candidate) : !isEvening(candidate)));
+      const meaningful = near ? available.filter((candidate) => !tooClose(candidate, near)) : available;
+      const options = meaningful.length ? meaningful : available;
       const item = near
-        ? available.sort((left, right) => distance(left, near) - distance(right, near))[0]
+        ? options.sort((left, right) => distance(left, near) - distance(right, near))[0]
         : available[0];
       if (item) used.add(item.candidateId);
       return item;
@@ -61,20 +76,35 @@ export class DemoPlanProvider {
       },
       days: Array.from({ length: dayCount }, (_, index) => {
         const dayStart = toMinutes("09:00");
-        const dayEnd = toMinutes("20:00");
-        const availableTarget = Math.max(1, Math.floor((dayEnd - dayStart - 120) / 180) + 1);
-        const target = Math.min(strategy.fullDayActivityTarget, availableTarget);
+        const requestedTarget = data.dayTargets?.find(({ dayNumber }) => dayNumber === index + 1)?.activityTarget ??
+          source.dailyAttractionTarget ??
+          strategy.fullDayActivityTarget;
+        const target = Math.max(1, Number(requestedTarget) || strategy.fullDayActivityTarget);
         const selected = [];
-        while (selected.length < Math.max(1, target - 1)) {
+        const attractionTarget = Math.max(1, target);
+        while (selected.length < attractionTarget) {
           const attraction = take(selected.at(-1));
           if (!attraction) break;
           selected.push(attraction);
+        }
+        while (selected.length < attractionTarget) {
+          const attraction = take(selected.at(-1), { evening: true });
+          if (!attraction) break;
+          selected.push(attraction);
+        }
+        if (selected.length >= attractionTarget && !selected.some(isEvening)) {
+          const eveningAttraction = take(selected.at(-1), { evening: true });
+          if (eveningAttraction) {
+            const replaced = selected[selected.length - 1];
+            if (replaced) used.delete(replaced.candidateId);
+            selected[selected.length - 1] = eveningAttraction;
+          }
         }
         const activities = selected.map((candidate, activityIndex) => ({
           sequence: activityIndex + 1,
           xid: candidate.candidateId,
           activityType: activityType(activityIndex),
-          plannedStartTime: toTime(Math.min(21 * 60, dayStart + 90 + activityIndex * 180)),
+          plannedStartTime: toTime(isEvening(candidate) ? 18 * 60 : Math.min(21 * 60, dayStart + 90 + activityIndex * 180)),
           plannedDurationMinutes: strategy.activityDurationMinutes,
           reason: source.language === "zh" ? "该景点与本次旅行偏好和当天路线相符。" : "This grounded attraction fits the trip preferences and the day's route."
         }));

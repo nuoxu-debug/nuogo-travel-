@@ -14,6 +14,41 @@ const singaporeCoreLandmarks = Object.freeze([
   "demo-sg-botanic-gardens"
 ]);
 
+function dayOfWeek(date) {
+  const parsed = new Date(`${date}T00:00:00.000Z`);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.getUTCDay();
+}
+
+function requestedDates(preferences) {
+  const start = Date.parse(`${preferences.startDate}T00:00:00.000Z`);
+  const end = Date.parse(`${preferences.endDate}T00:00:00.000Z`);
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return [];
+  const dates = [];
+  for (let value = start; value <= end; value += 86_400_000) {
+    dates.push(new Date(value).toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
+function verifiedRecordsFor(candidate, date, candidatePool) {
+  const poiId = candidate.canonicalPoiId ?? candidate.xid ?? candidate.candidateId;
+  const exceptions = (candidatePool.operatingHours?.exceptions ?? [])
+    .filter((record) => record.poiId === poiId && record.exceptionDate === date);
+  const records = exceptions.length
+    ? exceptions
+    : (candidatePool.operatingHours?.weeklyHours ?? [])
+        .filter((record) => record.poiId === poiId && record.dayOfWeek === dayOfWeek(date));
+  return records.filter(({ status, verificationStatus, isClosed }) =>
+    status === "ACTIVE" && verificationStatus === "VERIFIED" && !isClosed);
+}
+
+function operatingHoursScore(candidate, preferences, candidatePool) {
+  const dates = requestedDates(preferences);
+  if (!dates.length || !candidatePool.operatingHours) return 0;
+  const verifiedDates = dates.filter((date) => verifiedRecordsFor(candidate, date, candidatePool).length > 0).length;
+  return verifiedDates / dates.length;
+}
+
 function promoteDestinationLandmarks(ids, preferences) {
   if (preferences.destination !== "singapore") return ids;
   const priority = new Map(singaporeCoreLandmarks.map((id, index) => [id, index]));
@@ -32,7 +67,7 @@ export function buildProfilePlan({ profile, preferences, candidatePool, resolved
   const selectedSet = new Set(selectedCandidateIds); const ranked = []; const selectedCandidates = [...resolvedPreferences.supported];
   const remaining = candidatePool.candidates.filter((candidate) => !selectedSet.has(candidate.xid ?? candidate.candidateId));
   while (remaining.length) {
-    const scored = remaining.map((candidate) => { const features = buildCandidateFeatures(candidate, { preferences, selectedIds: selectedSet, selectedCandidates, routeContext: { currentLocation: selectedCandidates.at(-1)?.coordinates ?? anchors?.hotel } }); const score = Object.entries(features).reduce((sum, [key, value]) => sum + value * weights[key], 0); return { candidate, score }; });
+    const scored = remaining.map((candidate) => { const features = buildCandidateFeatures(candidate, { preferences, selectedIds: selectedSet, selectedCandidates, routeContext: { currentLocation: selectedCandidates.at(-1)?.coordinates ?? anchors?.hotel } }); const score = Object.entries(features).reduce((sum, [key, value]) => sum + value * weights[key], 0) + operatingHoursScore(candidate, preferences, candidatePool); return { candidate, score }; });
     scored.sort((left, right) => right.score - left.score || (left.candidate.xid ?? left.candidate.candidateId).localeCompare(right.candidate.xid ?? right.candidate.candidateId));
     const next = scored[0].candidate; ranked.push(next.xid ?? next.candidateId); selectedCandidates.push(next); remaining.splice(remaining.indexOf(next), 1);
   }

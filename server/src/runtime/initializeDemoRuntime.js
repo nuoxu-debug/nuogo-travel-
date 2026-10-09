@@ -3,9 +3,7 @@ import { AuthService } from "../services/authService.js";
 import { demoCostReferenceFixtures } from "../services/budget/demoCostReferenceFixtures.js";
 
 export async function initializeDemoRuntime({ repository, config }) {
-  if (config.runtimeMode !== "demo") return;
-
-  if (config.travelDataProvider === "demo") {
+  if (config.runtimeMode === "demo" && config.travelDataProvider === "demo") {
     for (const destination of supportedDestinationIds) {
       const existingIds = new Set(
         (await repository.listCostReferences(destination)).map(({ id }) => id)
@@ -15,6 +13,8 @@ export async function initializeDemoRuntime({ repository, config }) {
       }
     }
   }
+
+  if (config.runtimeMode !== "demo") return;
 
   if (!config.demoAdminEmail || !config.demoAdminPassword) return;
   const authService = new AuthService(repository, config.jwtSecret);

@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("administrator updates cost evidence used by the next generated trip", async ({ page, request }, testInfo) => {
+test("administrator updates cost evidence used by the next generated trip", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "One shared demo administrator journey is sufficient.");
 
   await page.goto("/login");
@@ -17,8 +17,8 @@ test("administrator updates cost evidence used by the next generated trip", asyn
   await expect(page).toHaveURL(/\/planner$/);
 
   await page.goto("/admin");
-  await expect(page.getByRole("heading", { name: "System Administrator" })).toBeVisible();
-  await page.getByRole("tab", { name: "Cost references" }).click();
+  await expect(page.getByRole("heading", { name: "Nuogo Admin Console" })).toBeVisible();
+  await page.getByRole("tab", { name: "Price Reference Management" }).click();
 
   const foodRows = page.getByRole("row").filter({ hasText: "Food" });
   await expect(foodRows).toHaveCount(3);
@@ -34,10 +34,6 @@ test("administrator updates cost evidence used by the next generated trip", asyn
   await expect(page.getByText(/Validated trip workspace/)).toBeVisible({ timeout: 30_000 });
 
   const tripId = new URL(page.url()).pathname.split("/").at(-1);
-  const token = await page.evaluate(() => localStorage.getItem("nuogo-token"));
-  const tripResponse = await request.get(`http://127.0.0.1:8788/api/trips/${tripId}`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  expect(tripResponse.ok()).toBeTruthy();
-  expect(JSON.stringify(await tripResponse.json())).toContain("E2E reviewed balanced meal evidence");
+  const preview = await page.evaluate((id) => sessionStorage.getItem(`nuogo-trip-${id}`), tripId);
+  expect(preview).toContain("E2E reviewed balanced meal evidence");
 });

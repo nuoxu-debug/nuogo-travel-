@@ -5,6 +5,7 @@ import { useAuth } from "./AuthContext.jsx";
 
 const TripContext = createContext(null);
 const ownerAccess = { role: "owner", canEdit: true, isOwner: true };
+const previewAccess = { role: "previewer", canEdit: false, isOwner: false, canSavePreview: true };
 
 function cachedTrip(tripId) {
   if (!tripId) return null;
@@ -16,7 +17,7 @@ export function TripProvider({ tripId, children }) {
   const { ready, user } = useAuth();
   const authenticated = Boolean(ready && user && getAuthToken());
   const [trip, setTripState] = useState(() => cachedTrip(tripId));
-  const [access, setAccess] = useState(() => trip ? ownerAccess : null);
+  const [access, setAccess] = useState(() => trip ? (trip.persistenceScope === "PREVIEW" ? previewAccess : ownerAccess) : null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -58,7 +59,7 @@ export function TripProvider({ tripId, children }) {
     const saved = cachedTrip(tripId);
     if (saved?.objectiveAligned) {
       setTripState(saved);
-      setAccess(ownerAccess);
+      setAccess(saved.persistenceScope === "PREVIEW" ? previewAccess : ownerAccess);
       setLoading(false);
       return () => { active = false; };
     }

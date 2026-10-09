@@ -32,7 +32,7 @@ describe.skipIf(!runOpenRouter)("OpenRouter live provider", () => {
   it("returns parseable JSON from the configured model", async () => {
     const provider = new OpenRouterProvider({
       apiKey: process.env.OPENROUTER_API_KEY,
-      model: process.env.OPENROUTER_MODEL || "deepseek/deepseek-chat-v3.1",
+      model: process.env.OPENROUTER_MODEL || "google/gemini-3.1-flash-lite",
       timeoutMs: 60_000,
       supportsStructuredOutput: process.env.OPENROUTER_STRUCTURED_OUTPUT === "true"
     });

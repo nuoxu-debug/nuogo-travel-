@@ -182,7 +182,7 @@ describe("ProfilePage", () => {
 
     render(<App initialPath="/profile" />);
 
-    expect(await screen.findByRole("heading", { name: "一次选择，一份真正好用的新加坡行程。" }))
+    expect(await screen.findByRole("heading", { name: "欢迎回来" }))
       .toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "个人资料与隐私" })).not.toBeInTheDocument();
   });

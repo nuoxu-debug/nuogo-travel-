@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import { fileURLToPath } from "node:url";
 
 if (process.env.NODE_ENV !== "test") {
   dotenv.config();
@@ -6,6 +7,7 @@ if (process.env.NODE_ENV !== "test") {
 }
 
 export function loadConfig() {
+  const defaultDemoPersistencePath = fileURLToPath(new URL("../../.data/demo-state.json", import.meta.url));
   const runtimeMode = process.env.APP_RUNTIME_MODE || (process.env.NODE_ENV === "test" ? "test" : "live");
   if (!["live", "demo", "test"].includes(runtimeMode)) {
     throw new Error("APP_RUNTIME_MODE must be live, demo, or test.");
@@ -57,12 +59,13 @@ export function loadConfig() {
     jwtSecret: process.env.JWT_SECRET || "nuogo-demo-secret-change-in-live-mode",
     runtimeMode,
     demoMode,
+    demoPersistencePath: runtimeMode === "demo" ? (process.env.DEMO_PERSISTENCE_PATH || defaultDemoPersistencePath) : "",
     demoAdminEmail: demoMode ? (process.env.DEMO_ADMIN_EMAIL || "") : "",
     demoAdminPassword: demoMode ? (process.env.DEMO_ADMIN_PASSWORD || "") : "",
     databaseProvider,
     aiProvider,
     openRouterKey: process.env.OPENROUTER_API_KEY || "",
-    openRouterModel: process.env.OPENROUTER_MODEL || "deepseek/deepseek-chat-v3.1",
+    openRouterModel: process.env.OPENROUTER_MODEL || "google/gemini-3.1-flash-lite",
     openRouterTimeoutMs,
     openRouterStructuredOutput,
     travelDataProvider,

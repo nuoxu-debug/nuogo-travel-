@@ -465,6 +465,75 @@ describe("deterministic itinerary repair", () => {
     expect(result.itinerary.days[0].activities[0].reason).toContain("Singapore Botanic Gardens Visitor Centre");
   });
 
+  it("replaces an unverified scheduled POI with an unused verified-open candidate", () => {
+    const input = itinerary();
+    input.days[0].activities = [{
+      ...activity("Q-B999"),
+      plannedStartTime: "10:00",
+      scheduledStartTime: "10:00",
+      scheduledEndTime: "11:30",
+      plannedDurationMinutes: 90
+    }];
+    const pool = {
+      ...candidatePool,
+      candidateIds: [...candidatePool.candidateIds, "Q-B999"],
+      candidates: [
+        ...candidatePool.candidates,
+        {
+          xid: "Q-B999",
+          candidateId: "Q-B999",
+          name: "Unverified Gallery",
+          displayName: { en: "Unverified Gallery", zh: "Unverified Gallery" },
+          category: "CULTURE",
+          coordinates: { latitude: 1.286, longitude: 103.85 }
+        }
+      ]
+    };
+
+    const result = deterministicRepair(input, [
+      issue("POI_OPENING_HOURS_UNVERIFIED", ["days", 0, "activities", 0, "xid"], { xid: "Q-B999" })
+    ], { candidatePool: pool });
+
+    expect(result.changed).toBe(true);
+    expect(result.itinerary.days[0].activities[0]).toMatchObject({
+      xid: "Q-B004",
+      activityType: "CULTURE",
+      plannedStartTime: "09:00"
+    });
+    expect(result.itinerary.days[0].activities[0].reason).toContain("verified-open replacement");
+    expect(result.itinerary.days[0].activities[0].scheduledStartTime).toBeUndefined();
+  });
+
+  it("leaves an unverified POI unchanged when no verified feasible replacement exists", () => {
+    const input = itinerary();
+    input.days[0].activities = [{
+      ...activity("Q-B999"),
+      plannedStartTime: "10:00",
+      scheduledStartTime: "10:00",
+      scheduledEndTime: "11:30",
+      plannedDurationMinutes: 90
+    }];
+    const pool = {
+      ...candidatePool,
+      candidateIds: ["Q-B999"],
+      candidates: [{
+        xid: "Q-B999",
+        candidateId: "Q-B999",
+        name: "Unverified Gallery",
+        category: "CULTURE",
+        coordinates: { latitude: 1.286, longitude: 103.85 }
+      }],
+      operatingHours: { weeklyHours: [], exceptions: [] }
+    };
+
+    const result = deterministicRepair(input, [
+      issue("POI_OPENING_HOURS_UNVERIFIED", ["days", 0, "activities", 0, "xid"], { xid: "Q-B999" })
+    ], { candidatePool: pool });
+
+    expect(result.changed).toBe(false);
+    expect(result.itinerary.days[0].activities[0].xid).toBe("Q-B999");
+  });
+
   it("backfills a sparse full day with real unused grounded candidates", () => {
     const input = itinerary();
     input.days = [{
@@ -564,6 +633,57 @@ describe("deterministic itinerary repair", () => {
     });
   });
 
+  it("adds lunch at the latest valid lunch start before an afternoon attraction", () => {
+    const input = itinerary();
+    input.days = [{
+      ...input.days[0],
+      activities: [
+        { sequence: 1, activityType: "MEAL", plannedStartTime: "09:00", plannedDurationMinutes: 60 },
+        { ...activity("Q-B001", 2), activityType: "FAMILY", plannedStartTime: "10:30", plannedDurationMinutes: 180 },
+        { ...activity("Q-B002", 3), activityType: "FAMILY", plannedStartTime: "14:30", plannedDurationMinutes: 150 }
+      ]
+    }];
+
+    const result = deterministicRepair(input, [
+      issue("MEAL_CADENCE_MISSING", ["days", 0, "activities"], { meal: "LUNCH" })
+    ], { candidatePool });
+
+    const lunch = result.itinerary.days[0].activities.find(({ activityType, plannedStartTime }) =>
+      activityType === "MEAL" && plannedStartTime === "13:30");
+    expect(lunch).toMatchObject({
+      activityType: "MEAL",
+      plannedDurationMinutes: expect.any(Number)
+    });
+  });
+
+  it("shrinks an overlong grounded visit to the canonical duration so lunch can be repaired", () => {
+    const input = itinerary();
+    input.days = [{
+      ...input.days[0],
+      activities: [
+        { ...activity("Q-B001", 1), activityType: "FAMILY", plannedStartTime: "10:30", plannedDurationMinutes: 240 },
+        { ...activity("Q-B002", 2), activityType: "FAMILY", plannedStartTime: "19:00", plannedDurationMinutes: 180 }
+      ]
+    }];
+    const pool = {
+      ...candidatePool,
+      candidates: candidatePool.candidates.map((candidate) =>
+        candidate.xid === "Q-B001"
+          ? { ...candidate, suggestedVisitDurationMinutes: 180 }
+          : candidate)
+    };
+
+    const result = deterministicRepair(input, [
+      issue("MEAL_CADENCE_MISSING", ["days", 0, "activities"], { meal: "LUNCH" })
+    ], { candidatePool: pool });
+
+    const firstAttraction = result.itinerary.days[0].activities.find(({ xid }) => xid === "Q-B001");
+    const lunch = result.itinerary.days[0].activities.find(({ activityType, plannedStartTime }) =>
+      activityType === "MEAL" && plannedStartTime === "13:30");
+    expect(firstAttraction.plannedDurationMinutes).toBe(180);
+    expect(lunch).toMatchObject({ activityType: "MEAL" });
+  });
+
   it("adds dinner when a sightseeing day continues into the evening", () => {
     const input = itinerary();
     input.days = [{
@@ -583,7 +703,28 @@ describe("deterministic itinerary repair", () => {
     expect(dinner).toBeTruthy();
   });
 
-  it("keeps lunch and dinner in their windows when meal repair runs with travel-time repair", () => {
+  it("adds dinner before an evening attraction so the attraction can be shifted later", () => {
+    const input = itinerary();
+    input.days = [{
+      ...input.days[0],
+      activities: [
+        { ...activity("Q-B001", 1), activityType: "NATURE", plannedStartTime: "10:30", plannedDurationMinutes: 90 },
+        { ...activity("Q-B002", 2), activityType: "FAMILY", plannedStartTime: "18:00", plannedDurationMinutes: 180 }
+      ]
+    }];
+
+    const result = deterministicRepair(input, [
+      issue("MEAL_CADENCE_MISSING", ["days", 0, "activities"], { meal: "DINNER" })
+    ], { candidatePool });
+
+    const dinner = result.itinerary.days[0].activities.find(({ activityType, plannedStartTime }) =>
+      activityType === "MEAL" && plannedStartTime === "17:30");
+    expect(dinner).toMatchObject({ activityType: "MEAL" });
+    expect(result.itinerary.days[0].activities.find(({ xid }) => xid === "Q-B002").plannedStartTime)
+      .toBe("18:00");
+  });
+
+  it("keeps feasible dinner and does not force a lunch when travel-time repair blocks the lunch window", () => {
     const input = itinerary();
     input.days = [{
       ...input.days[0],
@@ -604,8 +745,190 @@ describe("deterministic itinerary repair", () => {
     const meals = result.itinerary.days[0].activities
       .filter(({ activityType }) => activityType === "MEAL")
       .map(({ plannedStartTime }) => plannedStartTime);
-    expect(meals.some((time) => time >= "11:30" && time <= "14:00")).toBe(true);
+    expect(meals.some((time) => time >= "11:30" && time <= "14:00")).toBe(false);
     expect(meals.some((time) => time >= "17:30" && time <= "20:00")).toBe(true);
+  });
+
+  it("keeps a repaired lunch inside the lunch window when rebuilding a shifted day", () => {
+    const input = itinerary();
+    input.days = [{
+      ...input.days[0],
+      activities: [
+        { ...activity("Q-B001", 1), activityType: "CULTURE", plannedStartTime: "10:00", scheduledStartTime: "10:00", scheduledEndTime: "11:00", plannedDurationMinutes: 60 },
+        {
+          sequence: 2,
+          activityType: "MEAL",
+          sourceType: "AI_GENERATED",
+          plannedStartTime: "12:30",
+          scheduledStartTime: "14:43",
+          scheduledEndTime: "15:43",
+          plannedDurationMinutes: 60,
+          reason: "Lunch break."
+        },
+        { ...activity("Q-B004", 3), activityType: "CULTURE", plannedStartTime: "16:06", scheduledStartTime: "16:06", scheduledEndTime: "18:06", plannedDurationMinutes: 120 }
+      ]
+    }];
+
+    const result = deterministicRepair(input, [
+      issue("TRAVEL_TIME_CONFLICT", ["days", 0, "activities", 1, "plannedStartTime"], { shiftMinutes: 133 })
+    ], { candidatePool });
+
+    const lunch = result.itinerary.days[0].activities.find(({ activityType }) => activityType === "MEAL");
+    expect(lunch.plannedStartTime >= "11:30").toBe(true);
+    expect(lunch.plannedStartTime <= "14:00").toBe(true);
+  });
+
+  it("does not silently rebuild lunch to 14:43 outside the validator window", () => {
+    const input = itinerary();
+    input.days = [{
+      ...input.days[0],
+      activities: [
+        { ...activity("Q-B001", 1), activityType: "CULTURE", plannedStartTime: "10:00", scheduledStartTime: "10:00", scheduledEndTime: "11:00", plannedDurationMinutes: 60 },
+        {
+          sequence: 2,
+          activityType: "MEAL",
+          sourceType: "AI_GENERATED",
+          plannedStartTime: "12:30",
+          scheduledStartTime: "14:43",
+          scheduledEndTime: "15:43",
+          plannedDurationMinutes: 60,
+          reason: "Lunch break."
+        },
+        { ...activity("Q-B004", 3), activityType: "CULTURE", plannedStartTime: "16:06", scheduledStartTime: "16:06", scheduledEndTime: "18:06", plannedDurationMinutes: 120 }
+      ]
+    }];
+
+    const result = deterministicRepair(input, [
+      issue("TRAVEL_TIME_CONFLICT", ["days", 0, "activities", 1, "plannedStartTime"], { shiftMinutes: 133 })
+    ], { candidatePool });
+
+    expect(result.itinerary.days[0].activities.find(({ activityType }) => activityType === "MEAL").plannedStartTime)
+      .not.toBe("14:43");
+  });
+
+  it("keeps a repaired dinner inside the dinner window when rebuilding a shifted day", () => {
+    const input = itinerary();
+    input.days = [{
+      ...input.days[0],
+      activities: [
+        { ...activity("Q-B001", 1), activityType: "CULTURE", plannedStartTime: "15:00", scheduledStartTime: "15:00", scheduledEndTime: "16:00", plannedDurationMinutes: 60 },
+        {
+          sequence: 2,
+          activityType: "MEAL",
+          sourceType: "AI_GENERATED",
+          plannedStartTime: "17:30",
+          scheduledStartTime: "20:08",
+          scheduledEndTime: "21:08",
+          plannedDurationMinutes: 60,
+          reason: "Dinner break."
+        }
+      ]
+    }];
+
+    const result = deterministicRepair(input, [
+      issue("TRAVEL_TIME_CONFLICT", ["days", 0, "activities", 1, "plannedStartTime"], { shiftMinutes: 158 })
+    ], { candidatePool });
+
+    const dinner = result.itinerary.days[0].activities.find(({ activityType }) => activityType === "MEAL");
+    expect(dinner.plannedStartTime >= "17:30").toBe(true);
+    expect(dinner.plannedStartTime <= "20:00").toBe(true);
+  });
+
+  it("does not insert lunch into a long grounded activity that blocks the whole lunch window", () => {
+    const input = itinerary();
+    input.days = [{
+      ...input.days[0],
+      activities: [
+        { ...activity("Q-B001", 1), activityType: "CULTURE", plannedStartTime: "10:00", plannedDurationMinutes: 60 },
+        { ...activity("Q-B004", 2), activityType: "CULTURE", plannedStartTime: "11:43", plannedDurationMinutes: 180 },
+        { ...activity("Q-B002", 3), activityType: "HISTORY", plannedStartTime: "16:06", plannedDurationMinutes: 120 }
+      ]
+    }];
+
+    const result = deterministicRepair(input, [
+      issue("MEAL_CADENCE_MISSING", ["days", 0, "activities"], { meal: "LUNCH" })
+    ], { candidatePool });
+
+    expect(result.changed).toBe(false);
+    expect(result.itinerary.days[0].activities.some(({ activityType }) => activityType === "MEAL")).toBe(false);
+  });
+
+  it("repair loop keeps controlled failure when no feasible lunch slot exists", async () => {
+    const input = itinerary();
+    input.days = [{
+      ...input.days[0],
+      activities: [
+        { ...activity("Q-B001", 1), activityType: "CULTURE", plannedStartTime: "10:00", plannedDurationMinutes: 60 },
+        { ...activity("Q-B004", 2), activityType: "CULTURE", plannedStartTime: "11:43", plannedDurationMinutes: 180 },
+        { ...activity("Q-B002", 3), activityType: "HISTORY", plannedStartTime: "16:06", plannedDurationMinutes: 120 }
+      ]
+    }];
+    const evaluate = vi.fn(async (current) => ({
+      itinerary: current,
+      validation: { valid: false, issues: [issue("MEAL_CADENCE_MISSING", ["days", 0, "activities"], { meal: "LUNCH" })] }
+    }));
+
+    const result = await repairUntilValid({ itinerary: input, candidatePool, evaluate });
+
+    expect(result.state).toBe("FAILED");
+    expect(result.repairs.at(-1).action).toBe("NO_REPAIR_AVAILABLE");
+    expect(result.itinerary.days[0].activities.some(({ activityType }) => activityType === "MEAL")).toBe(false);
+  });
+
+  it("does not ask semantic repair to fabricate an infeasible lunch slot", async () => {
+    const input = itinerary();
+    input.days = [{
+      ...input.days[0],
+      activities: [
+        { ...activity("Q-B001", 1), activityType: "CULTURE", plannedStartTime: "10:00", plannedDurationMinutes: 60 },
+        { ...activity("Q-B004", 2), activityType: "CULTURE", plannedStartTime: "11:43", plannedDurationMinutes: 180 },
+        { ...activity("Q-B002", 3), activityType: "HISTORY", plannedStartTime: "16:06", plannedDurationMinutes: 120 }
+      ]
+    }];
+    const semanticRepair = vi.fn(async () => input);
+
+    const result = await repairUntilValid({
+      itinerary: input,
+      candidatePool,
+      evaluate: async (current) => ({
+        itinerary: current,
+        validation: { valid: false, issues: [issue("MEAL_CADENCE_MISSING", ["days", 0, "activities"], { meal: "LUNCH" })] }
+      }),
+      semanticRepair
+    });
+
+    expect(result.state).toBe("FAILED");
+    expect(semanticRepair).not.toHaveBeenCalled();
+    expect(result.repairs.at(-1).action).toBe("NO_REPAIR_AVAILABLE");
+  });
+
+  it("does not move or duplicate an already valid lunch during schedule repair", () => {
+    const input = itinerary();
+    input.days = [{
+      ...input.days[0],
+      activities: [
+        { ...activity("Q-B001", 1), activityType: "CULTURE", plannedStartTime: "09:30", scheduledStartTime: "09:45", scheduledEndTime: "11:15", plannedDurationMinutes: 90 },
+        {
+          sequence: 2,
+          activityType: "MEAL",
+          sourceType: "AI_GENERATED",
+          plannedStartTime: "12:00",
+          scheduledStartTime: "12:00",
+          scheduledEndTime: "13:00",
+          plannedDurationMinutes: 60,
+          reason: "Lunch break."
+        },
+        { ...activity("Q-B004", 3), activityType: "CULTURE", plannedStartTime: "14:00", scheduledStartTime: "14:00", scheduledEndTime: "15:30", plannedDurationMinutes: 90 }
+      ]
+    }];
+
+    const result = deterministicRepair(input, [
+      issue("TRAVEL_TIME_CONFLICT", ["days", 0, "activities", 0, "plannedStartTime"], { shiftMinutes: 15 })
+    ], { candidatePool });
+
+    const lunches = result.itinerary.days[0].activities.filter(({ activityType }) => activityType === "MEAL");
+    expect(lunches).toHaveLength(1);
+    expect(lunches[0].plannedStartTime).toBe("12:00");
   });
 
   it("does not force meals into a short arrival or departure day", () => {
@@ -793,6 +1116,40 @@ describe("bounded repair loop", () => {
       action: "AI_REPAIR",
       finalState: "FINAL_VALIDATED"
     }]);
+  });
+
+  it("reruns complete validation after replacing an unverified POI", async () => {
+    const input = itinerary();
+    input.days[0].activities = [{
+      ...activity("Q-B999"),
+      plannedStartTime: "10:00",
+      scheduledStartTime: "10:00",
+      scheduledEndTime: "11:30",
+      plannedDurationMinutes: 90
+    }];
+    const pool = {
+      ...candidatePool,
+      candidateIds: [...candidatePool.candidateIds, "Q-B999"],
+      candidates: [
+        ...candidatePool.candidates,
+        { xid: "Q-B999", candidateId: "Q-B999", name: "Unverified Gallery", category: "CULTURE", coordinates: { latitude: 1.286, longitude: 103.85 } }
+      ]
+    };
+    const evaluate = vi.fn(async (current) => {
+      const xid = current.days[0].activities[0].xid;
+      return {
+        itinerary: current,
+        validation: xid === "Q-B999"
+          ? { valid: false, issues: [issue("POI_OPENING_HOURS_UNVERIFIED", ["days", 0, "activities", 0, "xid"], { xid })] }
+          : { valid: true, issues: [] }
+      };
+    });
+
+    const result = await repairUntilValid({ itinerary: input, candidatePool: pool, evaluate });
+
+    expect(result.state).toBe("FINAL_VALIDATED");
+    expect(evaluate).toHaveBeenCalledTimes(2);
+    expect(result.itinerary.days[0].activities[0].xid).toBe("Q-B004");
   });
 
   it("allows chained deterministic repairs when continuity changes create new travel-time conflicts", async () => {

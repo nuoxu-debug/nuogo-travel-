@@ -41,7 +41,7 @@ test("the shell presents guest, registered, and administrator modes with friendl
   await page.getByLabel("Email address").fill(`phase-one-${Date.now()}@nuogo.test`);
   await page.getByLabel("Password", { exact: true }).fill("Nuogo123!");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByTestId("user-mode-badge")).toHaveText("Registered User");
+  await expect(page.getByTestId("user-mode-badge")).toHaveText("Registered Traveller");
 
   await page.getByRole("button", { name: "Sign out" }).click();
   await page.goto("/login");

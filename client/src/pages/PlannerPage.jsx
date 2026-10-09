@@ -1,9 +1,19 @@
-import { Bot, Database, MapPin, Route, ShieldCheck, WalletCards } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import {
+  Bed,
+  CalendarDays,
+  Clock3,
+  Flower2,
+  MapPin,
+  Plane,
+  ShieldCheck,
+  Users,
+  WalletCards
+} from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { deriveTripDurationDays } from "@nuogo/shared/schemas";
 import { apiRequest } from "../api/client.js";
 import PipelineOverlay from "../components/PipelineOverlay.jsx";
-import PlannerJourneyHorizon from "../components/PlannerJourneyHorizon.jsx";
 import PreferenceForm, { initialPreferenceValues } from "../components/PreferenceForm.jsx";
 import { publicAssetPath } from "../assets.js";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -20,19 +30,29 @@ function generationErrorMessage(error, language) {
   return error.message;
 }
 
-function generationIssueMessage(code, language) {
+function generationIssueMessage(code, language, preferences = {}) {
+  const dailyTarget = Number(preferences.dailyAttractionTarget);
+  const alreadyLightTarget = Number.isFinite(dailyTarget) && dailyTarget <= 2;
   const messages = {
     DAILY_DURATION_EXCEEDED: {
-      zh: "其中一天的景点与交通总时长超过可用时间。请减少当天景点，或选择更轻松的行程节奏。",
-      en: "One day exceeds the available time once attraction visits and travel are included. Choose fewer places or a slower pace."
+      zh: alreadyLightTarget
+        ? "其中一天的景点、用餐与交通总时长超过可用时间。请调整日期、出发/结束地点、交通方式或必去景点后重试。"
+        : "其中一天的景点与交通总时长超过可用时间。请减少当天景点，或选择更轻松的行程节奏。",
+      en: alreadyLightTarget
+        ? "One day exceeds the available time once visits, meals, and travel are included. Adjust the dates, start/end points, transport, or required sights and try again."
+        : "One day exceeds the available time once attraction visits and travel are included. Choose fewer places or a slower pace."
     },
     ROUTE_UNAVAILABLE: {
       zh: "系统无法为部分地点建立可用路线。请调整必去景点后重试。",
       en: "A usable route could not be created for part of the itinerary. Adjust the required sights and try again."
     },
     TRAVEL_TIME_CONFLICT: {
-      zh: "景点之间的交通时间与安排冲突。请减少当天景点后重试。",
-      en: "Travel time conflicts with the planned activity times. Choose fewer places for that day and try again."
+      zh: alreadyLightTarget
+        ? "景点之间的交通时间与安排冲突。当前每日景点目标已经较少，请调整日期、出发/结束地点、交通方式或必去景点后重试。"
+        : "景点之间的交通时间与安排冲突。请减少当天景点后重试。",
+      en: alreadyLightTarget
+        ? "Travel time conflicts with the planned activity times. The daily attraction target is already low; adjust the dates, start/end points, transport, or required sights and try again."
+        : "Travel time conflicts with the planned activity times. Choose fewer places for that day and try again."
     },
     TIME_OVERLAP: {
       zh: "部分活动时间重叠。请调整日期或偏好后重试。",
@@ -49,10 +69,20 @@ function generationIssueCodes(error) {
   return [...new Set(error.details.issueCodes.filter((code) => typeof code === "string" && code))];
 }
 
+function tripDuration(values) {
+  try {
+    return deriveTripDurationDays(values.startDate, values.endDate);
+  } catch {
+    return 0;
+  }
+}
+
 export default function PlannerPage() {
   const { language } = useLanguage();
-  const { loginAsGuest, ready: authReady, user } = useAuth();
+  const { ready: authReady } = useAuth();
+  const location = useLocation();
   const navigate = useNavigate();
+  const preferenceWorkflowRef = useRef(null);
   const [generating, setGenerating] = useState(false);
   const [generationState, setGenerationState] = useState("RETRIEVING");
   const [error, setError] = useState("");
@@ -62,6 +92,15 @@ export default function PlannerPage() {
     attractionDraft: readAttractionDraft()
   }));
 
+  useLayoutEffect(() => {
+    if (location.state?.plannerScrollTarget !== "preferences") return;
+    preferenceWorkflowRef.current?.scrollIntoView({
+      block: "start",
+      inline: "nearest",
+      behavior: "auto"
+    });
+  }, [location.state]);
+
   useEffect(() => {
     if (preferences.attractionDraft && preferences.attractionDraft.destination !== preferences.destination) {
       clearAttractionDraft();
@@ -69,16 +108,15 @@ export default function PlannerPage() {
     }
   }, [preferences.attractionDraft, preferences.destination]);
 
-  async function generate(preferences) {
+  async function generate(nextPreferences) {
     setError("");
     setIssueCodes([]);
     setGenerating(true);
     setGenerationState("RETRIEVING");
     try {
-      if (!user) await loginAsGuest();
       const result = await apiRequest("/trips/generate", {
         method: "POST",
-        body: JSON.stringify(preferences)
+        body: JSON.stringify(nextPreferences)
       });
       setGenerationState(result.state);
       const trip = {
@@ -91,8 +129,11 @@ export default function PlannerPage() {
         revision: result.trip.revision ?? 0
       };
       sessionStorage.setItem(`nuogo-trip-${result.trip.id}`, JSON.stringify(trip));
-      if (result.guestClaimToken) {
-        sessionStorage.setItem(`nuogo-guest-claim-${result.trip.id}`, result.guestClaimToken);
+      if (result.preview) {
+        sessionStorage.setItem(`nuogo-preview-result-${result.trip.id}`, JSON.stringify(result.preview));
+      }
+      if (result.previewToken) {
+        sessionStorage.setItem(`nuogo-preview-token-${result.trip.id}`, result.previewToken);
       }
       navigate(`/trip/${result.trip.id}`);
     } catch (requestError) {
@@ -102,55 +143,54 @@ export default function PlannerPage() {
     }
   }
 
+  const duration = tripDuration(preferences);
+  const zh = language === "zh";
+  const summaryRows = [
+    [MapPin, zh ? "目的地" : "Destination", zh ? "新加坡" : "Singapore"],
+    [Plane, zh ? "出发地" : "Departure", preferences.departurePoint],
+    [Bed, zh ? "住宿 / 结束地点" : "Stay / end point", preferences.arrivalPoint],
+    [CalendarDays, zh ? "旅行日期" : "Travel dates", `${preferences.startDate} - ${preferences.endDate} (${duration} ${zh ? "天" : duration === 1 ? "day" : "days"})`],
+    [Users, zh ? "旅行人数" : "Travellers", `${preferences.travellerCount} ${zh ? "人" : Number(preferences.travellerCount) === 1 ? "person" : "people"}`],
+    [WalletCards, zh ? "总预算" : "Budget", `S$ ${Number(preferences.budgetSgd).toLocaleString()}`]
+  ];
+
   return (
     <AppShell>
-      <section data-testid="planner-brief-hero" data-layout="travel-brief" className="relative overflow-hidden bg-paper px-5 py-12 text-ink sm:px-8 sm:py-16">
-        <img
-          aria-hidden="true"
-          data-testid="planner-brief-background"
-          className="absolute inset-0 h-full w-full scale-[1.04] object-cover object-center opacity-[.42] saturate-[.72] contrast-[.86] blur-[.55px]"
-          src={publicAssetPath("/images/landing/attractions/chinatown.png")}
-          alt=""
-        />
-        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-paper/76 via-paper/46 to-paper/24" />
-        <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(circle_at_24%_50%,rgba(247,248,244,.84)_0,rgba(247,248,244,.55)_34%,rgba(247,248,244,.14)_68%)]" />
-        <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-px bg-ink/10" />
-        <div aria-hidden="true" className="absolute right-[6%] top-0 hidden h-full w-[31%] border-x border-ink/8 lg:block" />
-        <div className="relative mx-auto grid max-w-[1440px] gap-9 lg:grid-cols-[1.05fr_.95fr] lg:items-center">
-          <div className="max-w-3xl">
-            <p className="inline-flex items-center gap-2 text-xs font-extrabold text-lake"><span className="h-2 w-2 rounded-full bg-vermilion" />{language === "zh" ? "新加坡行程 · 第 01 步" : "Singapore brief · step 01"}</p>
-            <h1 className="mt-5 max-w-[15ch] font-display text-4xl font-extrabold leading-[.98] sm:text-6xl lg:text-[4.75rem]">
-              {language === "zh" ? "一次选择，一份真正好用的新加坡行程。" : "One choice. One Singapore itinerary you can actually use."}
-            </h1>
-            <p className="mt-5 max-w-xl text-base leading-7 text-ink/60">{language === "zh" ? "从景点、日期与预算开始，Nuogo 会围绕你的旅行方式生成并验证一份新加坡行程。" : "Start with places, dates, and budget. Nuogo generates and validates one Singapore itinerary around your travel style."}</p>
-            <div className="mt-7 flex flex-wrap gap-2 text-xs font-bold text-ink/65"><span className="rounded-full border border-ink/12 bg-white px-3 py-2">{language === "zh" ? "仅限新加坡" : "Singapore only"}</span><span className="rounded-full border border-ink/12 bg-white px-3 py-2">{language === "zh" ? "SGD 硬预算" : "SGD hard budget"}</span><span className="rounded-full border border-ink/12 bg-white px-3 py-2">{language === "zh" ? "一份行程" : "One itinerary"}</span></div>
-          </div>
-          <aside className="relative overflow-hidden rounded-lg border border-ink/10 bg-ink p-5 text-white shadow-panel sm:p-7">
-            <div aria-hidden="true" className="absolute inset-y-0 right-0 w-[38%] border-l border-white/10 bg-white/[.035]" />
-            <div className="relative flex items-center justify-between border-b border-white/14 pb-4"><div><p className="text-[10px] font-extrabold text-[#e7baa1]">{language === "zh" ? "新加坡 / 行程简报" : "SINGAPORE / TRIP BRIEF"}</p><strong className="mt-1 block font-display text-xl">{language === "zh" ? "出发前的规划信号" : "Planning signals before you go"}</strong></div><MapPin className="h-7 w-7 text-[#9be0c7]" /></div>
-            <ol className="relative mt-5 grid gap-4">
-              {[
-                [Database, "01", language === "zh" ? "景点资料" : "Grounded POIs", language === "zh" ? "从新加坡景点发现开始" : "Begin with Singapore discovery"],
-                [Bot, "02", language === "zh" ? "旅行风格" : "Travel style", language === "zh" ? "选择一份适合你的节奏" : "Choose one pace that fits you"],
-                [WalletCards, "03", language === "zh" ? "硬预算验证" : "Hard budget", language === "zh" ? "行程总额保持在预算内" : "Keep the total within your budget"],
-                [Route, "04", language === "zh" ? "路线连续性" : "Route continuity", language === "zh" ? "让每日安排更连贯" : "Keep each day connected" ]
-              ].map(([Icon, step, label, detail]) => <li key={step} className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3"><span className="grid h-8 w-8 place-items-center rounded-full border border-white/20 bg-white/5 text-[#9be0c7]"><Icon className="h-4 w-4" /></span><div><span className="text-[10px] font-extrabold text-white/35">{step}</span><strong className="ml-2 text-sm">{label}</strong><small className="mt-1 block text-xs text-white/58">{detail}</small></div></li>)}
+      <div className="planner-postcard-page">
+        <section data-testid="planner-brief-hero" data-layout="travel-brief" className="planner-postcard-hero">
+          <div className="planner-hero-copy">
+            <p className="planner-kicker">{zh ? "当前试点规划" : "Current pilot planning"}</p>
+            <h1>{zh ? "使用新加坡试点创建可验证行程" : "Plan with the current Singapore pilot"}</h1>
+            <p>{zh ? "Nuogo 的验证规划流程当前运行在新加坡目的地数据上。分享你的偏好、预算和日期，系统会生成一份受检查的行程。" : "Nuogo's validated planning flow currently runs on Singapore destination data. Share your travel style, budget, dates, and preferred places to generate one checked itinerary."}</p>
+            <span className="planner-time-note"><Clock3 />{zh ? "约 2 分钟完成" : "About 2 minutes"}</span>
+            <ol className="planner-progress-rail" aria-label={zh ? "规划步骤" : "Planning steps"}>
+              {[zh ? "基本信息" : "Basics", zh ? "兴趣偏好" : "Interests", zh ? "出行方式" : "Transport", zh ? "其他需求" : "Needs", zh ? "生成行程" : "Generate"].map((label, index) => (
+                <li key={label} className={index === 0 ? "is-active" : ""}><span>{index + 1}</span><strong>{label}</strong></li>
+              ))}
             </ol>
-          </aside>
-        </div>
-      </section>
+          </div>
+          <figure className="planner-hero-scene">
+            <img
+              data-testid="planner-brief-background"
+              src={publicAssetPath("/images/singapore-marina-bay-hero.png")}
+              alt={zh ? "新加坡滨海湾与花园城市景观" : "Singapore Marina Bay and garden skyline"}
+            />
+            <figcaption>
+              <strong>Singapore</strong>
+              <span>{zh ? "一座让人想再来的城市" : "A city built for one more wander"}</span>
+            </figcaption>
+          </figure>
+        </section>
 
-      <section className="px-5 py-10 sm:px-8 sm:py-16">
-        <div className="mx-auto grid max-w-[1440px] gap-8 xl:grid-cols-[minmax(0,1fr)_380px]">
-          <div className="rounded-lg border border-ink/10 bg-white/78 p-5 shadow-panel backdrop-blur-2xl sm:p-8 lg:p-10">
-            <div className="mb-9 flex flex-col justify-between gap-4 border-b border-ink/10 pb-7 sm:flex-row sm:items-end">
+        <section ref={preferenceWorkflowRef} className="planner-postcard-workspace scroll-mt-24">
+          <div className="planner-form-card">
+            <div className="planner-form-heading">
               <div>
-                <p className="text-xs font-extrabold uppercase text-vermilion">{language === "zh" ? "旅行需求" : "Travel brief"}</p>
-                <h2 className="mt-2 font-display text-3xl font-extrabold">{language === "zh" ? "告诉 Nuogo 你想怎样探索新加坡" : "Tell Nuogo how you want to explore Singapore"}</h2>
+                <p>{zh ? "旅行需求" : "Travel needs"}</p>
+                <h2>{zh ? "先确认这次试点行程的基本形状" : "Start with the shape of this pilot trip"}</h2>
               </div>
-              <span className="text-xs font-bold text-ink/40">{language === "zh" ? "约 2 分钟" : "About 2 minutes"}</span>
+              <span>{zh ? "约 2 分钟" : "About 2 minutes"}</span>
             </div>
-            <PlannerJourneyHorizon values={preferences} />
             <PreferenceForm
               onSubmit={generate}
               values={preferences}
@@ -158,17 +198,17 @@ export default function PlannerPage() {
               busy={generating || !authReady}
             />
             {error && (
-              <div role="alert" className="mt-5 border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-                <strong>{language === "zh" ? "暂时无法生成行程。" : "The itinerary could not be generated."}</strong>
-                <p className="mt-1">{error}</p>
+              <div role="alert" className="planner-generation-error">
+                <strong>{zh ? "暂时无法生成行程。" : "The itinerary could not be generated."}</strong>
+                <p>{error}</p>
                 {issueCodes.length > 0 && (
-                  <div className="mt-3 border-t border-red-200 pt-3">
-                    <p className="font-semibold">{language === "zh" ? "实际验证原因" : "Validation reason"}</p>
-                    <ul className="mt-1 space-y-2">
+                  <div>
+                    <p>{zh ? "实际验证原因" : "Validation reason"}</p>
+                    <ul>
                       {issueCodes.map((code) => (
                         <li key={code}>
-                          <p>{generationIssueMessage(code, language)}</p>
-                          <p className="mt-1 text-xs font-semibold text-red-700">{code}</p>
+                          <span>{generationIssueMessage(code, language, preferences)}</span>
+                          <code>{code}</code>
                         </li>
                       ))}
                     </ul>
@@ -178,34 +218,58 @@ export default function PlannerPage() {
             )}
           </div>
 
-          <aside className="relative h-[640px] overflow-hidden rounded-lg bg-ink text-white shadow-panel xl:sticky xl:top-24">
-            <img
-              className="absolute inset-0 h-full w-full object-cover opacity-68"
-              src="https://images.unsplash.com/photo-1525625293386-3f8f99389edd?auto=format&fit=crop&w=1000&q=84"
-              alt={language === "zh" ? "新加坡滨海湾城市景观" : "Singapore Marina Bay skyline"}
-            />
-            <div className="absolute inset-0 bg-ink/35" />
-            <div className="absolute left-5 top-5 rounded-lg border border-white/25 bg-ink/70 px-3 py-2 text-xs font-bold backdrop-blur-lg">
-              {language === "zh" ? "新加坡 · 规划资料" : "SG · PLANNING DATA"}
-            </div>
-            <div className="absolute inset-x-0 bottom-0 bg-ink/90 p-7">
-              <ShieldCheck className="h-7 w-7 text-lake" />
-              <h2 className="mt-4 font-display text-2xl font-bold">
-                {language === "zh" ? "结构化输入，由服务端校验约束" : "Structured here. Constraint-checked on the server."}
-              </h2>
-              <p className="mt-3 text-sm leading-6 text-white/65">
-                {language === "zh"
-                  ? "景点、兴趣与预算使用结构化资料，系统提示词不会暴露在前端。"
-                  : "Attractions, interests, and budgets use structured data. System prompts never reach the frontend."}
-              </p>
-              <div className="mt-6 grid grid-cols-2 border-t border-white/15 pt-5 text-xs">
-                <span><b className="block text-lg text-white">1</b><i className="not-italic text-white/45">{language === "zh" ? "份已验证行程" : "validated itinerary"}</i></span>
-                <span><b className="block text-lg text-white">6</b><i className="not-italic text-white/45">{language === "zh" ? "类费用" : "cost categories"}</i></span>
+          <aside className="planner-summary-rail" aria-label={zh ? "旅程摘要" : "Trip summary"}>
+            <section className="planner-summary-card">
+              <div className="planner-summary-title"><MapPin /><div><h2>{zh ? "旅程摘要" : "Trip summary"}</h2><p>{zh ? "你的新加坡之旅" : "Your Singapore trip"}</p></div></div>
+              <figure className="planner-polaroid">
+                <img src={publicAssetPath("/images/landing/attractions/marina-bay.png")} alt={zh ? "新加坡滨海湾" : "Singapore Marina Bay"} />
+                <figcaption>Singapore</figcaption>
+              </figure>
+              <dl className="planner-summary-list">
+                {summaryRows.map(([Icon, label, value]) => <div key={label}><dt><Icon />{label}</dt><dd>{value}</dd></div>)}
+              </dl>
+            </section>
+            <section className="planner-inspiration-card">
+              <div className="planner-summary-title"><Flower2 /><div><h2>{zh ? "新加坡灵感速览" : "Singapore inspiration"}</h2><p>{zh ? "花园城市、多元文化与美食的天堂" : "Garden city, food, colour, and waterfront light"}</p></div></div>
+              <div className="planner-inspiration-grid">
+                {[
+                  ["/images/landing/attractions/marina-bay.png", zh ? "滨海湾金沙" : "Marina Bay"],
+                  ["/images/landing/attractions/gardens-by-the-bay.png", zh ? "滨海湾花园" : "Gardens"],
+                  ["/images/attractions/sentosa.jpg", zh ? "圣淘沙岛" : "Sentosa"],
+                  ["/images/landing/attractions/chinatown.png", zh ? "牛车水" : "Chinatown"]
+                ].map(([src, label]) => <figure key={label}><img src={publicAssetPath(src)} alt={label} /><figcaption><MapPin />{label}</figcaption></figure>)}
               </div>
-            </div>
+              <blockquote>{zh ? "从城市地标到海岛暖风，从多元美食到在地文化，发现属于你的新加坡。" : "From city icons to island air, from local food to heritage streets, shape the Singapore that fits you."}</blockquote>
+              <div className="planner-summary-trust"><ShieldCheck />{zh ? "结构化输入，服务端验证预算与约束。" : "Structured inputs, server-validated budget and constraints."}</div>
+            </section>
+            <section className="planner-route-note-card" aria-label={zh ? "新加坡路线灵感" : "Singapore route note"}>
+              <div>
+                <p>{zh ? "路线小记" : "Route note"}</p>
+                <h2>{zh ? "从滨海湾开始，慢慢走进街区。" : "Begin at the bay, then drift into the neighbourhoods."}</h2>
+              </div>
+              <img src={publicAssetPath("/images/landing/attractions/merlion.png")} alt={zh ? "鱼尾狮与滨海湾" : "Merlion by Marina Bay"} />
+              <span>{zh ? "Nuogo 会把景点、交通和预算放在同一条可验证的旅程里。" : "Nuogo keeps places, transport, and budget inside one checked journey."}</span>
+            </section>
+            <section className="planner-check-card" aria-label={zh ? "行程检查" : "Itinerary checks"}>
+              <div className="planner-summary-title"><ShieldCheck /><div><h2>{zh ? "生成前会检查" : "Checked before generation"}</h2><p>{zh ? "不只是好看的行程" : "More than a pretty route"}</p></div></div>
+              <ul>
+                <li><WalletCards />{zh ? "预算总额不能超出你填写的 SGD 预算。" : "The final total must stay inside your SGD budget."}</li>
+                <li><Clock3 />{zh ? "每天的景点数量会被时间和交通限制检查。" : "Daily attraction count is checked against time and transport limits."}</li>
+                <li><MapPin />{zh ? "手动选择的景点会作为高优先级偏好。" : "Manually selected attractions become high-priority preferences."}</li>
+              </ul>
+            </section>
+            <section className="planner-postcard-tip-card" aria-label={zh ? "新加坡小提示" : "Singapore planning tip"}>
+              <p>{zh ? "小提示" : "Little tip"}</p>
+              <h2>{zh ? "留一点空间给下雨、排队和突然想喝咖啡的时间。" : "Leave room for rain, queues, and the sudden need for kopi."}</h2>
+              <div>
+                <span>SGD</span>
+                <span>MRT</span>
+                <span>POI</span>
+              </div>
+            </section>
           </aside>
-        </div>
-      </section>
+        </section>
+      </div>
       <PipelineOverlay open={generating} state={generationState} language={language} />
     </AppShell>
   );

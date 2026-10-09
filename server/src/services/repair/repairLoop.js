@@ -94,6 +94,10 @@ export async function repairUntilValid(context, { maxAttempts = 20 } = {}) {
       repairs.push({ attempt: attempts, issueCodes, action: "ATTEMPT_LIMIT_REACHED" });
       break;
     }
+    if (issueCodes.every((code) => code === "MEAL_CADENCE_MISSING")) {
+      repairs.push({ attempt: attempts, issueCodes, action: "NO_REPAIR_AVAILABLE" });
+      break;
+    }
     if (!context.semanticRepair) {
       repairs.push({ attempt: attempts, issueCodes, action: "NO_REPAIR_AVAILABLE" });
       break;

@@ -41,7 +41,58 @@ async function register(app, email = "profile@nuogo.test") {
   };
 }
 
+async function createLegacyGuestAuth(repository) {
+  const guest = await repository.createUser({
+    name: "Legacy Guest",
+    email: "guest+legacy@nuogo.local",
+    passwordHash: "legacy-hash",
+    preferredLanguage: "zh",
+    accountType: "GUEST",
+    guestLastActivityAt: new Date().toISOString(),
+    guestExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+  });
+  const token = jwt.sign(
+    { sub: guest.id, email: guest.email, accountType: "GUEST" },
+    jwtSecret,
+    { expiresIn: "24h" }
+  );
+  return { Authorization: `Bearer ${token}` };
+}
+
 describe("profile and account lifecycle API", () => {
+  it("registers public users only as registered travellers", async () => {
+    const { app, repository } = buildApp();
+
+    const account = await request(app).post("/api/auth/register").send({
+      name: "Traveller Student",
+      email: "traveller-role@nuogo.test",
+      password: registeredPassword
+    }).expect(201);
+
+    expect(account.body.user).toMatchObject({
+      role: "user",
+      accountType: "REGISTERED"
+    });
+    await expect(repository.getUserRole(account.body.user.id)).resolves.toBe("user");
+  });
+
+  it("does not let the client self-assign or update an administrator role", async () => {
+    const { app } = buildApp();
+
+    await request(app).post("/api/auth/register").send({
+      name: "Role Escalation",
+      email: "role-escalation@nuogo.test",
+      password: registeredPassword,
+      role: "admin"
+    }).expect(400);
+
+    const account = await register(app, "role-profile@nuogo.test");
+    await request(app).patch("/api/profile").set(account.auth).send({
+      name: "Role Profile",
+      role: "admin"
+    }).expect(400);
+  });
+
   it("reads and updates only the supported public profile fields", async () => {
     const { app, repository } = buildApp();
     const account = await register(app);
@@ -115,8 +166,8 @@ describe("profile and account lifecycle API", () => {
     }).expect(400);
   });
 
-  it("reserves the internal guest email namespace for explicitly created guests", async () => {
-    const { app } = buildApp();
+  it("reserves the internal guest email namespace without creating guest users", async () => {
+    const { app, repository } = buildApp();
 
     await request(app).post("/api/auth/register").send({
       name: "Reserved Address",
@@ -124,11 +175,9 @@ describe("profile and account lifecycle API", () => {
       password: registeredPassword
     }).expect(400);
 
-    const guest = await request(app).post("/api/auth/guest").expect(200);
-    expect(guest.body.user).toMatchObject({
-      email: expect.stringMatching(/^guest\+.+@nuogo\.local$/),
-      accountType: "GUEST"
-    });
+    const guest = await request(app).post("/api/auth/guest").expect(410);
+    expect(guest.body.error.code).toBe("GUEST_AUTH_DEPRECATED");
+    expect([...repository.users.values()].filter((user) => user.accountType === "GUEST")).toHaveLength(0);
   });
 
   it("returns a safe server error when authenticated user lookup fails", async () => {
@@ -227,19 +276,17 @@ describe("profile and account lifecycle API", () => {
     await request(app).get("/api/profile").set(account.auth).expect(401);
   });
 
-  it("identifies and safely deletes an authenticated guest without a password", async () => {
-    const { app } = buildApp();
-    const guest = await request(app).post("/api/auth/guest").expect(200);
-    const auth = { Authorization: `Bearer ${guest.body.token}` };
+  it("blocks legacy guest tokens from profile and account lifecycle APIs", async () => {
+    const { app, repository } = buildApp();
+    const auth = await createLegacyGuestAuth(repository);
 
-    const profile = await request(app).get("/api/profile").set(auth).expect(200);
-    expect(profile.body.profile.accountType).toBe("GUEST");
-    expect(profile.body.profile.preferredLanguage).toBe("zh");
+    const profile = await request(app).get("/api/profile").set(auth).expect(403);
+    expect(profile.body.error.code).toBe("REGISTERED_ACCOUNT_REQUIRED");
 
-    await request(app).delete("/api/privacy/account")
+    const deletion = await request(app).delete("/api/privacy/account")
       .set(auth)
       .send({ confirmation: "DELETE" })
-      .expect(204);
-    await request(app).get("/api/profile").set(auth).expect(401);
+      .expect(403);
+    expect(deletion.body.error.code).toBe("REGISTERED_ACCOUNT_REQUIRED");
   });
 });

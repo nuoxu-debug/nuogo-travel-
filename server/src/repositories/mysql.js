@@ -433,7 +433,7 @@ export class MySqlRepository {
       for (const leg of run.legs ?? []) {
         await connection.execute(
           "INSERT INTO trip_legs (id, itinerary_run_id, day_number, sequence, leg_json) VALUES (?, ?, ?, ?, ?)",
-          [leg.id ?? randomUUID(), run.id, leg.dayNumber, leg.sequence, json(leg)]
+          [`${run.id}:${leg.dayNumber}:${leg.sequence}`, run.id, leg.dayNumber, leg.sequence, json(leg)]
         );
       }
       for (const item of run.provenance ?? []) {

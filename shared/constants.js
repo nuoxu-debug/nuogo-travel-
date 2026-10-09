@@ -12,6 +12,32 @@ export const localTransportModes = ["WALK", "PUBLIC_TRANSIT", "TAXI", "MIXED"];
 export const transportPreferenceModes = ["MANUAL", "AUTO_CHEAPEST"];
 export const preferredTransportModes = ["PUBLIC_TRANSIT", "WALK", "TAXI"];
 export const supportedCurrencies = ["SGD"];
+export const supportedLanguages = Object.freeze([
+  "en",
+  "zh-CN",
+  "zh-TW",
+  "ms",
+  "id",
+  "ja",
+  "ko",
+  "th",
+  "vi",
+  "es",
+  "fr",
+  "de",
+  "it",
+  "pt",
+  "ar",
+  "hi",
+  "ru",
+  "tr",
+  "nl",
+  "fil"
+]);
+export const supportedLanguageCodesWithLegacy = Object.freeze([
+  ...supportedLanguages,
+  "zh"
+]);
 export const attractionSelectionModes = ["MANUAL", "AUTO"];
 export const sourceTypes = [
   "USER_PROVIDED", "OPENTRIPMAP_API", "DATABASE_BACKED", "AI_GENERATED",

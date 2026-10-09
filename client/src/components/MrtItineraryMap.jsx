@@ -2,7 +2,7 @@ import { TrainFront } from "lucide-react";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { localizedText } from "../i18n/display.js";
 
-const SMRT_NETWORK_MAP_URL = "https://journey.smrt.com.sg/static/journey/img/network_map_2026_June.png";
+const SMRT_NETWORK_MAP_URL = "/images/reference/singapore-mrt-network-map.png";
 const SMRT_NETWORK_MAP_PAGE = "https://journey.smrt.com.sg/journey/mrt_network_map/";
 
 const zhText = {

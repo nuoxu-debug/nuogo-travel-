@@ -1,4 +1,4 @@
-import { ArrowRight, Compass, RefreshCw } from "lucide-react";
+import { ArrowRight, Compass, Lightbulb, Map, RefreshCw, Wand2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiRequest } from "../api/client.js";
@@ -14,10 +14,15 @@ function discoveryCopy(language) {
   const zh = language === "zh";
   return {
     zh,
-    eyebrow: zh ? "\u65b0\u52a0\u5761 POI \u53d1\u73b0" : "Singapore POI discovery",
-    title: zh ? "\u53d1\u73b0\u65b0\u52a0\u5761" : "Discover Singapore",
-    body: zh ? "\u6d4f\u89c8\u65b0\u52a0\u5761\u5173\u6ce8\u70b9\uff0c\u9009\u62e9\u4f60\u5e0c\u671b Nuogo \u7eb3\u5165\u8003\u8651\u7684\u666f\u70b9\u3002" : "Explore Singapore Points of Interest and choose attractions you would like Nuogo to consider.",
-    definition: zh ? "POI \u5305\u62ec\u666f\u70b9\u3001\u535a\u7269\u9986\u3001\u516c\u56ed\u4e0e\u5730\u6807\uff0c\u53ef\u7528\u4e8e\u884c\u7a0b\u89c4\u5212\u3002" : "POIs are attractions, museums, parks, and landmarks that can be used during itinerary planning.",
+    eyebrow: zh ? "\u76ee\u7684\u5730\u53d1\u73b0" : "Destination catalogue",
+    title: zh ? "\u53d1\u73b0\u76ee\u7684\u5730" : "Discover Destinations",
+    body: zh ? "\u6d4f\u89c8 Nuogo \u7684\u76ee\u7684\u5730\u5c42\u3002\u65b0\u52a0\u5761\u662f\u5f53\u524d\u53ef\u7528\u7684\u9a8c\u8bc1\u89c4\u5212\u8bd5\u70b9\uff0c\u672a\u6765\u76ee\u7684\u5730\u53ef\u901a\u8fc7\u540c\u4e00\u6570\u636e\u67b6\u6784\u52a0\u5165\u3002" : "Browse Nuogo's destination layer. Singapore is currently available for validated planning, while future destinations can be added through the same data architecture.",
+    definitionTitle: zh ? "\u5f53\u524d\u8bd5\u70b9" : "Current pilot",
+    definition: zh ? "\u76ee\u7684\u5730\u4e0a\u7ebf\u9700\u8981\u53ef\u7528 POI\u3001\u9884\u7b97\u53c2\u8003\u4e0e\u884c\u7a0b\u9a8c\u8bc1\u89c4\u5219\u3002" : "A destination needs usable POIs, budget references and itinerary validation rules before it becomes selectable.",
+    pilotLabel: zh ? "\u53ef\u7528\u8bd5\u70b9\u76ee\u7684\u5730" : "Available Pilot Destination",
+    pilotStatus: zh ? "\u5f53\u524d\u53ef\u7528" : "Available now",
+    pilotBody: zh ? "\u65b0\u52a0\u5761\u662f Nuogo \u5f53\u524d\u5df2\u9a8c\u8bc1\u7684\u76ee\u7684\u5730\uff0c\u652f\u6301\u666f\u70b9\u53d1\u73b0\u3001\u504f\u597d\u9009\u62e9\u4e0e\u884c\u7a0b\u751f\u6210\u3002" : "Singapore is Nuogo's current validated destination, supporting attraction discovery, preference capture and itinerary generation.",
+    futureNote: zh ? "\u66f4\u591a\u76ee\u7684\u5730\u5c06\u5728\u672a\u6765\u7248\u672c\u4e2d\u52a0\u5165\u3002" : "More destinations coming in future releases.",
     modeTitle: zh ? "\u4f60\u5e0c\u671b\u5982\u4f55\u9009\u62e9\u666f\u70b9\uff1f" : "How would you like to choose attractions?",
     manual: zh ? "\u81ea\u5df1\u9009\u62e9\u666f\u70b9" : "Choose Attractions Myself",
     manualBody: zh ? "\u9009\u62e9\u5e0c\u671b Nuogo \u4f18\u5148\u8003\u8651\u7684\u65b0\u52a0\u5761\u666f\u70b9\u3002" : "Select preferred Singapore attractions for Nuogo to prioritise.",
@@ -33,6 +38,8 @@ function discoveryCopy(language) {
     retry: zh ? "\u91cd\u8bd5" : "Try again",
     preferenceNote: zh ? "\u6240\u9009\u666f\u70b9\u5c06\u4f5c\u4e3a\u9ad8\u4f18\u5148\u7ea7\u504f\u597d\uff0c\u4ecd\u9700\u901a\u8fc7\u9884\u7b97\u4e0e\u884c\u7a0b\u53ef\u884c\u6027\u68c0\u67e5\u3002" : "Selected attractions are high-priority preferences and still pass budget and itinerary feasibility checks.",
     continue: zh ? "\u7ee7\u7eed\u586b\u5199\u504f\u597d" : "Continue to Preferences",
+    poiTitle: zh ? "\u65b0\u52a0\u5761\u666f\u70b9" : "Singapore POIs",
+    poiBody: zh ? "\u63a2\u7d22\u65b0\u52a0\u5761\u7684\u7cbe\u9009\u666f\u70b9\uff0c\u518d\u67e5\u770b\u8be6\u60c5\u6216\u4fdd\u5b58\u5230\u89c4\u5212\u504f\u597d\u3002" : "Explore curated Singapore places, then inspect details or save them for planning.",
   };
 }
 
@@ -101,20 +108,53 @@ export default function DestinationDiscoveryPage() {
   }
 
   return <AppShell><div className="discovery-page">
-    <section className="discovery-hero" aria-labelledby="discovery-title"><div className="discovery-hero-copy"><p><Compass aria-hidden="true" /> {t.eyebrow}</p><h1 id="discovery-title">{t.title}</h1><span>{t.body}</span></div><aside className="discovery-definition"><strong>{t.zh ? "从景点开始" : "Start with places"}</strong>{t.definition}</aside></section>
-    <section>
+    <section className="discovery-hero" aria-labelledby="discovery-title">
+      <div className="discovery-hero-copy">
+        <p><Compass aria-hidden="true" /> {t.eyebrow}</p>
+        <h1 id="discovery-title">{t.title}</h1>
+        <span>{t.body}</span>
+      </div>
+      <aside className="discovery-definition">
+        <strong>{t.definitionTitle}</strong>
+        {t.definition}
+      </aside>
+    </section>
+    <section className="destination-availability" aria-labelledby="destination-availability-title">
+      <article className="destination-availability__card">
+        <div>
+          <span>{t.pilotLabel}</span>
+          <h2 id="destination-availability-title">Singapore</h2>
+          <p>{t.pilotBody}</p>
+        </div>
+        <strong>{t.pilotStatus}</strong>
+      </article>
+      <p className="destination-availability__future">{t.futureNote}</p>
+    </section>
+    <section className="discovery-workspace">
       {error && <div role="alert" className="discovery-state"><strong>{t.failure}</strong><button type="button" onClick={load}><RefreshCw aria-hidden="true" /> {t.retry}</button></div>}
       {!error && !result && <div className="discovery-state" aria-live="polite">{t.loading}</div>}
       {result && attractions.length === 0 && <div className="discovery-state">{t.empty}</div>}
       {result && attractions.length > 0 && <>
-        <fieldset className="discovery-mode"><legend>{t.modeTitle}</legend><div className="discovery-mode-options" role="radiogroup" aria-label={t.modeTitle}>
-          <label className="discovery-mode-option"><input type="radio" name="attraction-mode" value="MANUAL" checked={mode === "MANUAL"} onChange={() => chooseMode("MANUAL")} /><strong>{t.manual}</strong><span>{t.manualBody}</span></label>
-          <label className="discovery-mode-option"><input type="radio" name="attraction-mode" value="AUTO" checked={mode === "AUTO"} onChange={() => chooseMode("AUTO")} /><strong>{t.auto}</strong><span>{t.autoBody}</span></label>
+        <fieldset className="discovery-mode"><legend className="sr-only">{t.modeTitle}</legend><div className="discovery-mode-options" role="radiogroup" aria-label={t.modeTitle}>
+          <label className="discovery-mode-option discovery-mode-option--manual"><input type="radio" name="attraction-mode" value="MANUAL" checked={mode === "MANUAL"} onChange={() => chooseMode("MANUAL")} /><span className="discovery-mode-icon"><Map aria-hidden="true" /></span><strong>{t.manual}</strong><span>{t.manualBody}</span></label>
+          <label className="discovery-mode-option discovery-mode-option--auto"><input type="radio" name="attraction-mode" value="AUTO" checked={mode === "AUTO"} onChange={() => chooseMode("AUTO")} /><span className="discovery-mode-icon"><Wand2 aria-hidden="true" /></span><strong>{t.auto}</strong><span>{t.autoBody}</span></label>
         </div></fieldset>
-        {mode === "AUTO" && <p className="discovery-auto-note">{t.autoNote}</p>}
-        <div className="discovery-toolbar"><div role="group" aria-label={t.filters}>{categories.map((category) => <button type="button" key={category} aria-pressed={filter === category} onClick={() => setFilter(category)}>{categoryLabel(category, language)}</button>)}</div><strong aria-live="polite">{t.selected(selected.size)}</strong></div>
-        <div className="discovery-layout"><div className="discovery-list" aria-label={t.zh ? "\u65b0\u52a0\u5761\u666f\u70b9\u5217\u8868" : "Singapore attractions"}>{visible.map((attraction) => <AttractionCard key={attraction.xid} attraction={attraction} language={language} selected={selected.has(attraction.xid)} selectionEnabled={mode === "MANUAL"} onToggle={() => toggle(attraction)} onFocus={() => focusAttraction(attraction.xid)} />)}</div><div className="discovery-map-column"><AttractionDiscoveryMap attractions={attractions} selectedXids={selected} focusedXid={focusedXid} onFocus={focusAttraction} language={language} label={t.map} /></div></div>
-        <div className="discovery-footer"><span>{t.preferenceNote}</span><Link to="/planner">{t.continue}<ArrowRight aria-hidden="true" /></Link></div>
+        {mode === "AUTO" && <p className="discovery-auto-note"><Lightbulb aria-hidden="true" />{t.autoNote}</p>}
+        <div className="discovery-layout">
+          <div className="discovery-list-panel">
+            <div className="discovery-section-heading">
+              <span aria-hidden="true">◆</span>
+              <div>
+                <h2>{t.poiTitle}</h2>
+                <p>{t.poiBody}</p>
+              </div>
+            </div>
+            <div className="discovery-toolbar"><div role="group" aria-label={t.filters}>{categories.map((category) => <button type="button" key={category} aria-pressed={filter === category} onClick={() => setFilter(category)}>{categoryLabel(category, language)}</button>)}</div><strong aria-live="polite">{t.selected(selected.size)}</strong></div>
+            <div className="discovery-list" aria-label={t.zh ? "\u65b0\u52a0\u5761\u666f\u70b9\u5217\u8868" : "Singapore attractions"}>{visible.map((attraction) => <AttractionCard key={attraction.xid} attraction={attraction} language={language} selected={selected.has(attraction.xid)} selectionEnabled={mode === "MANUAL"} onToggle={() => toggle(attraction)} onFocus={() => focusAttraction(attraction.xid)} />)}</div>
+          </div>
+          <div className="discovery-map-column"><AttractionDiscoveryMap attractions={attractions} selectedXids={selected} focusedXid={focusedXid} onFocus={focusAttraction} language={language} label={t.map} /></div>
+        </div>
+        <div className="discovery-footer"><span>{t.preferenceNote}</span><Link to="/planner" state={{ plannerScrollTarget: "preferences" }}>{t.continue}<ArrowRight aria-hidden="true" /></Link></div>
       </>}
     </section>
   </div></AppShell>;

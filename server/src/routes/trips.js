@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { travelPreferenceSchema, tripRevisionSchema } from "@nuogo/shared/schemas";
-import { createGuestClaim, getTripAccess, guestClaimMatches, requireTripRole } from "../services/tripAccess.js";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { getTripAccess, guestClaimMatches, requireTripRole } from "../services/tripAccess.js";
 import { travelPreferenceRequest } from "../validation/requestValidators.js";
 import { validateRequest } from "../validation/validateRequest.js";
 import { screenTravelPreferences } from "../services/promptInjection.js";
@@ -29,6 +30,17 @@ function validationError(message) {
   return error;
 }
 
+function requireRegisteredTraveller(req, _res, next) {
+  if (req.user.accountType === "GUEST") {
+    const error = new Error("A registered account is required for itinerary planning.");
+    error.code = "REGISTERED_ACCOUNT_REQUIRED";
+    error.status = 403;
+    next(error);
+    return;
+  }
+  next();
+}
+
 function failedGenerationResponse(result) {
   const issueCodes = [...new Set((result.validation?.issues ?? []).map(({ code }) => code))];
   return {
@@ -51,6 +63,35 @@ function publicAccess(access) {
   };
 }
 
+function previewEnvelope(result) {
+  return {
+    result,
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+  };
+}
+
+function previewSignature(envelope, secret) {
+  return createHmac("sha256", secret)
+    .update(JSON.stringify(envelope))
+    .digest("hex");
+}
+
+function signedPreview(result, secret) {
+  const envelope = previewEnvelope(result);
+  return {
+    preview: envelope,
+    previewToken: previewSignature(envelope, secret),
+    previewExpiresAt: envelope.expiresAt
+  };
+}
+
+function verifyPreview(envelope, token, secret) {
+  if (!envelope?.result || typeof token !== "string" || !/^[a-f0-9]{64}$/i.test(token)) return false;
+  if (!envelope.expiresAt || Date.parse(envelope.expiresAt) <= Date.now()) return false;
+  const expected = previewSignature(envelope, secret);
+  return timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(token, "hex"));
+}
+
 function expectedRevision(body) {
   return tripRevisionSchema.parse({
     expectedRevision: body.expectedRevision
@@ -66,10 +107,12 @@ async function accessFor(repository, tripId, userId, roles) {
 export function createTripsRouter({
   repository,
   objectivePlanner,
-  authenticate
+  authenticate,
+  config
 }) {
   const router = Router();
   router.use(authenticate);
+  router.use(requireRegisteredTraveller);
 
   router.post(
     "/generate",
@@ -99,24 +142,51 @@ export function createTripsRouter({
       if (result.state !== "FINAL_VALIDATED") {
         return res.status(422).json(failedGenerationResponse(result));
       }
-      const guestClaim = req.user.accountType === "GUEST" ? createGuestClaim() : null;
-      const persistedResult = guestClaim
-        ? {
-            ...result,
-            persistenceScope: "SESSION",
-            expiresAt: req.user.guestExpiresAt,
-            guestClaimTokenHash: guestClaim.tokenHash
-          }
-        : result;
-      const trip = repository.saveObjectiveTrip
-        ? await repository.saveObjectiveTrip(req.user.id, persistedResult)
-        : result.trip;
-      return res.status(201).json({ ...result, trip, ...(guestClaim ? { guestClaimToken: guestClaim.token } : {}) });
+      const previewResult = {
+        ...result,
+        trip: {
+          ...result.trip,
+          persistenceScope: "PREVIEW",
+          revision: 0
+        }
+      };
+      const preview = signedPreview(previewResult, config.jwtSecret);
+      return res.status(201).json({ ...previewResult, preview: preview.preview, previewToken: preview.previewToken, previewExpiresAt: preview.previewExpiresAt });
     } catch (error) {
       next(error);
     }
     }
   );
+
+  router.post("/save-preview", async (req, res, next) => {
+    try {
+      if (req.user.accountType === "GUEST") {
+        const error = new Error("A registered account is required to save this itinerary.");
+        error.code = "REGISTERED_ACCOUNT_REQUIRED";
+        error.status = 403;
+        throw error;
+      }
+      const envelope = req.body.preview;
+      const token = req.body.previewToken;
+      if (!verifyPreview(envelope, token, config.jwtSecret)) {
+        throw validationError("This itinerary preview can no longer be saved. Please regenerate it.");
+      }
+      const result = envelope.result;
+      if (result.state !== "FINAL_VALIDATED") throw validationError("Only validated itinerary previews can be saved.");
+      const trip = await repository.saveObjectiveTrip(req.user.id, {
+        ...result,
+        trip: {
+          ...result.trip,
+          persistenceScope: "PERSISTENT",
+          expiresAt: null,
+          guestClaimTokenHash: null
+        }
+      });
+      return res.status(201).json({ ...result, trip });
+    } catch (error) {
+      next(error);
+    }
+  });
 
   router.get("/", async (req, res, next) => {
     try {

@@ -126,11 +126,6 @@ export function AuthProvider({ children }) {
         body: JSON.stringify({ email, password })
       }));
     },
-    loginAsGuest() {
-      return establishSession(() => apiRequest("/auth/guest", {
-        method: "POST"
-      }));
-    },
     register(name, email, password) {
       return establishSession(() => apiRequest("/auth/register", {
         method: "POST",

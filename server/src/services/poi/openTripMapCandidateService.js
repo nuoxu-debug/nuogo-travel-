@@ -10,6 +10,7 @@ const listRecordSchema = z.object({
   xid: z.string().trim().min(1),
   name: z.string().default(""),
   kinds: z.string().default(""),
+  estimatedCostMinor: z.number().int().nonnegative().optional(),
   point: pointSchema
 }).passthrough();
 
@@ -84,7 +85,8 @@ function normalize(record, detail, { destination, retrievedAt }) {
     matchStatus: "MATCHED",
     verificationStatus: "SUPPORTING_ONLY",
     ...(detail?.address ? { address: detail.address } : {}),
-    ...(detail?.preview?.source ? { previewUrl: detail.preview.source } : {})
+    ...(detail?.preview?.source ? { previewUrl: detail.preview.source } : {}),
+    ...(Number.isFinite(record.estimatedCostMinor) ? { estimatedCostMinor: record.estimatedCostMinor } : {})
   };
 }
 

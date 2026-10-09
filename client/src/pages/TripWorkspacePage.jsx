@@ -5,7 +5,7 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import AppShell from "../layout/AppShell.jsx";
 
 function WorkspaceContent() {
-  const { trip, setTrip, access, loading, error } = useTrip();
+  const { trip, setTrip, access, loading, error, refreshTrip } = useTrip();
   const { language } = useLanguage();
 
   if (loading) {
@@ -25,7 +25,7 @@ function WorkspaceContent() {
     );
   }
 
-  return <ObjectiveTripWorkspace trip={trip} setTrip={setTrip} access={access} />;
+  return <ObjectiveTripWorkspace trip={trip} setTrip={setTrip} access={access} refreshTrip={refreshTrip} />;
 }
 
 export default function TripWorkspacePage() {

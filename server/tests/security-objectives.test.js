@@ -1,5 +1,5 @@
 import request from "supertest";
-import { createHash } from "node:crypto";
+import jwt from "jsonwebtoken";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import { DemoPlanProvider } from "../src/providers/demoProvider.js";
@@ -83,44 +83,14 @@ describe("security objective boundaries", () => {
     expect(response.body.error.code).toBe("TRIP_OWNER_REQUIRED");
   });
 
-  it("claims exactly one guest trip only after an explicit one-time save", async () => {
+  it("does not create persistent users through the deprecated guest auth route", async () => {
     const repository = new MemoryRepository();
     app = buildApp(repository);
-    const guestResponse = await request(app).post("/api/auth/guest").expect(200);
-    const registeredAuth = await register(app, "claim-owner@nuogo.test");
-    const otherAuth = await register(app, "claim-other@nuogo.test");
-    const claimToken = "one-time-guest-claim";
-    const claimTokenHash = createHash("sha256").update(claimToken).digest("hex");
-    await repository.saveObjectiveTrip(guestResponse.body.user.id, {
-      state: "FINAL_VALIDATED",
-      trip: {
-        id: "guest-trip-to-save",
-        destination: "singapore",
-        startDate: "2026-10-10",
-        endDate: "2026-10-11",
-        budgetMinor: 200000,
-        title: "Singapore trip"
-      },
-      variants: [],
-      validation: { valid: true, issues: [] },
-      guestClaimTokenHash: claimTokenHash
-    });
 
-    await request(app).get("/api/trips").set(registeredAuth).expect(200, { trips: [] });
-    await request(app).post("/api/trips/guest-trip-to-save/claim")
-      .set(otherAuth).send({ claimToken: "wrong-token-long-enough" }).expect(403);
+    const response = await request(app).post("/api/auth/guest").expect(410);
 
-    const claimed = await request(app).post("/api/trips/guest-trip-to-save/claim")
-      .set(registeredAuth).send({ claimToken }).expect(200);
-    expect(claimed.body.trip).toMatchObject({
-      id: "guest-trip-to-save",
-      persistenceScope: "PERSISTENT"
-    });
-    expect((await request(app).get("/api/trips").set(registeredAuth)).body.trips)
-      .toHaveLength(1);
-
-    await request(app).post("/api/trips/guest-trip-to-save/claim")
-      .set(otherAuth).send({ claimToken }).expect(403);
+    expect(response.body.error.code).toBe("GUEST_AUTH_DEPRECATED");
+    expect([...repository.users.values()].filter((user) => user.accountType === "GUEST")).toHaveLength(0);
   });
 
   it("does not expose an internal exception message in a 500 response", async () => {
@@ -143,6 +113,43 @@ describe("security objective boundaries", () => {
       }
     });
     expect(JSON.stringify(response.body)).not.toContain("private-test-value");
+  });
+
+  it("blocks guest tokens from itinerary generation and trip management APIs", async () => {
+    const repository = new MemoryRepository();
+    app = buildApp(repository);
+    const guest = await repository.createUser({
+      name: "Legacy Guest",
+      email: "guest+legacy@nuogo.local",
+      passwordHash: "legacy-hash",
+      preferredLanguage: "zh",
+      accountType: "GUEST",
+      guestLastActivityAt: new Date().toISOString(),
+      guestExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    });
+    const token = jwt.sign(
+      { sub: guest.id, email: guest.email, accountType: "GUEST" },
+      "test-secret-with-enough-length",
+      { expiresIn: "24h" }
+    );
+    const guestAuth = { Authorization: `Bearer ${token}` };
+
+    await request(app).post("/api/trips/generate")
+      .set(guestAuth)
+      .send(objectivePreferences())
+      .expect(403);
+
+    await request(app).get("/api/trips")
+      .set(guestAuth)
+      .expect(403);
+
+    await request(app).get("/api/trips/any-trip")
+      .set(guestAuth)
+      .expect(403);
+
+    await request(app).delete("/api/trips/any-trip")
+      .set(guestAuth)
+      .expect(403);
   });
 
   it("classifies instruction-like user text before it reaches an AI prompt", async () => {

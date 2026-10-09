@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { buildObjectiveRuns, validateItineraryRun } from "./objectiveRecords.js";
 
 function clone(value) {
@@ -6,7 +8,8 @@ function clone(value) {
 }
 
 export class MemoryRepository {
-  constructor() {
+  constructor({ snapshotPath } = {}) {
+    this.snapshotPath = snapshotPath ? resolve(snapshotPath) : "";
     this.users = new Map();
     this.trips = new Map();
     this.tripMutationLocks = new Map();
@@ -15,10 +18,40 @@ export class MemoryRepository {
       ["singapore", { id: "singapore", status: "ACTIVE" }]
     ]);
     this.canonicalPois = new Map();
+    this.poiOperatingHours = new Map();
+    this.poiOperatingHourExceptions = new Map();
     this.routeCache = new Map();
     this.costReferences = new Map();
     this.itineraryRuns = new Map();
     this.systemRecords = [];
+    this.loadSnapshot();
+  }
+
+  loadSnapshot() {
+    if (!this.snapshotPath || !existsSync(this.snapshotPath)) return;
+    const state = JSON.parse(readFileSync(this.snapshotPath, "utf8"));
+    for (const [key, value] of Object.entries(state.maps ?? {})) {
+      if (this[key] instanceof Map) this[key] = new Map(value);
+    }
+    if (Array.isArray(state.systemRecords)) this.systemRecords = state.systemRecords;
+  }
+
+  persistSnapshot() {
+    if (!this.snapshotPath) return;
+    mkdirSync(dirname(this.snapshotPath), { recursive: true });
+    const maps = {
+      users: [...this.users.entries()],
+      trips: [...this.trips.entries()],
+      privacyConsents: [...this.privacyConsents.entries()],
+      supportedDestinations: [...this.supportedDestinations.entries()],
+      canonicalPois: [...this.canonicalPois.entries()],
+      poiOperatingHours: [...this.poiOperatingHours.entries()],
+      poiOperatingHourExceptions: [...this.poiOperatingHourExceptions.entries()],
+      routeCache: [...this.routeCache.entries()],
+      costReferences: [...this.costReferences.entries()],
+      itineraryRuns: [...this.itineraryRuns.entries()]
+    };
+    writeFileSync(this.snapshotPath, JSON.stringify({ maps, systemRecords: this.systemRecords }, null, 2));
   }
 
   async createUser(user) {
@@ -36,6 +69,7 @@ export class MemoryRepository {
       createdAt: new Date().toISOString()
     };
     this.users.set(record.id, record);
+    this.persistSnapshot();
     return clone(record);
   }
 
@@ -65,6 +99,7 @@ export class MemoryRepository {
     if (patch.preferredLanguage !== undefined) {
       user.preferredLanguage = patch.preferredLanguage;
     }
+    this.persistSnapshot();
     return clone(user);
   }
 
@@ -72,6 +107,7 @@ export class MemoryRepository {
     const user = this.users.get(id);
     if (!user) return false;
     user.passwordHash = passwordHash;
+    this.persistSnapshot();
     return true;
   }
 
@@ -83,6 +119,7 @@ export class MemoryRepository {
     const user = this.users.get(userId);
     if (!user || !["user", "admin"].includes(role)) return false;
     user.role = role;
+    this.persistSnapshot();
     return true;
   }
 
@@ -94,11 +131,13 @@ export class MemoryRepository {
     const destination = this.supportedDestinations.get(destinationId);
     if (!destination) return undefined;
     destination.status = status;
+    this.persistSnapshot();
     return clone(destination);
   }
 
   async upsertCanonicalPoi(poi) {
     this.canonicalPois.set(poi.id, clone(poi));
+    this.persistSnapshot();
     return clone(poi);
   }
 
@@ -107,8 +146,39 @@ export class MemoryRepository {
       .filter((poi) => poi.destinationId === destinationId));
   }
 
+  async upsertPoiOperatingHour(record) {
+    const saved = { ...record, verificationStatus: record.verificationStatus ?? "PENDING_REVIEW" };
+    this.poiOperatingHours.set(saved.id, clone(saved));
+    this.persistSnapshot();
+    return clone(saved);
+  }
+
+  async listPoiOperatingHours(destinationId) {
+    const poiIds = new Set([...this.canonicalPois.values()]
+      .filter((poi) => poi.destinationId === destinationId)
+      .map(({ id }) => id));
+    return clone([...this.poiOperatingHours.values()]
+      .filter((record) => poiIds.has(record.poiId)));
+  }
+
+  async upsertPoiOperatingHourException(record) {
+    const saved = { ...record, verificationStatus: record.verificationStatus ?? "PENDING_REVIEW" };
+    this.poiOperatingHourExceptions.set(saved.id, clone(saved));
+    this.persistSnapshot();
+    return clone(saved);
+  }
+
+  async listPoiOperatingHourExceptions(destinationId) {
+    const poiIds = new Set([...this.canonicalPois.values()]
+      .filter((poi) => poi.destinationId === destinationId)
+      .map(({ id }) => id));
+    return clone([...this.poiOperatingHourExceptions.values()]
+      .filter((record) => poiIds.has(record.poiId)));
+  }
+
   async putRouteCache(key, route) {
     this.routeCache.set(key, clone(route));
+    this.persistSnapshot();
     return clone(route);
   }
 
@@ -119,6 +189,7 @@ export class MemoryRepository {
   async upsertCostReference(reference) {
     const record = { ...reference, tier: reference.tier ?? null };
     this.costReferences.set(record.id, clone(record));
+    this.persistSnapshot();
     return clone(record);
   }
 
@@ -131,12 +202,14 @@ export class MemoryRepository {
     if (!user || !["ACTIVE", "SUSPENDED"].includes(status)) return undefined;
     user.status = status;
     const { passwordHash: _passwordHash, ...publicRecord } = user;
+    this.persistSnapshot();
     return clone(publicRecord);
   }
 
   async appendSystemRecord(record) {
     const saved = { id: randomUUID(), ...clone(record), createdAt: new Date().toISOString() };
     this.systemRecords.unshift(saved);
+    this.persistSnapshot();
     return clone(saved);
   }
 
@@ -153,6 +226,7 @@ export class MemoryRepository {
   async saveItineraryRun(run) {
     validateItineraryRun(run);
     this.itineraryRuns.set(run.id, clone(run));
+    this.persistSnapshot();
     return clone(run);
   }
 
@@ -185,6 +259,7 @@ export class MemoryRepository {
     };
     this.trips.set(trip.id, trip);
     for (const run of runs) this.itineraryRuns.set(run.id, clone(run));
+    this.persistSnapshot();
     return clone(trip);
   }
 
@@ -202,6 +277,7 @@ export class MemoryRepository {
       recordedAt: new Date().toISOString()
     };
     this.privacyConsents.set(`${userId}:${consent.type}`, consent);
+    this.persistSnapshot();
     return clone(consent);
   }
 
@@ -219,6 +295,7 @@ export class MemoryRepository {
       itineraryRuns: keep(this.itineraryRuns, (run) => ownedTripIds.has(run.tripId))
     };
     Object.assign(this, next);
+    this.persistSnapshot();
     return true;
   }
 
@@ -246,6 +323,7 @@ export class MemoryRepository {
     trip.expiresAt = null;
     trip.guestClaimTokenHash = null;
     trip.updatedAt = new Date().toISOString();
+    this.persistSnapshot();
     return clone(trip);
   }
 
@@ -276,6 +354,7 @@ export class MemoryRepository {
         }
         trip.revision = expectedRevision + 1;
         trip.updatedAt = new Date().toISOString();
+        this.persistSnapshot();
         return trip.revision;
       } catch (error) {
         this.trips.set(tripId, tripSnapshot);
@@ -312,6 +391,7 @@ export class MemoryRepository {
     this.trips.delete(id);
     this.itineraryRuns = new Map([...this.itineraryRuns]
       .filter(([, run]) => run.tripId !== id));
+    this.persistSnapshot();
     return true;
   }
 
@@ -347,6 +427,7 @@ export class MemoryRepository {
       }));
     }
     this.trips.set(tripId, copy);
+    this.persistSnapshot();
     return clone(copy);
   }
 

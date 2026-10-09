@@ -39,13 +39,11 @@ export function createAuthMiddleware(jwtSecret, repository) {
       }
       if (user?.accountType === "GUEST") {
         if (!user.guestExpiresAt || Date.parse(user.guestExpiresAt) <= Date.now()) {
-          if (repository.deleteAccount) await repository.deleteAccount(user.id);
           const error = new Error("The guest session has expired.");
           error.code = "AUTH_TOKEN_EXPIRED";
           error.status = 401;
           return next(error);
         }
-        if (repository.touchGuestSession) user = await repository.touchGuestSession(user.id) ?? user;
       }
     } catch (error) {
       return next(error);

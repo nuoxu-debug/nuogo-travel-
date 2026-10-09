@@ -158,6 +158,7 @@ describe("validated itinerary workspace", () => {
   it("shows the selected Travel Style from the current one-run contract", async () => {
     await renderWorkspace();
     expect(screen.getByText(/Validated trip workspace/)).toHaveTextContent("Balanced");
+    expect(screen.getByRole("button", { name: "Back to My trips" })).toBeInTheDocument();
   });
   it("requires an explicit registered-account save to claim a guest itinerary", async () => {
     localStorage.setItem("nuogo-token", "registered-token");
@@ -230,7 +231,7 @@ describe("validated itinerary workspace", () => {
 
     expect(await screen.findByRole("button", { name: "打开行程" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复用偏好" })).toBeInTheDocument();
-    expect(screen.getByText("已验证")).toBeInTheDocument();
+    expect(screen.getAllByText("已验证").length).toBeGreaterThan(0);
   });
 
   it("deletes an owned objective trip through the API", async () => {
@@ -247,6 +248,18 @@ describe("validated itinerary workspace", () => {
     await renderWorkspace(singleRunTrip());
     expect(screen.getByText(/Validated trip workspace/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Choose this plan" })).not.toBeInTheDocument();
+  });
+
+  it("shows the unsaved preview prompt at the end instead of as a persistent bottom bar", async () => {
+    const trip = { ...singleRunTrip(), persistenceScope: "PREVIEW" };
+
+    await renderWorkspace(trip);
+
+    expect(screen.getByRole("button", { name: "Back to edit preferences" })).toBeInTheDocument();
+    const wholeTripSummary = screen.getByRole("region", { name: "Whole-trip attraction and contingency summary" });
+    const prompt = screen.getByRole("region", { name: "Itinerary preview not saved" });
+    expect(prompt).not.toHaveClass("fixed", "bottom-4");
+    expect(wholeTripSummary.compareDocumentPosition(prompt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("shows rainy-day alternatives as inactive contingencies without replacing the main activity", async () => {
@@ -268,8 +281,11 @@ describe("validated itinerary workspace", () => {
 
     const contingency = screen.getByRole("region", { name: "Rainy-day contingency" });
     expect(contingency).toHaveTextContent("inactive");
+    expect(contingency).toHaveTextContent("Inactive indoor backup");
+    expect(contingency).not.toHaveTextContent("Day 1 · Inactive");
     expect(contingency).toHaveTextContent("never replaces the original activity automatically");
     expect(contingency).toHaveTextContent("Capital Museum");
+    expect(contingency).toHaveTextContent("Planning estimate: S$ 30");
     expect(contingency).toHaveTextContent("Unused contingency costs are excluded from the itinerary total");
     expect(screen.getByRole("button", { name: /Palace Museum details/ })).toBeInTheDocument();
   });
@@ -278,11 +294,6 @@ describe("validated itinerary workspace", () => {
     await renderWorkspace();
     const timeline = screen.getByRole("region", { name: "Day 1 continuous itinerary" });
 
-    expect(within(timeline).getAllByText(/1\.2 km/).map((element) => element.textContent.match(/\d+ min$/)[0])).toEqual([
-      "5 min",
-      "6 min",
-      "7 min"
-    ]);
     expect(within(timeline).getByRole("button", { name: /Palace Museum/ })).toHaveTextContent("OpenTripMap facts");
     ["Meal", "Transfer", "Accommodation", "Rest", "Departure"].forEach((label) => {
       expect(within(timeline).getByRole("button", { name: `${label} details` })).not.toHaveTextContent("OpenTripMap facts");
@@ -296,6 +307,22 @@ describe("validated itinerary workspace", () => {
     await userEvent.click(within(timeline).getByRole("button", { name: "Meal details" }));
     expect(screen.getByRole("dialog", { name: "Meal details" })).toHaveTextContent("Schedule entry");
     expect(screen.getByRole("dialog", { name: "Meal details" })).not.toHaveTextContent("Source-matched activity");
+  });
+
+  it("renders generic meal and rest entries as compact schedule rows instead of empty attraction cards", async () => {
+    await renderWorkspace();
+    const timeline = screen.getByRole("region", { name: "Day 1 continuous itinerary" });
+    const meal = within(timeline).getByTestId("compact-activity-2");
+    const rest = within(timeline).getByTestId("compact-activity-5");
+
+    expect(meal).toHaveTextContent("Meal");
+    expect(meal).toHaveTextContent("Planned meal entry.");
+    expect(rest).toHaveTextContent("Rest");
+    expect(rest).toHaveTextContent("Planned rest entry.");
+    expect(within(meal).queryByTestId("activity-image-frame")).not.toBeInTheDocument();
+    expect(within(rest).queryByTestId("activity-image-frame")).not.toBeInTheDocument();
+    expect(within(timeline).getByRole("button", { name: /Palace Museum/ }))
+      .toContainElement(within(timeline).getAllByTestId("activity-image-frame")[0]);
   });
 
   it("labels a deterministic rainy-day alternative as demo evidence", async () => {
@@ -323,10 +350,155 @@ describe("validated itinerary workspace", () => {
   it("shows validation evidence only from the validated itinerary response", async () => {
     await renderWorkspace();
 
+    expect(screen.queryByRole("region", { name: "Itinerary Update Required" })).not.toBeInTheDocument();
     const evidence = await screen.findByRole("region", { name: "Itinerary validation summary" });
     expect(within(evidence).getByText("Validated")).toBeVisible();
     expect(within(evidence).getByText("Within hard budget")).toBeVisible();
     expect(within(evidence).getByText("Grounded attractions: 3")).toBeVisible();
+  });
+
+  it("counts sourced attractions from retained source records only", async () => {
+    const trip = singleRunTrip();
+    trip.itineraryRun.itinerary.days[1].activities[0].poi.sourceRecords = [];
+
+    await renderWorkspace(trip);
+
+    const evidence = await screen.findByRole("region", { name: "Itinerary validation summary" });
+    expect(within(evidence).getByText("Grounded attractions: 2")).toBeVisible();
+    expect(evidence).not.toHaveTextContent("Grounded attractions: 3");
+  });
+
+  it("shows unverifiable opening hours as a warning on an otherwise valid itinerary", async () => {
+    const trip = singleRunTrip();
+    trip.itineraryRun.validation.issues = [{
+      code: "POI_OPENING_HOURS_UNVERIFIED",
+      severity: "WARNING",
+      path: ["days", 0, "activities", 0],
+      metadata: { operatingHoursState: "UNVERIFIED" }
+    }];
+    await renderWorkspace(trip);
+
+    const evidence = await screen.findByRole("region", { name: "Itinerary validation summary" });
+    expect(within(evidence).getByText("Validated")).toBeVisible();
+    expect(within(evidence).getByText("Opening hours not verified - please confirm before visiting.")).toBeVisible();
+    expect(evidence).not.toHaveTextContent("Verified Open");
+  });
+
+  it("renders opening-hours verified only from an explicit VERIFIED_OPEN state", async () => {
+    const trip = singleRunTrip();
+    const activity = trip.itineraryRun.itinerary.days[0].activities[0];
+    activity.operatingHoursVerification = {
+      state: "VERIFIED_OPEN",
+      sourceName: "Official gallery hours",
+      sourceUrl: "https://example.edu/gallery-hours",
+      lastReviewedDate: "2026-09-27"
+    };
+    trip.itineraryRun.itinerary.days[0].activities[6].operatingHoursVerification = { state: "UNVERIFIED" };
+
+    await renderWorkspace(trip);
+    const timeline = screen.getByRole("region", { name: "Day 1 continuous itinerary" });
+
+    expect(within(timeline).getByRole("button", { name: "Palace Museum details" })).toHaveTextContent("Opening hours verified");
+    expect(within(timeline).getByRole("button", { name: "Jingshan Park details" })).toHaveTextContent("Opening hours not verified - please confirm before visiting.");
+    expect(within(timeline).getByRole("button", { name: "Jingshan Park details" })).not.toHaveTextContent("Opening hours verified");
+  });
+
+  it("does not infer opening-hours verification when the state is missing", async () => {
+    await renderWorkspace();
+    const timeline = screen.getByRole("region", { name: "Day 1 continuous itinerary" });
+
+    expect(within(timeline).getByRole("button", { name: "Palace Museum details" })).toHaveTextContent("Opening hours not verified - please confirm before visiting.");
+    expect(within(timeline).getByRole("button", { name: "Palace Museum details" })).not.toHaveTextContent("Opening hours verified");
+  });
+
+  it("labels source-backed price only from explicit cost provenance", async () => {
+    const trip = singleRunTrip();
+    const sourceBackedActivity = trip.itineraryRun.itinerary.days[0].activities[0];
+    sourceBackedActivity.priceReference = {
+      referenceType: "EXACT",
+      sourceName: "Official ticketing page",
+      sourceUrl: "https://example.edu/tickets",
+      lastReviewedDate: "2026-09-27"
+    };
+
+    await renderWorkspace(trip);
+    const timeline = screen.getByRole("region", { name: "Day 1 continuous itinerary" });
+
+    expect(within(timeline).getByRole("button", { name: "Palace Museum details" })).toHaveTextContent("Source-backed planning price");
+    expect(within(timeline).getByRole("button", { name: "Jingshan Park details" })).toHaveTextContent("Estimated planning price");
+    expect(within(timeline).getByRole("button", { name: "Jingshan Park details" })).not.toHaveTextContent("Source-backed planning price");
+  });
+
+  it("shows provenance links only when stored source URLs exist", async () => {
+    const trip = singleRunTrip();
+    const activity = trip.itineraryRun.itinerary.days[0].activities[0];
+    activity.priceReference = {
+      referenceType: "FREE",
+      sourceName: "Official free-entry notice",
+      sourceUrl: "https://example.edu/free-entry"
+    };
+    activity.operatingHoursVerification = {
+      state: "VERIFIED_OPEN",
+      sourceName: "Official gallery hours"
+    };
+    activity.poi.sourceRecords[0].sourceUrl = undefined;
+
+    await renderWorkspace(trip);
+    await userEvent.click(screen.getByRole("button", { name: "Palace Museum details" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Palace Museum details" });
+    expect(within(dialog).getByRole("region", { name: "Source" })).toHaveTextContent("Source not available");
+    expect(within(dialog).getByRole("region", { name: "Price Source" })).toHaveTextContent("Official free-entry notice");
+    expect(within(dialog).getByRole("link", { name: "View Source for Price Source" })).toHaveAttribute("href", "https://example.edu/free-entry");
+    expect(within(dialog).getByRole("region", { name: "Opening Hours Source" })).toHaveTextContent("Opening hours verified");
+    expect(within(dialog).getByRole("region", { name: "Opening Hours Source" })).toHaveTextContent("Source not available");
+    expect(screen.queryByRole("link", { name: "View Source for Source" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "View Source for Opening Hours Source" })).not.toBeInTheDocument();
+  });
+
+  it("renders retained database source and opening-hours source metadata", async () => {
+    const trip = singleRunTrip();
+    const activity = trip.itineraryRun.itinerary.days[0].activities[0];
+    activity.poi.primarySource = "DATABASE";
+    activity.poi.sourceRecords = [{
+      provider: "OFFICIAL",
+      sourceId: "src-palace-museum",
+      sourceName: "Official Palace Museum source",
+      sourceUrl: "https://example.edu/palace-source",
+      retrievedAt: "2026-08-14T00:00:00.000Z"
+    }];
+    activity.operatingHoursVerification = {
+      state: "VERIFIED_OPEN",
+      source: "WEEKLY",
+      sourceName: "Official Palace Museum hours",
+      sourceUrl: "https://example.edu/palace-hours",
+      verificationStatus: "VERIFIED",
+      lastReviewedDate: "2026-09-30"
+    };
+
+    await renderWorkspace(trip);
+    await userEvent.click(screen.getByRole("button", { name: "Palace Museum details" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Palace Museum details" });
+    expect(within(dialog).getByRole("region", { name: "Source" })).toHaveTextContent("Official Palace Museum source");
+    expect(within(dialog).getByRole("region", { name: "Source" })).not.toHaveTextContent("Source not available");
+    expect(within(dialog).getByRole("link", { name: "View Source for Source" })).toHaveAttribute("href", "https://example.edu/palace-source");
+    expect(within(dialog).getByRole("region", { name: "Opening Hours Source" })).toHaveTextContent("Opening hours verified");
+    expect(within(dialog).getByRole("region", { name: "Opening Hours Source" })).toHaveTextContent("Official Palace Museum hours");
+    expect(within(dialog).getByRole("region", { name: "Opening Hours Source" })).not.toHaveTextContent("Source not available");
+    expect(within(dialog).getByRole("link", { name: "View Source for Opening Hours Source" })).toHaveAttribute("href", "https://example.edu/palace-hours");
+  });
+
+  it("renders the final itinerary data-source notice with expandable sources", async () => {
+    const trip = singleRunTrip();
+    trip.itineraryRun.itinerary.days[0].activities[0].operatingHoursVerification = { state: "VERIFIED_OPEN" };
+
+    await renderWorkspace(trip);
+
+    const notice = screen.getByRole("region", { name: "Data Sources & Travel Notice" });
+    expect(notice).toHaveTextContent("This itinerary is generated by Nuogo using AI-assisted planning together with available source-backed tourism data.");
+    expect(notice).toHaveTextContent("Users are advised to confirm important information, especially ticket prices and operating hours, with the relevant official source before visiting or making a purchase.");
+    expect(within(notice).getByText("View Data Sources")).toBeInTheDocument();
   });
 
   it("does not badge a generic entry with embedded provider records", async () => {
@@ -401,28 +573,35 @@ describe("validated itinerary workspace", () => {
 
   it("keeps the map compact, ordered, and explicit about estimated anchors", async () => {
     await renderWorkspace();
-    expect(screen.getByRole("button", { name: /MRT estimate/i })).toBeInTheDocument();
-    expect(screen.getByTestId("route-view-aside")).toHaveClass("lg:sticky", "lg:top-4");
-    expect(screen.getByTestId("route-map-panel")).toHaveClass("h-[280px]");
+    expect(screen.queryByRole("button", { name: /MRT estimate/i })).not.toBeInTheDocument();
+    expect(screen.getByTestId("route-side-rail")).toHaveClass("min-w-0", "self-start", "lg:sticky", "lg:top-4");
+    expect(screen.getByTestId("route-view-aside")).toHaveClass("h-full", "min-w-0");
+    expect(screen.getByTestId("route-view-aside")).not.toHaveClass("sticky", "top-4");
+    expect(screen.getByTestId("budget-summary-rail")).not.toHaveClass("lg:col-span-2");
+    expect(screen.getByTestId("route-map-panel")).toHaveClass("min-h-[420px]", "flex-1", "lg:min-h-0");
     expect(screen.getByText("Origin and hotel anchors may be estimated; POI coordinates retain their provider source.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Map marker: Palace Museum" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Map marker: Start: Departure point" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Map marker: End: Accommodation" })).toBeInTheDocument();
   });
 
-  it("keeps the MRT estimate panel visible even when no MRT route was resolved", async () => {
+  it("keeps whole-trip attraction outcomes outside the day-specific tabs", async () => {
+    await renderWorkspace();
+    const outcome = screen.getByRole("region", { name: "Whole-trip attraction and contingency summary" });
+    const dayTabs = screen.getByRole("navigation", { name: "Trip days" });
+
+    expect(outcome).not.toHaveClass("lg:grid-cols-2");
+    expect(outcome.compareDocumentPosition(dayTabs) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Day 2" }));
+    expect(screen.getByRole("region", { name: "Day 2 continuous itinerary" })).toBeInTheDocument();
+    expect(outcome.compareDocumentPosition(dayTabs) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  });
+
+  it("does not show the retired MRT estimate panel", async () => {
     await renderWorkspace();
 
-    await userEvent.click(screen.getByRole("button", { name: /MRT estimate/i }));
-
-    const mrt = screen.getByRole("region", { name: "Estimated MRT route for Day 1" });
-    expect(within(mrt).getByTestId("mrt-route-diagram")).toBeInTheDocument();
-    expect(within(mrt).getByRole("img", { name: "Official Singapore MRT network map" }))
-      .toHaveAttribute("src", "https://journey.smrt.com.sg/static/journey/img/network_map_2026_June.png");
-    expect(within(mrt).getByRole("link", { name: "Open official SMRT map" }))
-      .toHaveAttribute("href", "https://journey.smrt.com.sg/journey/mrt_network_map/");
-    expect(within(mrt).getByText("No MRT estimate for Day 1")).toBeInTheDocument();
-    expect(within(mrt).getByText(/falls back to the existing travel-time estimate/i)).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Estimated MRT route for Day 1" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("route-map-panel")).toBeInTheDocument();
   });
 
   it("maps only grounded attractions and selects them by xid", async () => {
@@ -435,31 +614,14 @@ describe("validated itinerary workspace", () => {
     expect(screen.getByRole("dialog", { name: "Jingshan Park details" })).toBeInTheDocument();
   });
 
-  it("promotes the estimated MRT route as the visible map panel when trip legs include MRT metadata", async () => {
+  it("keeps the route map visible when trip legs include MRT metadata", async () => {
     const trip = singleRunTrip();
     trip.itineraryRun.itinerary.days[0].legs[0] = mrtLeg();
 
     await renderWorkspace(trip);
 
-    expect(screen.getByRole("button", { name: /MRT estimate/i })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /Route map/i })).toHaveAttribute("aria-pressed", "false");
-    const mrt = screen.getByRole("region", { name: "Estimated MRT route for Day 1" });
-    expect(within(mrt).getByTestId("mrt-route-diagram")).toBeInTheDocument();
-    expect(within(mrt).getByRole("img", { name: "Official Singapore MRT network map" }))
-      .toHaveAttribute("src", "https://journey.smrt.com.sg/static/journey/img/network_map_2026_June.png");
-    expect(within(mrt).getByText("City Hall")).toBeInTheDocument();
-    expect(within(mrt).getByText("Bayfront")).toBeInTheDocument();
-    expect(within(mrt).getByText("North-South Line")).toBeInTheDocument();
-    expect(within(mrt).getByText("Downtown Line")).toBeInTheDocument();
-    expect(within(mrt).getByText("6.8 km")).toBeInTheDocument();
-    expect(within(mrt).getByText("S$ 1.77")).toBeInTheDocument();
-    expect(within(mrt).getByText("Public transport legs")).toBeInTheDocument();
-    expect(within(mrt).getByText("Bayfront -> Bugis")).toBeInTheDocument();
-    expect(within(mrt).getByText(/Estimated only/)).toBeInTheDocument();
-    expect(within(mrt).getByText(/does not include real-time arrivals/i)).toBeInTheDocument();
-    expect(within(mrt).queryByText(/live SMRT routing/i)).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: /Route map/i }));
+    expect(screen.queryByRole("button", { name: /MRT estimate/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Estimated MRT route for Day 1" })).not.toBeInTheDocument();
     expect(screen.getByTestId("route-map-panel")).toBeInTheDocument();
   });
 
@@ -476,9 +638,11 @@ describe("validated itinerary workspace", () => {
     expect(await screen.findByRole("heading", { name: "Singapore graduation trip" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Regenerate trip" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Edit preferences" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Needs revalidation");
-    expect(screen.getByRole("status")).not.toHaveTextContent("INVALIDATED");
-    expect(screen.getByRole("button", { name: "Revalidate itinerary" })).toBeInTheDocument();
+    const updateNotice = screen.getByRole("region", { name: "Itinerary Update Required" });
+    expect(updateNotice).toHaveTextContent("Itinerary Update Required");
+    expect(updateNotice).toHaveTextContent("Your travel preferences have changed. Please regenerate the itinerary to apply your latest preferences.");
+    expect(updateNotice).not.toHaveTextContent(/State unavailable|Invalid state|Validation failed|INVALIDATED/i);
+    expect(within(updateNotice).getByRole("button", { name: "Regenerate Itinerary" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Privacy and AI" }));
     expect(screen.getByRole("dialog", { name: "Privacy and AI settings" })).toHaveTextContent("travel preferences");
   });
@@ -530,13 +694,23 @@ describe("validated itinerary workspace", () => {
     expect(screen.getByRole("dialog", { name: "Palace Museum details" })).toBeInTheDocument();
   });
 
-  it("creates a linked version from a changed hard budget", async () => {
-    const child = { ...singleRunTrip(), id: "trip-child", parentTripId: "trip-objective", revision: 0 };
+  it("creates a linked version from changed travel preferences", async () => {
+    const child = { ...singleRunTrip(), id: "trip-child", parentTripId: "trip-objective", revision: 0, title: "Updated Singapore trip" };
     await renderWorkspace();
     await userEvent.click(screen.getByRole("button", { name: "Edit preferences" }));
     const budget = screen.getByRole("spinbutton", { name: "Hard budget in SGD" });
+    expect(budget).toHaveValue(50);
     await userEvent.clear(budget);
-    await userEvent.type(budget, "6000");
+    await userEvent.type(budget, "60");
+    const travellers = screen.getByRole("spinbutton", { name: "Travellers" });
+    await userEvent.clear(travellers);
+    await userEvent.type(travellers, "3");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Travel style" }), "COMFORT_FOCUSED");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Daily attraction target" }), "4");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Transport preference" }), "TAXI");
+    await userEvent.click(screen.getByRole("checkbox", { name: "Include rainy-day backup" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Nature" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "Other preferences" }), "Slower pace near gardens");
     fetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -546,17 +720,68 @@ describe("validated itinerary workspace", () => {
         state: "FINAL_VALIDATED"
       })
     });
-    await userEvent.click(screen.getByRole("button", { name: "Create new trip version" }));
+    await userEvent.click(within(screen.getByRole("region", { name: "Itinerary Update Required" })).getByRole("button", { name: "Regenerate Itinerary" }));
 
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining("/trips/trip-objective/regenerate"),
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ expectedRevision: 0, preferences: { budgetMinor: 6000 } })
+        body: JSON.stringify({
+          expectedRevision: 0,
+          preferences: {
+            budgetMinor: 6000,
+            travellerCount: 3,
+            travelStyle: "COMFORT_FOCUSED",
+            dailyAttractionTarget: 4,
+            transportPreferenceMode: "MANUAL",
+            preferredTransportModes: ["TAXI"],
+            interests: ["HISTORY", "NATURE"],
+            rainyDayBackupEnabled: true,
+            otherPreferences: "Slower pace near gardens"
+          }
+        })
       })
     );
     expect(sessionStorage.getItem("nuogo-trip-trip-objective")).not.toBeNull();
     expect(JSON.parse(sessionStorage.getItem("nuogo-trip-trip-child")).parentTripId).toBe("trip-objective");
+    expect(await screen.findByRole("heading", { name: "Updated Singapore trip" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Itinerary Update Required" })).not.toBeInTheDocument();
+  });
+
+  it("preserves the old itinerary and reports a normal error when stale regeneration fails", async () => {
+    await renderWorkspace();
+    await userEvent.click(screen.getByRole("button", { name: "Edit preferences" }));
+    fetch.mockResolvedValueOnce({
+      ok: false,
+      status: 422,
+      json: async () => ({
+        error: {
+          code: "GENERATION_CONSTRAINTS_UNSATISFIED",
+          message: "Nuogo could not create a valid itinerary within the current requirements and budget."
+        }
+      })
+    });
+
+    await userEvent.click(within(screen.getByRole("region", { name: "Itinerary Update Required" })).getByRole("button", { name: "Regenerate Itinerary" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Nuogo could not create a valid itinerary within the current requirements and budget.");
+    expect(screen.getByRole("heading", { name: "Singapore study trip" })).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Day 1 continuous itinerary" })).getByRole("button", { name: "Palace Museum details" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Itinerary Update Required" })).toBeInTheDocument();
+  });
+
+  it("shows the stale itinerary notice in Chinese without technical status wording", async () => {
+    localStorage.setItem("nuogo-language", "zh");
+    localStorage.setItem("nuogo-language-default", "zh-v4");
+    await renderWorkspace();
+
+    await userEvent.click(screen.getByRole("button", { name: "编辑偏好" }));
+
+    const updateNotice = screen.getByRole("region", { name: "行程需要更新" });
+    expect(updateNotice).toHaveTextContent("行程需要更新");
+    expect(updateNotice).toHaveTextContent("您的旅行偏好已更改。请重新生成行程，以应用最新的偏好设置。");
+    expect(within(updateNotice).getByRole("button", { name: "重新生成行程" })).toBeInTheDocument();
+    expect(updateNotice).not.toHaveTextContent("状态不可用");
   });
 
   it("renders the validated workspace controls and budget in Chinese", async () => {

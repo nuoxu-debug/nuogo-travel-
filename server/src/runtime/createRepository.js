@@ -9,7 +9,7 @@ export function createRepository(config, { testRepository } = {}) {
     }
     return new MySqlRepository(config.mysql);
   }
-  if (config.runtimeMode === "demo") return new MemoryRepository();
+  if (config.runtimeMode === "demo") return new MemoryRepository({ snapshotPath: config.demoPersistencePath });
   if (config.runtimeMode === "test") {
     if (!testRepository) throw new Error("Runtime test mode requires an explicit test repository.");
     return testRepository;

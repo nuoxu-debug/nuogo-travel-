@@ -61,6 +61,7 @@ function daySummary(day) {
 
 export function buildVariantMetrics(itinerary, summary, profileDefinition) {
   const activities = itinerary.days.flatMap((day) => day.activities);
+  const nonMealActivities = activities.filter(({ activityType }) => activityType !== "MEAL");
   const legs = itinerary.days.flatMap((day) => day.legs ?? []);
   const transportDistribution = countBy(legs, "mode");
   const paidActivityCount = activities.filter(({ estimatedActivityCostMinor }) => estimatedActivityCostMinor > 0).length;
@@ -72,11 +73,11 @@ export function buildVariantMetrics(itinerary, summary, profileDefinition) {
       : [`${transportDistribution.TAXI ?? 0} taxi legs reduce transfer effort`, "Comfort accommodation estimate", "Higher meal allowance"];
 
   return {
-    activityCount: activities.length,
+    activityCount: nonMealActivities.length,
     attractionCount: activities.filter(({ xid }) => xid).length,
     mealCount: activities.filter(({ activityType }) => activityType === "MEAL").length,
     paidActivityCount,
-    freeActivityCount: activities.length - paidActivityCount,
+    freeActivityCount: nonMealActivities.length - paidActivityCount,
     tripLegCount: legs.length,
     walkingDistanceMeters: legs
       .filter(({ mode }) => mode === "WALK")

@@ -1,6 +1,6 @@
 import { TrainFront } from "lucide-react";
 
-const SMRT_NETWORK_MAP_URL = "https://journey.smrt.com.sg/static/journey/img/network_map_2026_June.png";
+const SMRT_NETWORK_MAP_URL = "/images/reference/singapore-mrt-network-map.png";
 const SMRT_NETWORK_MAP_PAGE = "https://journey.smrt.com.sg/journey/mrt_network_map/";
 
 export default function JourneyMapSection({ copy, zh = false }) {

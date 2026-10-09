@@ -63,23 +63,6 @@ function repairContinuity(itinerary, issues) {
   return changed;
 }
 
-function repairScheduleConflicts(itinerary, issues) {
-  const affectedDays = new Set(issues
-    .filter(({ code }) => code === "TRAVEL_TIME_CONFLICT" || code === "TIME_OVERLAP")
-    .map(activityLocation)
-    .filter(Boolean)
-    .map(({ dayIndex }) => dayIndex));
-  let changed = false;
-  for (const dayIndex of affectedDays) {
-    for (const activity of itinerary.days[dayIndex]?.activities ?? []) {
-      if (!activity.scheduledStartTime || activity.plannedStartTime === activity.scheduledStartTime) continue;
-      activity.plannedStartTime = activity.scheduledStartTime;
-      changed = true;
-    }
-  }
-  return changed;
-}
-
 function repairBudget(itinerary, issues) {
   if (!issues.some(({ code }) => code === "BUDGET_EXCEEDED")) return false;
   for (let dayIndex = itinerary.days.length - 1; dayIndex >= 0; dayIndex -= 1) {
@@ -97,7 +80,7 @@ const attractionTypes = new Set(["CULTURE", "HISTORY", "NATURE", "SHOPPING", "EN
 const MEAL_DURATION_MINUTES = 60;
 const MEAL_WINDOWS = Object.freeze({
   LUNCH: { start: 11 * 60 + 30, end: 14 * 60, fallback: 12 * 60 + 30, reason: "Lunch opportunity between sightseeing activities." },
-  DINNER: { start: 17 * 60 + 30, end: 20 * 60, fallback: 18 * 60 + 30, reason: "Dinner opportunity after evening sightseeing." }
+  DINNER: { start: 17 * 60 + 30, end: 20 * 60, fallback: 18 * 60 + 30, reason: "Dinner opportunity before evening sightseeing.", allowEveningShift: true }
 });
 
 function dayLocation(issue) {
@@ -246,6 +229,24 @@ function orderedReplacementCandidates(candidatePool, currentId) {
   const currentIndex = candidates.findIndex((candidate) => candidateId(candidate) === currentId);
   if (currentIndex < 0) return candidates;
   return [...candidates.slice(currentIndex + 1), ...candidates.slice(0, currentIndex)];
+}
+
+function orderedCompatibleReplacements(candidatePool, activity) {
+  const candidates = candidateById(candidatePool);
+  const current = candidates.get(activity.xid);
+  const currentCoordinates = activityCoordinates(activity, candidates);
+  return orderedReplacementCandidates(candidatePool, activity.xid)
+    .map((candidate) => ({
+      candidate,
+      sameCategory: current?.category && candidate.category === current.category,
+      distance: currentCoordinates && candidate.coordinates
+        ? distanceOrInfinity(currentCoordinates, candidate.coordinates)
+        : Number.POSITIVE_INFINITY
+    }))
+    .sort((left, right) =>
+      Number(right.sameCategory) - Number(left.sameCategory) ||
+      left.distance - right.distance)
+    .map(({ candidate }) => candidate);
 }
 
 function plannedStartForOpenInterval(activity, interval) {
@@ -428,11 +429,35 @@ function chooseMealStart(day, window) {
     .sort((left, right) => left.start - right.start);
   let cursor = window.start;
   for (const block of busy) {
-    if (cursor + MEAL_DURATION_MINUTES <= Math.min(block.start, window.end)) return cursor;
+    if (cursor <= window.end && cursor + MEAL_DURATION_MINUTES <= block.start) return cursor;
+    if (window.allowEveningShift && cursor === window.start && block.start >= window.start && block.start <= window.end) {
+      return window.start;
+    }
     if (block.end > cursor) cursor = block.end;
   }
   if (cursor <= window.end) return cursor;
-  return Math.min(window.fallback, window.end);
+  return undefined;
+}
+
+function normalizeOverlongGroundedDurations(itinerary, issues, { candidatePool } = {}) {
+  if (!issues.some(({ code }) => code === "MEAL_CADENCE_MISSING")) return false;
+  const candidates = candidateById(candidatePool);
+  let changed = false;
+
+  for (const day of itinerary.days ?? []) {
+    for (const activity of day.activities ?? []) {
+      if (!activity.xid) continue;
+      const canonicalDuration = Number(candidates.get(activity.xid)?.suggestedVisitDurationMinutes);
+      const plannedDuration = Number(activity.plannedDurationMinutes);
+      if (!Number.isFinite(canonicalDuration) || !Number.isFinite(plannedDuration)) continue;
+      if (canonicalDuration <= 0) continue;
+      if (plannedDuration <= canonicalDuration) continue;
+      activity.plannedDurationMinutes = canonicalDuration;
+      changed = true;
+    }
+  }
+
+  return changed;
 }
 
 function repairMealCadence(itinerary, issues) {
@@ -452,6 +477,7 @@ function repairMealCadence(itinerary, issues) {
     const window = MEAL_WINDOWS[meal];
     if (hasMealInWindow(day, window)) continue;
     const start = chooseMealStart(day, window);
+    if (start === undefined) continue;
     day.activities.push({
       sequence: day.activities.length + 1,
       activityType: "MEAL",
@@ -508,7 +534,7 @@ function trimGenericFiller(itinerary, issues) {
     if (groundedCount < 2) continue;
 
     const keptMealWindows = new Set();
-    const next = day.activities.filter((activity, index) => {
+    const next = day.activities.filter((activity) => {
       if (activity.xid) return true;
       if (removableGenericTypes.has(activity.activityType)) return false;
       if (activity.activityType === "MEAL") {
@@ -674,7 +700,19 @@ function rebuildDaySchedule(day, candidatePool, { dayStart = 9 * 60 } = {}) {
     } else {
       const plannedStart = toMinutes(activity.plannedStartTime);
       const scheduledStart = toMinutes(activity.scheduledStartTime);
-      start = Math.max(cursor, scheduledStart ?? plannedStart ?? cursor);
+      const mealWindow = mealWindowKey(activity);
+      if (activity.activityType === "MEAL" && mealWindow) {
+        const window = MEAL_WINDOWS[mealWindow];
+        if (plannedStart !== undefined && plannedStart >= cursor) {
+          start = plannedStart;
+        } else if (cursor <= window.end) {
+          start = Math.max(cursor, window.start);
+        } else {
+          start = plannedStart ?? cursor;
+        }
+      } else {
+        start = Math.max(cursor, scheduledStart ?? plannedStart ?? cursor);
+      }
     }
 
     cursor = start + duration;
@@ -764,9 +802,9 @@ function repairClosedPois(itinerary, issues, { candidatePool } = {}) {
     return false;
   }
   const locations = issues
-    .filter(({ code }) => code === "POI_CLOSED_AT_SCHEDULED_TIME")
-    .map(activityLocation)
-    .filter(Boolean);
+    .filter(({ code }) => code === "POI_CLOSED_AT_SCHEDULED_TIME" || code === "POI_OPENING_HOURS_UNVERIFIED")
+    .map((issue) => ({ ...activityLocation(issue), code: issue.code }))
+    .filter(({ dayIndex, activityIndex }) => Number.isInteger(dayIndex) && Number.isInteger(activityIndex));
   if (!locations.length) return false;
 
   const usedIds = new Set(itinerary.days
@@ -775,7 +813,7 @@ function repairClosedPois(itinerary, issues, { candidatePool } = {}) {
     .filter(Boolean));
   let changed = false;
 
-  for (const { dayIndex, activityIndex } of locations) {
+  for (const { dayIndex, activityIndex, code } of locations) {
     const day = itinerary.days[dayIndex];
     const activity = day?.activities?.[activityIndex];
     if (!activity?.xid) continue;
@@ -802,7 +840,10 @@ function repairClosedPois(itinerary, issues, { candidatePool } = {}) {
       continue;
     }
 
-    const replacement = orderedReplacementCandidates(candidatePool, activity.xid)
+    const replacementCandidates = code === "POI_OPENING_HOURS_UNVERIFIED"
+      ? orderedCompatibleReplacements(candidatePool, activity)
+      : orderedReplacementCandidates(candidatePool, activity.xid);
+    const replacement = replacementCandidates
       .find((candidate) => {
         const id = candidateId(candidate);
         if (!id || usedIds.has(id)) return false;
@@ -872,6 +913,7 @@ export function deterministicRepair(input, issues, options = {}) {
     repairContinuity(itinerary, issues),
     repairClosedPois(itinerary, issues, options),
     backfillSparseDays(itinerary, issues, options),
+    normalizeOverlongGroundedDurations(itinerary, issues, options),
     repairMealCadence(itinerary, issues),
     trimGenericFiller(itinerary, issues),
     reduceOverlongSightseeingDays(itinerary, issues),

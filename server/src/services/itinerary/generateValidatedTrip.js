@@ -3,7 +3,7 @@ import { getDestinationDiscoveryContent } from "@nuogo/shared/destination-discov
 import { buildCandidatePool } from "../poi/buildCandidatePool.js";
 import { resolveAttractionPreferences } from "../poi/resolveAttractionPreferences.js";
 import { calculateItineraryBudget } from "../budget/budgetEngine.js";
-import { resolveAttractionActivityCostMinor } from "../budget/attractionPriceResolver.js";
+import { resolveAttractionActivityCostMinor, resolveAttractionPrice } from "../budget/attractionPriceResolver.js";
 import { buildProfileBudgetContext, countAvailableMeals } from "../budget/profileBudget.js";
 import { getSpendingProfile } from "../budget/spendingProfiles.js";
 import { planDraft } from "../llm/itineraryHarness.js";
@@ -104,6 +104,12 @@ function activityEstimateMinorFor(activity, poi, references, travellerCount) {
     return resolveAttractionActivityCostMinor({ activity, poi, references, travellerCount });
   }
   return activityEstimateMinor(activity.activityType, references, travellerCount);
+}
+
+function attractionPriceReferenceFor(activity, poi, references) {
+  if (!["CULTURE", "HISTORY", "NATURE", "FAMILY"].includes(activity.activityType)) return undefined;
+  const { poi: _resolvedPoi, ...reference } = resolveAttractionPrice({ activity, poi, references });
+  return reference;
 }
 
 function directDistanceMeters(from, to) {
@@ -324,9 +330,13 @@ function attachPoiFacts(itinerary, candidatePool, { anchors, references, prefere
       activities: day.activities.map((activity) => {
         const poi = activity.xid ? byId.get(activity.xid) : undefined;
         const hours = operatingHoursMetadata(activity, day, candidatePool);
+        const priceReference = poi ? attractionPriceReferenceFor(activity, poi, references) : undefined;
         return poi ? {
           ...activity,
-          estimatedActivityCostMinor: activityEstimateMinorFor(activity, poi, references, preferences.travellerCount),
+          estimatedActivityCostMinor: priceReference
+            ? priceReference.representativeMinor * preferences.travellerCount
+            : activityEstimateMinorFor(activity, poi, references, preferences.travellerCount),
+          ...(priceReference ? { priceReference } : {}),
           ...(hours ? { operatingHoursVerification: hours } : {}),
           poi: {
             canonicalPoiId: poi.canonicalPoiId,

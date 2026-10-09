@@ -414,6 +414,57 @@ describe("objective-aligned trip generation", () => {
     expect(unverified.operatingHoursVerification.state).not.toBe("VERIFIED_OPEN");
   });
 
+  it("attaches POI-specific price references to generated activities for source display", async () => {
+    const dbCandidates = databaseBackedCandidates("singapore");
+    const sourceBackedReferences = resolveCostReferences([
+      ...demoCostReferenceFixtures("singapore"),
+      {
+        id: "sg25-cost-sg-asian-civilisations-museum",
+        city: "singapore",
+        destinationId: "singapore",
+        poiId: "sg-asian-civilisations-museum",
+        category: "ATTRACTION_PERSON_ENTRY",
+        tier: null,
+        minMinor: 2500,
+        maxMinor: 2500,
+        representativeMinor: 2500,
+        currency: "SGD",
+        sourceName: "National Heritage Board — Asian Civilisations Museum",
+        sourceUrl: "https://www.nhb.gov.sg/acm/visit/admissions",
+        collectedOn: "2026-09-30",
+        updatedAt: "2026-09-30T00:00:00.000Z",
+        status: "ACTIVE",
+        referenceType: "EXACT",
+        unitType: "PER_PERSON_ENTRY",
+        priceBasis: "Published adult admission",
+        sourceType: "OFFICIAL",
+        lastReviewedDate: "2026-09-30",
+        notes: "Foreign residents/tourists adult all-access admission S$25."
+      }
+    ], { city: "singapore" });
+    const result = await generateValidatedTrip(preferences("singapore", {
+      startDate: "2026-10-10",
+      endDate: "2026-10-10",
+      dailyAttractionTarget: 2
+    }), dependencies({
+      retrieveAttractionCandidates: vi.fn(async () => dbCandidates),
+      getCostReferences: vi.fn(async () => sourceBackedReferences)
+    }));
+
+    expect(result.state, JSON.stringify(result.validation)).toBe("FINAL_VALIDATED");
+    const activity = result.variants[0].itinerary.days[0].activities
+      .find(({ xid }) => xid === "sg-asian-civilisations-museum");
+    expect(activity.priceReference).toMatchObject({
+      referenceType: "EXACT",
+      representativeMinor: 2500,
+      sourceName: "National Heritage Board — Asian Civilisations Museum",
+      sourceUrl: "https://www.nhb.gov.sg/acm/visit/admissions",
+      sourceType: "OFFICIAL",
+      lastReviewedDate: "2026-09-30"
+    });
+    expect(activity.presentation.costSourceType).toBe("OFFICIAL");
+  });
+
   it("attaches a grounded rainy-day alternative without adding its unused cost to the trip total", async () => {
     const selectedXid = "singapore-xid-2";
     const candidates = attractionCandidates("singapore").map((item, index) => index === 0
@@ -644,13 +695,17 @@ describe("objective-aligned trip generation", () => {
       budgetMinor: 1_000_000
     }), dependencies({ llmProvider: provider }));
 
-    expect(result.state).toBe("FINAL_VALIDATED");
+    expect(result.state).toBe("FAILED");
     expect(result.itineraryRun.validation.issues
       .some(({ code, severity }) => code === "SCHEDULE_DATE_MISSING" && severity === "ERROR")).toBe(false);
     expect(result.itineraryRun.itinerary.days.map(({ date }) => date))
       .toEqual(["2026-10-10", "2026-10-11", "2026-10-12", "2026-10-13", "2026-10-14"]);
     expect(result.itineraryRun.itinerary.days.every((day) =>
       day.activities.some(({ xid }) => xid))).toBe(true);
+    expect(result.itineraryRun.repairs.at(-1)).toMatchObject({
+      action: "NO_REPAIR_AVAILABLE",
+      issueCodes: ["MEAL_CADENCE_MISSING"]
+    });
   });
 
   it("returns and records a safe failure when the budget is impossible", async () => {

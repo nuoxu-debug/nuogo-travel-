@@ -34,9 +34,9 @@ afterEach(() => {
 });
 
 describe("runtime configuration", () => {
-  it("defaults OpenRouter generation to the approved DeepSeek model", () => {
+  it("defaults OpenRouter generation to the selected Gemini runtime model", () => {
     delete process.env.OPENROUTER_MODEL;
-    expect(loadConfig().openRouterModel).toBe("deepseek/deepseek-chat-v3.1");
+    expect(loadConfig().openRouterModel).toBe("google/gemini-3.1-flash-lite");
   });
 
   it("rejects an unknown AI provider", () => {
@@ -182,6 +182,16 @@ describe("runtime configuration", () => {
       travelDataProvider: "live",
       travelProviderTimeoutMs: 12000,
       openTripMapKey: "test-otm-key"
+    });
+  });
+
+  it("allows database-backed travel data without requiring OpenTripMap", () => {
+    process.env.TRAVEL_DATA_PROVIDER = "database";
+    delete process.env.OPENTRIPMAP_API_KEY;
+
+    expect(loadConfig()).toMatchObject({
+      travelDataProvider: "database",
+      openTripMapKey: ""
     });
   });
 

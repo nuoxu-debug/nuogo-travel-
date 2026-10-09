@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import App from "../src/App.jsx";
@@ -17,7 +17,7 @@ function respond(body = discovery, ok = true) { fetch.mockResolvedValue({ ok, st
 describe("destination discovery", () => {
   it("shows Chinese Singapore discovery content and never renders raw modes", async () => {
     localStorage.setItem("nuogo-language", "zh"); respond(); render(<App initialPath="/discover/singapore" />);
-    expect(await screen.findByRole("heading", { name: "发现新加坡" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "发现目的地" })).toBeVisible();
     expect(screen.getByRole("radio", { name: /让 Nuogo 建议/ })).toBeChecked();
     expect(screen.queryByText("AUTO", { exact: true })).not.toBeInTheDocument();
     expect(screen.getAllByText("演示资料").length).toBeGreaterThan(0);
@@ -26,7 +26,9 @@ describe("destination discovery", () => {
 
   it("uses friendly labels while preserving MANUAL and AUTO only in the stored draft", async () => {
     localStorage.setItem("nuogo-language", "en"); respond(); render(<App initialPath="/discover/singapore" />);
-    expect(await screen.findByRole("heading", { name: "Discover Singapore" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Discover Destinations" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Singapore" })).toBeVisible();
+    expect(screen.getByText("Available Pilot Destination")).toBeVisible();
     await userEvent.click(screen.getByRole("radio", { name: /Choose Attractions Myself/ }));
     await userEvent.click(screen.getByRole("button", { name: "Add National Gallery Singapore" }));
     expect(screen.getByText("Selected Attractions: 1")).toBeVisible();
@@ -38,7 +40,7 @@ describe("destination discovery", () => {
 
   it("keeps cards and map focus linked and labels demo data honestly", async () => {
     localStorage.setItem("nuogo-language", "en"); respond(); render(<App initialPath="/discover/singapore" />);
-    await screen.findByRole("heading", { name: "Discover Singapore" });
+    await screen.findByRole("heading", { name: "Discover Destinations" });
     await userEvent.click(screen.getByRole("radio", { name: /Choose Attractions Myself/ }));
     await userEvent.click(screen.getByRole("button", { name: "Add National Gallery Singapore" }));
     expect(screen.getAllByText("Demo data").length).toBeGreaterThan(0);
@@ -47,9 +49,49 @@ describe("destination discovery", () => {
     expect(screen.getByRole("link", { name: "Continue to Preferences" })).toHaveAttribute("href", "/planner");
   });
 
+  it.each(["en", "zh"])("requires sign-in before continuing from %s discovery to preferences", async (language) => {
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value: scrollIntoView });
+    try {
+      localStorage.setItem("nuogo-language", language);
+      respond();
+      render(<App initialPath="/discover/singapore" />);
+
+      await waitFor(() => expect(document.querySelector(".discovery-footer a[href='/planner']")).toBeTruthy());
+      await userEvent.click(document.querySelector(".discovery-footer a[href='/planner']"));
+
+      expect(await screen.findByRole("heading", { name: language === "zh" ? "欢迎回来" : "Welcome back" })).toBeVisible();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally {
+      if (originalScrollIntoView) {
+        Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value: originalScrollIntoView });
+      } else {
+        delete Element.prototype.scrollIntoView;
+      }
+    }
+  });
+
+  it("does not scroll the preference workflow on direct planner entry", async () => {
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value: scrollIntoView });
+    try {
+      render(<App initialPath="/planner" />);
+      expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeVisible();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally {
+      if (originalScrollIntoView) {
+        Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value: originalScrollIntoView });
+      } else {
+        delete Element.prototype.scrollIntoView;
+      }
+    }
+  });
+
   it("filters attractions without losing a chosen selection", async () => {
     localStorage.setItem("nuogo-language", "en"); respond(); render(<App initialPath="/discover/singapore" />);
-    await screen.findByRole("heading", { name: "Discover Singapore" }); await userEvent.click(screen.getByRole("radio", { name: /Choose Attractions Myself/ })); await userEvent.click(screen.getByRole("button", { name: "Add National Gallery Singapore" }));
+    await screen.findByRole("heading", { name: "Discover Destinations" }); await userEvent.click(screen.getByRole("radio", { name: /Choose Attractions Myself/ })); await userEvent.click(screen.getByRole("button", { name: "Add National Gallery Singapore" }));
     await userEvent.click(screen.getByRole("button", { name: "Nature" }));
     expect(screen.getByRole("button", { name: "Add Singapore Botanic Gardens" })).toBeVisible();
     expect(screen.getByText("Selected Attractions: 1")).toBeVisible();
