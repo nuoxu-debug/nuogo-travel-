@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { itineraryDraftJsonSchema } from "@nuogo/shared/itinerary-draft-schema";
 import { OpenRouterProvider } from "../src/providers/openRouter.js";
 
 const structuredRequest = {
@@ -47,6 +48,40 @@ describe("OpenRouterProvider", () => {
         code: "OPENROUTER_TIMEOUT",
         status: 504
       });
+  });
+
+  it.each([
+    { model: "google/gemini-3.1-flash-lite", omitMaximums: true },
+    { model: "test-model", omitMaximums: false }
+  ])("preserves local validation while preparing initial and repair schemas for $model", async ({ model, omitMaximums }) => {
+    const bodies = [];
+    const originalSchema = structuredClone(itineraryDraftJsonSchema);
+    const expectedSchema = structuredClone(itineraryDraftJsonSchema);
+    if (omitMaximums) {
+      delete expectedSchema.properties.days.maxItems;
+      delete expectedSchema.$defs.day.properties.activities.maxItems;
+    }
+    const provider = providerWith(async (_url, options) => {
+      bodies.push(JSON.parse(options.body));
+      return {
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: "{}" } }] })
+      };
+    }, { model });
+
+    for (const temperature of [0.2, 0.1]) {
+      await provider.generateStructured({ ...structuredRequest, jsonSchema: itineraryDraftJsonSchema, temperature });
+    }
+
+    for (const body of bodies) {
+      expect(body.response_format).toEqual({
+        type: "json_schema",
+        json_schema: { name: "nuogo_itinerary_draft", strict: true, schema: expectedSchema }
+      });
+    }
+    expect(itineraryDraftJsonSchema).toEqual(originalSchema);
+    expect(itineraryDraftJsonSchema.properties.days.maxItems).toBe(14);
+    expect(itineraryDraftJsonSchema.$defs.day.properties.activities.maxItems).toBe(12);
   });
 
   it("returns a typed error for non-2xx responses", async () => {

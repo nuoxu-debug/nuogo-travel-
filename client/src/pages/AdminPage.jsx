@@ -9,7 +9,7 @@ import AppShell from "../layout/AppShell.jsx";
 const copy = {
   en: {
     title: "Admin Dashboard",
-    intro: "Maintain the supporting records that keep destination, attraction, and planning-price data reliable.",
+    intro: "Legacy / evaluation reference tools for FYP planning data review.",
     loading: "Loading administration data...",
     retry: "Retry loading administration data",
     destinations: "Destination Management",
@@ -631,7 +631,7 @@ export default function AdminPage() {
             </label>
           </div>
           {data && <>
-            <section aria-label="Admin maintenance overview" className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <section aria-label="Legacy evaluation reference overview" className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {[
                 plural(overview.supportedPois, "supported POI", "supported POIs"),
                 plural(overview.activePriceReferences, "active price reference"),
@@ -639,7 +639,7 @@ export default function AdminPage() {
                 plural(overview.outdatedOrUnavailableRecords, "outdated / unavailable record")
               ].map((label) => <div key={label} className="border border-ink/10 bg-white px-4 py-4">
                 <p className="text-sm font-extrabold text-ink">{label}</p>
-                <p className="mt-1 text-xs font-semibold text-ink/55">Real records loaded from the Admin API.</p>
+                <p className="mt-1 text-xs font-semibold text-ink/55">Legacy / evaluation reference records loaded from the Admin API.</p>
               </div>)}
             </section>
 
@@ -879,7 +879,7 @@ export default function AdminPage() {
                       }}
                       className="min-h-11 rounded-lg border border-ink/15 bg-white px-3 text-sm font-bold text-ink"
                     >
-                      <option value="">Legacy</option>
+                      <option value="">Legacy / Evaluation Reference</option>
                       {referenceTypeOptions.map((value) => <option key={value} value={value}>{value}</option>)}
                     </select>
                   </label>
@@ -901,14 +901,14 @@ export default function AdminPage() {
                   <label className="grid gap-2 text-xs font-extrabold text-ink/60">
                     Source Type
                     <select aria-label="Source Type" value={editingCost.sourceType ?? ""} onChange={(event) => setEditingCost((current) => ({ ...current, sourceType: event.target.value || undefined }))} className="min-h-11 rounded-lg border border-ink/15 bg-white px-3 text-sm font-bold text-ink">
-                      <option value="">Legacy</option>
+                      <option value="">Legacy / Evaluation Reference</option>
                       {sourceTypeOptions.map((value) => <option key={value} value={value}>{value}</option>)}
                     </select>
                   </label>
                   <label className="grid gap-2 text-xs font-extrabold text-ink/60">
                     Unit Type
                     <select aria-label="Unit Type" value={editingCost.unitType ?? ""} onChange={(event) => setEditingCost((current) => ({ ...current, unitType: event.target.value || undefined }))} className="min-h-11 rounded-lg border border-ink/15 bg-white px-3 text-sm font-bold text-ink">
-                      <option value="">Legacy</option>
+                      <option value="">Legacy / Evaluation Reference</option>
                       {unitTypeOptions.map((value) => <option key={value} value={value}>{value}</option>)}
                     </select>
                   </label>

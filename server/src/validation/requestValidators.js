@@ -6,6 +6,8 @@ const activityPreferences = ["CULTURE", "HISTORY", "FOOD", "NATURE", "SHOPPING",
 const transportPreferenceModes = ["MANUAL", "AUTO_CHEAPEST"];
 const preferredTransportModes = ["PUBLIC_TRANSIT", "WALK", "TAXI"];
 const requiredText = (field, min, max) => body(field).isString().trim().isLength({ min, max });
+const localDateTimePattern = /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/;
+const datePart = (value) => String(value ?? "").slice(0, 10);
 const password = () => body("password").isString().isLength({ min: 8 }).custom((value) => {
   if (typeof value !== "string" || Buffer.byteLength(value, "utf8") > 72) {
     throw new Error("Password must be at most 72 UTF-8 bytes.");
@@ -31,6 +33,23 @@ export const travelPreferenceRequest = [checkExact([
   body("startDate").isISO8601({ strict: true, strictSeparator: true }),
   body("endDate").isISO8601({ strict: true, strictSeparator: true }).custom((value, { req }) => {
     if (value < req.body.startDate) throw new Error("End date must be on or after start date.");
+    return true;
+  }),
+  body("arrivalDateTime").optional({ values: "falsy" }).matches(localDateTimePattern).custom((value, { req }) => {
+    const arrivalDate = datePart(value);
+    if (arrivalDate < req.body.startDate || arrivalDate > req.body.endDate) {
+      throw new Error("Arrival date and time must be within the selected trip dates.");
+    }
+    return true;
+  }),
+  body("departureDateTime").optional({ values: "falsy" }).matches(localDateTimePattern).custom((value, { req }) => {
+    const departureDate = datePart(value);
+    if (departureDate < req.body.startDate || departureDate > req.body.endDate) {
+      throw new Error("Departure date and time must be within the selected trip dates.");
+    }
+    if (req.body.arrivalDateTime && value < req.body.arrivalDateTime) {
+      throw new Error("Departure date and time must be after arrival date and time.");
+    }
     return true;
   }),
   body("travellerCount").isInt({ min: 1, max: 20 }).toInt(),

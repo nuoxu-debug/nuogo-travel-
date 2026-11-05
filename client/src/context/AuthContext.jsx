@@ -18,6 +18,18 @@ import { clearAttractionDraft } from "../planning/attractionDraft.js";
 
 const AuthContext = createContext(null);
 
+function clearSavedTripCache() {
+  for (const key of Object.keys(sessionStorage)) {
+    if (!key.startsWith("nuogo-trip-")) continue;
+    try {
+      if (JSON.parse(sessionStorage.getItem(key))?.persistenceScope === "PREVIEW") continue;
+    } catch {
+      // Invalid cached trips are discarded with private saved trips.
+    }
+    sessionStorage.removeItem(key);
+  }
+}
+
 export function safeReturnTo(value) {
   if (typeof value !== "string") return "/planner";
 
@@ -53,7 +65,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const token = getAuthToken();
     if (!token) {
-      clearAuthToken();
+      clearSavedTripCache();
       return undefined;
     }
 
@@ -77,6 +89,21 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    function handleStorageChange(event) {
+      if (event.storageArea !== localStorage || (event.key !== "nuogo-token" && event.key !== null)) return;
+      const revision = ++sessionRevision.current;
+      clearSavedTripCache();
+      setUser(null);
+      setSessionReason(null);
+      const token = getAuthToken();
+      setReady(!token);
+      if (!token) return;
+      apiRequest("/auth/me")
+        .then((body) => { if (revision === sessionRevision.current) setUser(body.user); })
+        .catch(() => {})
+        .finally(() => { if (revision === sessionRevision.current) setReady(true); });
+    }
+
     function handleTokenChange(event) {
       if (getAuthToken()) return;
       sessionRevision.current += 1;
@@ -86,7 +113,11 @@ export function AuthProvider({ children }) {
     }
 
     window.addEventListener(AUTH_TOKEN_CHANGE_EVENT, handleTokenChange);
-    return () => window.removeEventListener(AUTH_TOKEN_CHANGE_EVENT, handleTokenChange);
+    window.addEventListener("storage", handleStorageChange);
+    return () => {
+      window.removeEventListener(AUTH_TOKEN_CHANGE_EVENT, handleTokenChange);
+      window.removeEventListener("storage", handleStorageChange);
+    };
   }, []);
 
   const establishSession = useCallback(async (request) => {
@@ -96,6 +127,7 @@ export function AuthProvider({ children }) {
     try {
       const body = await request();
       if (revision === sessionRevision.current) {
+        clearSavedTripCache();
         setSessionReason(null);
         setAuthToken(body.token, { guest: body.user.accountType === "GUEST" });
         setUser(body.user);

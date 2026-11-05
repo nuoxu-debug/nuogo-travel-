@@ -145,7 +145,7 @@ function mapActivity(activity, language) {
     name: { en: activityLabel(activity), zh: activityLabel(activity, "zh") },
     startTime: activity.scheduledStartTime ?? activity.plannedStartTime,
     endTime: activity.scheduledEndTime ?? activity.plannedStartTime,
-    address: { en: address ?? "Source-matched point of interest", zh: address ?? "与来源资料匹配的景点" },
+    address: { en: address ?? "Reference point of interest", zh: address ?? "参考景点" },
     location: activity.poi?.coordinates,
     locationIsEstimated: false,
     activityType: activity.activityType,
@@ -366,13 +366,13 @@ function ActivityDetails({ activity, onClose, language, canEdit, onSave, editBus
       <section role="dialog" aria-modal="true" aria-label={`${poi.name}${language === "zh" ? "详情" : " details"}`} className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-paper p-6 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-5">
           <div>
-            <p className="text-xs font-bold uppercase text-lake">{language === "zh" ? "与来源资料匹配的活动" : "Source-matched activity"}</p>
+            <p className="text-xs font-bold uppercase text-lake">{language === "zh" ? "来源支持型参考信息" : "Reference information"}</p>
             <h2 className="mt-2 font-display text-2xl font-bold">{poi.name}</h2>
           </div>
           <button type="button" onClick={onClose} className="min-h-11 rounded-lg border border-ink/15 px-4 text-sm font-bold">{language === "zh" ? "关闭" : "Close"}</button>
         </div>
-        <section role="region" aria-label={language === "zh" ? "OpenTripMap 提供方资料" : "OpenTripMap provider facts"} className="mt-6 border-t border-jade/20 bg-jade/5 p-4">
-          <p className="text-xs font-bold uppercase text-jade">{language === "zh" ? "OpenTripMap 提供方资料" : "OpenTripMap provider facts"}</p>
+        <section role="region" aria-label={language === "zh" ? "旅游参考信息" : "Travel reference information"} className="mt-6 border-t border-jade/20 bg-jade/5 p-4">
+          <p className="text-xs font-bold uppercase text-jade">{language === "zh" ? "旅游参考信息" : "Travel reference information"}</p>
           <dl className="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
             <div><dt className="text-ink/45">{language === "zh" ? "提供方" : "Provider"}</dt><dd className="mt-1 font-semibold">{displayLabel(language, "source", provider?.provider ?? poi.primarySource)}</dd></div>
             <div><dt className="text-ink/45">OpenTripMap xid</dt><dd className="mt-1 break-all font-semibold">{activity.xid}</dd></div>
@@ -439,7 +439,7 @@ function BudgetSummary({ summary, language }) {
           <span>{language === "zh" ? "查看预算明细" : "View cost details"}</span>
           <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
         </summary>
-        {hasCostReferences && <p className="mt-1 text-xs font-semibold text-ink/55">{language === "zh" ? "数据库成本参考" : "Database-backed cost references"}</p>}
+        {hasCostReferences && <p className="mt-1 text-xs font-semibold text-ink/55">{language === "zh" ? "规划成本参考" : "Planning cost references"}</p>}
         <dl className="mt-3 grid gap-2 sm:grid-cols-2">
           {Object.entries(budgetLabels).map(([key, label]) => (
             <div key={key} className="flex items-center justify-between gap-3 border-b border-ink/8 pb-2 text-sm">
@@ -583,19 +583,23 @@ export default function ObjectiveTripWorkspace({ trip, setTrip, access, refreshT
     }
   }
 
-  async function regenerate(preferences = {}) {
+  async function regenerate(preferencePatch = {}) {
     const wasStale = status === "INVALIDATED";
     setBusy(true);
     setStatus("REVALIDATING");
     setActionError("");
     setNotice("");
     try {
-      const result = await apiRequest(`/trips/${trip.id}/regenerate`, {
+      const result = await apiRequest(isPreview ? "/trips/generate" : `/trips/${trip.id}/regenerate`, {
         method: "POST",
-        body: JSON.stringify({ expectedRevision: trip.revision, preferences })
+        body: JSON.stringify(isPreview
+          ? { ...preferences, ...preferencePatch }
+          : { expectedRevision: trip.revision, preferences: preferencePatch })
       });
       const next = { ...result.trip, itineraryRun: result.itineraryRun, validation: result.validation, generationState: result.state, objectiveAligned: true, revision: result.trip.revision ?? 0 };
       sessionStorage.setItem(`nuogo-trip-${next.id}`, JSON.stringify(next));
+      if (result.preview) sessionStorage.setItem(`nuogo-preview-result-${next.id}`, JSON.stringify(result.preview));
+      if (result.previewToken) sessionStorage.setItem(`nuogo-preview-token-${next.id}`, result.previewToken);
       setTrip(next);
       setStatus("FINAL_VALIDATED");
       setVersioningOpen(false);
@@ -646,29 +650,9 @@ export default function ObjectiveTripWorkspace({ trip, setTrip, access, refreshT
     }
   }
 
-  async function claimGuestTrip() {
-    const key = `nuogo-guest-claim-${trip.id}`;
-    const claimToken = sessionStorage.getItem(key);
-    if (!claimToken) return;
-    setBusy(true);
-    try {
-      const body = await apiRequest(`/trips/${trip.id}/claim`, {
-        method: "POST",
-        body: JSON.stringify({ claimToken })
-      });
-      sessionStorage.removeItem(key);
-      setTrip((current) => ({ ...current, ...body.trip }));
-      setNotice(zh ? "行程已保存到你的账户。" : "Itinerary saved to your account.");
-    } catch {
-      setNotice(zh ? "暂时无法保存此行程，请重新登录后再试。" : "This itinerary could not be saved. Sign in again and retry.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function savePreviewTrip() {
-    if (user?.accountType === "GUEST") {
-      navigate(`/register?returnTo=${encodeURIComponent(`/trip/${trip.id}`)}`);
+    if (!user || user.accountType === "GUEST") {
+      navigate(`/login?returnTo=${encodeURIComponent(`/trip/${trip.id}`)}`);
       return;
     }
     const preview = sessionStorage.getItem(`nuogo-preview-result-${trip.id}`);
@@ -720,8 +704,6 @@ export default function ObjectiveTripWorkspace({ trip, setTrip, access, refreshT
           </div>}
           {access?.canEdit && !isPreview && <div className="flex flex-wrap gap-2">
             <button type="button" aria-label={zh ? "返回我的行程" : "Back to My trips"} onClick={() => navigate("/archive")} className="flex min-h-11 items-center gap-2 rounded-lg border border-ink/15 bg-white px-3 text-sm font-bold"><MapPinned className="h-4 w-4" /> {zh ? "返回我的行程" : "Back to My trips"}</button>
-            {user?.accountType === "GUEST" && sessionStorage.getItem(`nuogo-guest-claim-${trip.id}`) && <button type="button" aria-label={zh ? "登录后保存行程" : "Sign in to save itinerary"} onClick={() => navigate(`/register?returnTo=${encodeURIComponent(`/trip/${trip.id}`)}`)} className="flex min-h-11 items-center gap-2 rounded-lg bg-jade px-3 text-sm font-bold text-white"><Save className="h-4 w-4" /> {zh ? "登录后保存" : "Sign in to save"}</button>}
-            {user?.accountType !== "GUEST" && sessionStorage.getItem(`nuogo-guest-claim-${trip.id}`) && <button type="button" aria-label={zh ? "将行程保存到我的账户" : "Save itinerary to my account"} onClick={claimGuestTrip} disabled={busy} className="flex min-h-11 items-center gap-2 rounded-lg bg-jade px-3 text-sm font-bold text-white disabled:opacity-50"><Save className="h-4 w-4" /> {zh ? "保存到我的账户" : "Save to my account"}</button>}
             <button type="button" aria-label={zh ? "重命名行程" : "Rename trip"} onClick={rename} className="flex min-h-11 items-center gap-2 rounded-lg border border-ink/15 bg-white px-3 text-sm font-bold"><Edit3 className="h-4 w-4" /> {zh ? "重命名" : "Rename"}</button>
             <button type="button" aria-label={zh ? "编辑偏好" : "Edit preferences"} onClick={() => { setVersioningOpen((open) => !open); setStatus("INVALIDATED"); setActionError(""); }} className="flex min-h-11 items-center gap-2 rounded-lg border border-ink/15 bg-white px-3 text-sm font-bold"><Route className="h-4 w-4" /> {zh ? "编辑偏好" : "Edit preferences"}</button>
             <button type="button" aria-label={zh ? "重新生成行程" : "Regenerate trip"} disabled={busy} onClick={() => regenerate()} className="flex min-h-11 items-center gap-2 rounded-lg bg-ink px-3 text-sm font-bold text-white disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} /> {zh ? "重新生成" : "Regenerate"}</button>
@@ -762,7 +744,7 @@ export default function ObjectiveTripWorkspace({ trip, setTrip, access, refreshT
         {status === "FINAL_VALIDATED" && validation?.valid && <section role="region" aria-label={zh ? "行程校验摘要" : "Itinerary validation summary"} className="mb-4 flex flex-wrap gap-x-6 gap-y-2 border-y border-ink/10 bg-paper px-4 py-3 text-sm font-bold text-jade">
           <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4" />{zh ? "已通过校验" : "Validated"}</span>
           {withinBudget && <span className="flex items-center gap-2"><WalletCards className="h-4 w-4" />{zh ? "符合总预算上限" : "Within hard budget"}</span>}
-          <span className="flex items-center gap-2"><MapPinned className="h-4 w-4" />{zh ? `有来源景点：${sourcedAttractionCount}` : `Grounded attractions: ${sourcedAttractionCount}`}</span>
+          <span className="flex items-center gap-2"><MapPinned className="h-4 w-4" />{zh ? `参考景点：${sourcedAttractionCount}` : `Reference attractions: ${sourcedAttractionCount}`}</span>
           {openingHourWarnings.length > 0 && <span className="flex basis-full items-center gap-2 text-amber-700">{zh ? "开放时间未验证 - 到访前请再次确认。" : "Opening hours not verified - please confirm before visiting."}</span>}
         </section>}
         <nav aria-label={zh ? "行程日期" : "Trip days"} className="mb-4 flex gap-2 overflow-x-auto border border-ink/10 bg-paper p-2">
@@ -796,7 +778,7 @@ export default function ObjectiveTripWorkspace({ trip, setTrip, access, refreshT
                         <div className="mt-3 flex flex-wrap gap-1.5">
                           {activityChips(activity, language).map((chip) => <span key={chip} className="rounded-full bg-ink/[0.045] px-2.5 py-1 text-xs font-bold text-ink/62">{chip}</span>)}
                           {activityVerificationChips(activity, language).map((chip) => <span key={chip} className="rounded-full bg-jade/10 px-2.5 py-1 text-xs font-bold text-jade">{chip}</span>)}
-                          {activity.poi?.primarySource === "OPENTRIPMAP" && <span className="rounded-full bg-jade/10 px-2.5 py-1 text-xs font-bold text-jade">{zh ? "OpenTripMap 提供方资料" : "OpenTripMap facts"}</span>}
+                          {activity.poi?.primarySource === "OPENTRIPMAP" && <span className="rounded-full bg-jade/10 px-2.5 py-1 text-xs font-bold text-jade">{zh ? "参考信息" : "Reference information"}</span>}
                         </div>
                         {activityCostLabel(activity, language) && <p className="mt-3 text-xs font-bold text-sky"><span className="mr-2 uppercase">{zh ? "估算" : "Estimate"}</span>{activityCostLabel(activity, language)}</p>}
                       </div>

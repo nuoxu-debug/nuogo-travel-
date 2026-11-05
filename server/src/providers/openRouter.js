@@ -22,7 +22,10 @@ export class OpenRouterProvider {
         json_schema: {
           name: "nuogo_itinerary_draft",
           strict: true,
-          schema: jsonSchema
+          // Large nested maxItems bounds exceed Gemini schema complexity limits; enforce them locally.
+          schema: this.model.startsWith("google/")
+            ? JSON.parse(JSON.stringify(jsonSchema, (key, value) => key === "maxItems" ? undefined : value))
+            : jsonSchema
         }
       }
       : { type: "json_object" };

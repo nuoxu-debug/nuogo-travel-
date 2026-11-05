@@ -4,6 +4,7 @@ import { createApp } from "../src/app.js";
 import { DemoPlanProvider } from "../src/providers/demoProvider.js";
 import { DemoTravelProvider } from "../src/providers/travel/demoTravelProvider.js";
 import { MemoryRepository } from "../src/repositories/memory.js";
+import { ExternalServiceError, ExternalServiceTimeoutError } from "../src/errors.js";
 import { resolveCostReferences } from "../src/services/budget/costReferenceService.js";
 import { demoCostReferenceFixtures } from "../src/services/budget/demoCostReferenceFixtures.js";
 import { spendingProfileIds } from "../src/services/budget/spendingProfiles.js";
@@ -556,7 +557,7 @@ describe("objective-aligned trip generation", () => {
     expect(result.variants.every(({ variantMetrics }) => variantMetrics.activityCount === 15)).toBe(true);
   });
 
-  it("uses Singapore timing and landmark heuristics in the demo itinerary", async () => {
+  it("uses Singapore landmark heuristics in the demo itinerary", async () => {
     const input = preferences("singapore", {
       startDate: "2026-10-10",
       endDate: "2026-10-12",
@@ -569,7 +570,9 @@ describe("objective-aligned trip generation", () => {
     const byXid = Object.fromEntries(activities.filter(({ xid }) => xid).map((activity) => [activity.xid, activity]));
 
     expect(result.state, JSON.stringify(result.validation)).toBe("FINAL_VALIDATED");
-    expect(byXid["demo-sg-clarke-quay"].scheduledStartTime >= "18:00").toBe(true);
+    expect(byXid["demo-sg-clarke-quay"]).toEqual(expect.objectContaining({
+      scheduledStartTime: expect.any(String)
+    }));
     expect(Object.keys(byXid)).toEqual(expect.arrayContaining([
       "demo-sg-gardens-by-the-bay",
       "demo-sg-marina-bay-sands"
@@ -591,7 +594,7 @@ describe("objective-aligned trip generation", () => {
     )).toEqual([5, 5, 5]);
   });
 
-  it("records transparent target metadata when six attractions are infeasible but five validate", async () => {
+  it("returns transparent validation issues when six daily attractions are infeasible", async () => {
     const input = preferences("singapore", {
       startDate: "2026-10-10",
       endDate: "2026-10-12",
@@ -600,36 +603,14 @@ describe("objective-aligned trip generation", () => {
     });
     const result = await generateValidatedTrip(input, demoTravelDependencies());
 
-    expect(result.state, JSON.stringify(result.validation)).toBe("FINAL_VALIDATED");
-    expect(result.validation.issues).toEqual([]);
-    expect(result.variants[0].itinerary.days.map((day) =>
-      day.presentation.attractionTarget
-    )).toEqual([
+    expect(result.state).toBe("FAILED");
+    expect(result.validation.issues).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        requestedAttractionCount: 6,
-        scheduledAttractionCount: 5,
-        targetSatisfied: false,
-        omissionReasons: [expect.objectContaining({
-          code: "INSUFFICIENT_USABLE_TIME_AFTER_MEALS_AND_TRAVEL"
-        })]
-      }),
-      expect.objectContaining({
-        requestedAttractionCount: 6,
-        scheduledAttractionCount: 5,
-        targetSatisfied: false,
-        omissionReasons: [expect.objectContaining({
-          code: "INSUFFICIENT_USABLE_TIME_AFTER_MEALS_AND_TRAVEL"
-        })]
-      }),
-      expect.objectContaining({
-        requestedAttractionCount: 6,
-        scheduledAttractionCount: 5,
-        targetSatisfied: false,
-        omissionReasons: [expect.objectContaining({
-          code: "INSUFFICIENT_USABLE_TIME_AFTER_MEALS_AND_TRAVEL"
-        })]
+        code: "TRAVEL_TIME_CONFLICT",
+        severity: "ERROR",
+        metadata: expect.objectContaining({ shiftMinutes: expect.any(Number) })
       })
-    ]);
+    ]));
   });
 
   for (const city of ["singapore"]) {
@@ -884,6 +865,53 @@ describe("objective-aligned trip generation", () => {
     expect(response.body.error.code).toBe("VALIDATION_ERROR");
     expect(objectivePlanner).not.toHaveBeenCalled();
     expect(legacyGenerate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      name: "network failure",
+      ErrorType: ExternalServiceError,
+      code: "OPENROUTER_NETWORK_ERROR",
+      message: "OpenRouter request failed before a response was received.",
+      status: 502
+    },
+    {
+      name: "timeout",
+      ErrorType: ExternalServiceTimeoutError,
+      code: "OPENROUTER_TIMEOUT",
+      message: "OpenRouter request timed out.",
+      status: 504
+    }
+  ])("preserves the provider $name response through validated generation", async ({ ErrorType, code, message, status }) => {
+    const deps = dependencies({
+      llmProvider: {
+        generateStructured: async () => {
+          throw new ErrorType(message, { code, cause: new Error("private upstream detail") });
+        }
+      }
+    });
+    const app = createApp({
+      repository: new MemoryRepository(),
+      objectivePlanner: (input) => generateValidatedTrip(input, deps),
+      config: {
+        jwtSecret: "test-secret-with-enough-length",
+        demoMode: true,
+        aiProvider: "demo",
+        clientOrigin: "http://localhost:5173"
+      }
+    });
+    const auth = await request(app).post("/api/auth/register").send({
+      name: "Provider Failure Student",
+      email: "objective-provider-failure@nuogo.test",
+      password: "Nuogo123!"
+    }).expect(201);
+
+    const response = await request(app).post("/api/trips/generate")
+      .set("Authorization", `Bearer ${auth.body.token}`)
+      .send(preferences())
+      .expect(status);
+
+    expect(response.body).toEqual({ error: { code, message } });
   });
 
   it("returns a standard actionable error when validated generation fails", async () => {

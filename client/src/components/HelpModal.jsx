@@ -52,8 +52,8 @@ export default function HelpModal({ isOpen, onClose }) {
             </h3>
             <p className="mt-1.5 text-xs leading-relaxed text-ink/70">
               {zh
-                ? "请先注册或登录，然后进入“定制行程”页面，填写出发地、住宿区域、游玩日期、新币预算和旅行风格。系统会生成一份经过验证的试点行程。"
-                : "Create an account or sign in first, then go to Plan a trip. Enter your departure point, stay area, dates, SGD budget and travel style to generate one validated pilot itinerary."}
+                ? "进入“定制行程”页面，填写出发地、住宿区域、游玩日期、新币预算和旅行风格，即可生成一份经过验证的试点行程。保存行程时再注册或登录。"
+                : "Go to Plan a trip and enter your departure point, stay area, dates, SGD budget and travel style to generate one validated pilot itinerary. Sign in or create an account when you want to save it."}
             </p>
           </div>
 

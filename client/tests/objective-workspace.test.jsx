@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import App from "../src/App.jsx";
@@ -149,7 +149,12 @@ function singleRunTrip() {
 async function renderWorkspace(trip = singleRunTrip()) {
   localStorage.setItem("nuogo-token", "test-token");
   sessionStorage.setItem("nuogo-trip-trip-objective", JSON.stringify(trip));
-  fetch.mockResolvedValue({ ok: true, json: async () => ({ user: { id: "user-1", name: "Student", email: "student@nuogo.test" } }) });
+  fetch.mockImplementation(async (url) => {
+    if (url.endsWith("/auth/me")) return { ok: true, json: async () => ({ user: { id: "user-1", name: "Student", email: "student@nuogo.test" } }) };
+    if (url.endsWith(`/trips/${trip.id}`)) return { ok: true, json: async () => ({ trip, access: { role: "owner", canEdit: true, isOwner: true } }) };
+    if (url.endsWith("/trips")) return { ok: true, json: async () => ({ trips: [] }) };
+    throw new Error(`Unexpected request: ${url}`);
+  });
   render(<App initialPath="/trip/trip-objective" />);
   return screen.findByRole("heading", { name: "Singapore study trip" });
 }
@@ -160,27 +165,22 @@ describe("validated itinerary workspace", () => {
     expect(screen.getByText(/Validated trip workspace/)).toHaveTextContent("Balanced");
     expect(screen.getByRole("button", { name: "Back to My trips" })).toBeInTheDocument();
   });
-  it("requires an explicit registered-account save to claim a guest itinerary", async () => {
+  it("does not expose legacy guest-claim controls", async () => {
     localStorage.setItem("nuogo-token", "registered-token");
     sessionStorage.setItem("nuogo-guest-claim-trip-objective", "guest-claim-token-long-enough");
     sessionStorage.setItem("nuogo-trip-trip-objective", JSON.stringify(singleRunTrip()));
-    fetch.mockImplementation(async (url, options = {}) => {
+    fetch.mockImplementation(async (url) => {
       if (url.endsWith("/auth/me")) return { ok: true, json: async () => ({ user: { id: "user-1", accountType: "REGISTERED" } }) };
-      if (url.endsWith("/trips/trip-objective/claim") && options.method === "POST") {
-        return { ok: true, json: async () => ({ trip: { ...singleRunTrip(), persistenceScope: "PERSISTENT" } }) };
-      }
+      if (url.endsWith("/trips/trip-objective")) return { ok: true, json: async () => ({ trip: singleRunTrip() }) };
       throw new Error(`Unexpected request: ${url}`);
     });
 
     render(<App initialPath="/trip/trip-objective" />);
-    await userEvent.click(await screen.findByRole("button", { name: "Save itinerary to my account" }));
+    await screen.findByRole("heading", { name: "Singapore study trip" });
 
-    expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining("/trips/trip-objective/claim"),
-      expect.objectContaining({ method: "POST", body: JSON.stringify({ claimToken: "guest-claim-token-long-enough" }) })
-    );
-    expect(await screen.findByRole("status")).toHaveTextContent("Itinerary saved to your account");
-    expect(sessionStorage.getItem("nuogo-guest-claim-trip-objective")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save itinerary to my account" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sign in to save itinerary" })).not.toBeInTheDocument();
+    expect(fetch.mock.calls.find(([url]) => String(url).includes("/claim"))).toBeUndefined();
   });
   it("renders saved objective trips in the archive", async () => {
     localStorage.setItem("nuogo-token", "test-token");
@@ -250,6 +250,58 @@ describe("validated itinerary workspace", () => {
     expect(screen.queryByRole("button", { name: "Choose this plan" })).not.toBeInTheDocument();
   });
 
+  it("keeps an anonymous preview through sign-in and saves only after authentication", async () => {
+    const trip = { ...singleRunTrip(), persistenceScope: "PREVIEW" };
+    const saved = { ...trip, persistenceScope: "PERSISTENT" };
+    sessionStorage.setItem(`nuogo-trip-${trip.id}`, JSON.stringify(trip));
+    sessionStorage.setItem(`nuogo-preview-result-${trip.id}`, JSON.stringify({ result: { state: "FINAL_VALIDATED", trip } }));
+    sessionStorage.setItem(`nuogo-preview-token-${trip.id}`, "a".repeat(64));
+    fetch.mockImplementation(async (url) => {
+      if (url.endsWith("/auth/login")) return { ok: true, json: async () => ({ token: "registered-token", user: { id: "user-1", accountType: "REGISTERED" } }) };
+      if (url.endsWith("/trips/save-preview")) return { ok: true, json: async () => ({ trip: saved }) };
+      if (url.endsWith(`/trips/${trip.id}`)) return { ok: true, json: async () => ({ trip: saved }) };
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    render(<App initialPath={`/trip/${trip.id}`} />);
+    await screen.findByRole("heading", { name: "Singapore study trip" });
+    await userEvent.click(screen.getAllByRole("button", { name: "Save to My trips" })[0]);
+    expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Create account" }).at(-1)).toHaveAttribute("href", "/register?returnTo=%2Ftrip%2Ftrip-objective");
+    expect(fetch.mock.calls.find(([url]) => url.endsWith("/trips/save-preview"))).toBeUndefined();
+    await userEvent.type(screen.getByLabelText("Email address"), "visitor@example.com");
+    await userEvent.type(screen.getByLabelText("Password"), "Nuogo123!");
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await screen.findByRole("heading", { name: "Singapore study trip" });
+    await userEvent.click(screen.getAllByRole("button", { name: "Save to My trips" })[0]);
+    expect(await screen.findByText("Itinerary saved to My trips.")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Itinerary preview not saved" })).not.toBeInTheDocument();
+    expect(sessionStorage.getItem(`nuogo-preview-token-${trip.id}`)).toBeNull();
+  });
+
+  it("regenerates an anonymous preview through the public generation endpoint and replaces its signed envelope", async () => {
+    const trip = { ...singleRunTrip(), persistenceScope: "PREVIEW" };
+    const next = { ...trip, id: "trip-regenerated", title: "Regenerated preview" };
+    const preview = { result: { state: "FINAL_VALIDATED", trip: next } };
+    sessionStorage.setItem(`nuogo-trip-${trip.id}`, JSON.stringify(trip));
+    fetch.mockResolvedValue({ ok: true, json: async () => ({ trip: next, itineraryRun: next.itineraryRun, state: "FINAL_VALIDATED", preview, previewToken: "b".repeat(64) }) });
+    render(<App initialPath={`/trip/${trip.id}`} />);
+    await screen.findByRole("heading", { name: "Singapore study trip" });
+    await userEvent.click(screen.getByRole("button", { name: "Regenerate trip" }));
+    expect(await screen.findByRole("heading", { name: "Regenerated preview" })).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining("/trips/generate"), expect.objectContaining({ method: "POST" }));
+    expect(JSON.parse(sessionStorage.getItem(`nuogo-preview-result-${next.id}`))).toEqual(preview);
+    expect(sessionStorage.getItem(`nuogo-preview-token-${next.id}`)).toBe("b".repeat(64));
+  });
+
+  it("does not expose a cached persistent trip to anonymous visitors", async () => {
+    sessionStorage.setItem("nuogo-trip-trip-objective", JSON.stringify({ ...singleRunTrip(), persistenceScope: "PERSISTENT" }));
+    render(<App initialPath="/trip/trip-objective" />);
+    expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Singapore study trip" })).not.toBeInTheDocument();
+    expect(fetch.mock.calls.find(([url]) => url.endsWith("/trips/trip-objective"))).toBeUndefined();
+    expect(sessionStorage.getItem("nuogo-trip-trip-objective")).toBeNull();
+  });
+
   it("shows the unsaved preview prompt at the end instead of as a persistent bottom bar", async () => {
     const trip = { ...singleRunTrip(), persistenceScope: "PREVIEW" };
 
@@ -294,19 +346,19 @@ describe("validated itinerary workspace", () => {
     await renderWorkspace();
     const timeline = screen.getByRole("region", { name: "Day 1 continuous itinerary" });
 
-    expect(within(timeline).getByRole("button", { name: /Palace Museum/ })).toHaveTextContent("OpenTripMap facts");
+    expect(within(timeline).getByRole("button", { name: /Palace Museum/ })).toHaveTextContent("Reference information");
     ["Meal", "Transfer", "Accommodation", "Rest", "Departure"].forEach((label) => {
-      expect(within(timeline).getByRole("button", { name: `${label} details` })).not.toHaveTextContent("OpenTripMap facts");
+      expect(within(timeline).getByRole("button", { name: `${label} details` })).not.toHaveTextContent("Reference information");
     });
 
     await userEvent.click(within(timeline).getByRole("button", { name: /Palace Museum/ }));
-    expect(screen.getByRole("dialog", { name: "Palace Museum details" })).toHaveTextContent("Source-matched activity");
+    expect(screen.getByRole("dialog", { name: "Palace Museum details" })).toHaveTextContent("Reference information");
     expect(screen.getByText("otm-bj-forbidden-city", { selector: "dd" })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Close" }));
     await userEvent.click(within(timeline).getByRole("button", { name: "Meal details" }));
     expect(screen.getByRole("dialog", { name: "Meal details" })).toHaveTextContent("Schedule entry");
-    expect(screen.getByRole("dialog", { name: "Meal details" })).not.toHaveTextContent("Source-matched activity");
+    expect(screen.getByRole("dialog", { name: "Meal details" })).not.toHaveTextContent("Reference information");
   });
 
   it("renders generic meal and rest entries as compact schedule rows instead of empty attraction cards", async () => {
@@ -354,7 +406,7 @@ describe("validated itinerary workspace", () => {
     const evidence = await screen.findByRole("region", { name: "Itinerary validation summary" });
     expect(within(evidence).getByText("Validated")).toBeVisible();
     expect(within(evidence).getByText("Within hard budget")).toBeVisible();
-    expect(within(evidence).getByText("Grounded attractions: 3")).toBeVisible();
+    expect(within(evidence).getByText("Reference attractions: 3")).toBeVisible();
   });
 
   it("counts sourced attractions from retained source records only", async () => {
@@ -364,8 +416,8 @@ describe("validated itinerary workspace", () => {
     await renderWorkspace(trip);
 
     const evidence = await screen.findByRole("region", { name: "Itinerary validation summary" });
-    expect(within(evidence).getByText("Grounded attractions: 2")).toBeVisible();
-    expect(evidence).not.toHaveTextContent("Grounded attractions: 3");
+    expect(within(evidence).getByText("Reference attractions: 2")).toBeVisible();
+    expect(evidence).not.toHaveTextContent("Reference attractions: 3");
   });
 
   it("shows unverifiable opening hours as a warning on an otherwise valid itinerary", async () => {
@@ -510,7 +562,7 @@ describe("validated itinerary workspace", () => {
     await renderWorkspace(trip);
 
     const timeline = screen.getByRole("region", { name: "Day 1 continuous itinerary" });
-    expect(within(timeline).getByRole("button", { name: "Meal details" })).not.toHaveTextContent("OpenTripMap facts");
+    expect(within(timeline).getByRole("button", { name: "Meal details" })).not.toHaveTextContent("Reference information");
   });
 
   it("selects provider facts by activity xid instead of source-record order", async () => {
@@ -532,19 +584,19 @@ describe("validated itinerary workspace", () => {
     expect(dialog).toHaveTextContent("2026-08-14T00:00:00.000Z");
   });
 
-  it("separates OpenTripMap provider facts, AI rationale, and deterministic estimates without current-data claims", async () => {
+  it("separates travel reference information, AI rationale, and deterministic estimates without current-data claims", async () => {
     await renderWorkspace();
     const timeline = screen.getByRole("region", { name: "Day 1 continuous itinerary" });
     const attraction = within(timeline).getByRole("button", { name: /Palace Museum/ });
 
-    expect(attraction).toHaveTextContent("OpenTripMap facts");
+    expect(attraction).toHaveTextContent("Reference information");
     expect(attraction).toHaveTextContent("AI rationale");
     expect(attraction).toHaveTextContent("Estimate");
     expect(within(timeline).getAllByRole("group", { name: "Travel estimate" })).toHaveLength(3);
 
     await userEvent.click(attraction);
     const dialog = screen.getByRole("dialog", { name: "Palace Museum details" });
-    const providerFacts = within(dialog).getByRole("region", { name: "OpenTripMap provider facts" });
+    const providerFacts = within(dialog).getByRole("region", { name: "Travel reference information" });
     const rationale = within(dialog).getByRole("region", { name: "AI rationale" });
     const estimate = within(dialog).getByRole("region", { name: "Deterministic estimate" });
 
@@ -568,7 +620,7 @@ describe("validated itinerary workspace", () => {
     expect(within(budget).queryByText("Return transport")).not.toBeInTheDocument();
     expect(within(budget).getByText("S$ 2,200 remaining")).toBeInTheDocument();
     expect(within(budget).getByText("S$ 1,400 per traveller")).toBeInTheDocument();
-    expect(within(budget).getByText("Database-backed cost references")).toBeInTheDocument();
+    expect(within(budget).getByText("Planning cost references")).toBeInTheDocument();
   });
 
   it("keeps the map compact, ordered, and explicit about estimated anchors", async () => {
@@ -719,7 +771,7 @@ describe("validated itinerary workspace", () => {
         validation: child.validation,
         state: "FINAL_VALIDATED"
       })
-    });
+    }).mockResolvedValueOnce({ ok: true, json: async () => ({ trip: child }) });
     await userEvent.click(within(screen.getByRole("region", { name: "Itinerary Update Required" })).getByRole("button", { name: "Regenerate Itinerary" }));
 
     expect(fetch).toHaveBeenCalledWith(
@@ -744,7 +796,8 @@ describe("validated itinerary workspace", () => {
     );
     expect(sessionStorage.getItem("nuogo-trip-trip-objective")).not.toBeNull();
     expect(JSON.parse(sessionStorage.getItem("nuogo-trip-trip-child")).parentTripId).toBe("trip-objective");
-    expect(await screen.findByRole("heading", { name: "Updated Singapore trip" })).toBeInTheDocument();
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining("/trips/trip-child"), expect.anything()));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Updated Singapore trip" })).toBeInTheDocument());
     expect(screen.queryByRole("region", { name: "Itinerary Update Required" })).not.toBeInTheDocument();
   });
 
@@ -804,13 +857,13 @@ describe("validated itinerary workspace", () => {
 
     const timeline = screen.getByRole("region", { name: "第 1 天连续行程" });
     const attraction = within(timeline).getByRole("button", { name: "Palace Museum详情" });
-    expect(attraction).toHaveTextContent("OpenTripMap 提供方资料");
+    expect(attraction).toHaveTextContent("参考信息");
     expect(attraction).toHaveTextContent("AI 生成理由");
     expect(attraction).toHaveTextContent("估算");
 
     await userEvent.click(attraction);
     const dialog = screen.getByRole("dialog", { name: "Palace Museum详情" });
-    expect(within(dialog).getByRole("region", { name: "OpenTripMap 提供方资料" })).toHaveTextContent("辅助资料");
+    expect(within(dialog).getByRole("region", { name: "旅游参考信息" })).toHaveTextContent("辅助资料");
     expect(within(dialog).getByRole("region", { name: "AI 生成理由" })).toBeInTheDocument();
     expect(within(dialog).getByRole("region", { name: "确定性估算" })).toBeInTheDocument();
   });

@@ -17,7 +17,7 @@ describe("Nuogo application shell", () => {
     expect(screen.queryByText("GUEST", { exact: true })).not.toBeInTheDocument();
   });
 
-  it("sends Guest Mode users to sign in when they choose Plan a trip", async () => {
+  it("lets Guest Mode users open the public planner when they choose Plan a trip", async () => {
     sessionStorage.setItem("nuogo-token", "guest-token");
     fetch.mockResolvedValueOnce(response({
       user: { id: "guest-1", name: "Nuogo Guest", accountType: "GUEST" }
@@ -28,7 +28,7 @@ describe("Nuogo application shell", () => {
     expect(await screen.findByTestId("user-mode-badge")).toHaveTextContent("Guest Mode");
     fireEvent.click(screen.getAllByRole("link", { name: /Plan a trip/i })[0]);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Please sign in or create an account to plan your trip.");
+    expect(await screen.findByRole("button", { name: "Generate ONE itinerary" })).toBeInTheDocument();
     expect(fetch.mock.calls.find(([url]) => String(url).endsWith("/auth/guest"))).toBeUndefined();
   });
 

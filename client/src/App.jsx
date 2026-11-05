@@ -1,4 +1,4 @@
-import { BrowserRouter, MemoryRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, MemoryRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext.jsx";
 import { LanguageProvider } from "./context/LanguageContext.jsx";
 import { RootErrorBoundary } from "./components/RootErrorBoundary.jsx";
@@ -20,9 +20,9 @@ function ApplicationRoutes() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/planner" element={<RegisteredRoute><PlannerPage /></RegisteredRoute>} />
+        <Route path="/planner" element={<PlannerPage />} />
         <Route path="/discover/:destination" element={<DestinationDiscoveryPage />} />
-        <Route path="/trip/:tripId" element={<RegisteredRoute><TripWorkspacePage /></RegisteredRoute>} />
+        <Route path="/trip/:tripId" element={<TripRoute />} />
         <Route path="/archive" element={<RegisteredRoute><ArchivePage /></RegisteredRoute>} />
         <Route path="/profile" element={<RegisteredRoute><ProfilePage /></RegisteredRoute>} />
         <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
@@ -30,6 +30,20 @@ function ApplicationRoutes() {
       </Routes>
     </>
   );
+}
+
+function TripRoute() {
+  const { tripId } = useParams();
+  let preview;
+  try {
+    preview = JSON.parse(sessionStorage.getItem(`nuogo-trip-${tripId}`));
+  } catch {
+    preview = null;
+  }
+  if (preview?.id === tripId && preview.objectiveAligned && preview.persistenceScope === "PREVIEW") {
+    return <TripWorkspacePage />;
+  }
+  return <RegisteredRoute><TripWorkspacePage /></RegisteredRoute>;
 }
 
 function SessionExpiryRedirect() {

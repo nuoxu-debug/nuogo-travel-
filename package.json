@@ -12,23 +12,16 @@
     "node": ">=20"
   },
   "scripts": {
-    "bootstrap:node": "powershell -ExecutionPolicy Bypass -File scripts/bootstrap-node.ps1",
     "dev": "concurrently -n API,WEB -c yellow,cyan \"npm --workspace server run dev\" \"npm --workspace client run dev\"",
-    "build": "npm --workspace shared run test && npm --workspace server run build && npm --workspace client run build",
+    "build": "npm --workspace server run build && npm --workspace client run build",
     "test": "npm --workspace shared run test && npm --workspace server run test && npm --workspace client run test",
     "test:integration": "npm --workspace server run test:integration",
     "test:e2e": "playwright test",
-    "lint": "eslint client/src client/tests server/src server/tests shared tests/e2e playwright.config.js",
     "test:shared": "npm --workspace shared run test"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.0",
     "@playwright/test": "^1.62.1",
     "concurrently": "^9.0.1",
-    "eslint": "^9.39.0",
-    "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "globals": "^17.11.0",
     "xlsx": "^0.18.5"
   }
 }

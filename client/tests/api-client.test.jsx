@@ -2,6 +2,24 @@ import { describe, expect, it } from "vitest";
 import { apiRequest } from "../src/api/client.js";
 
 describe("apiRequest authentication handling", () => {
+  it.each(["/auth/login", "/auth/register"])("preserves an existing session and unsaved preview when %s rejects credentials", async (path) => {
+    localStorage.setItem("nuogo-token", "current-session");
+    sessionStorage.setItem("nuogo-trip-preview", JSON.stringify({ id: "preview", persistenceScope: "PREVIEW" }));
+    sessionStorage.setItem("nuogo-preview-result-preview", "preview-result");
+    sessionStorage.setItem("nuogo-preview-token-preview", "preview-signature");
+    fetch.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: { code: "INVALID_CREDENTIALS", message: "Invalid credentials." } })
+    });
+
+    await expect(apiRequest(path, { method: "POST", body: "{}" })).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
+    expect(localStorage.getItem("nuogo-token")).toBe("current-session");
+    expect(sessionStorage.getItem("nuogo-trip-preview")).toContain("PREVIEW");
+    expect(sessionStorage.getItem("nuogo-preview-result-preview")).toBe("preview-result");
+    expect(sessionStorage.getItem("nuogo-preview-token-preview")).toBe("preview-signature");
+  });
+
   it("sends the stored bearer token", async () => {
     localStorage.setItem("nuogo-token", "stored-token");
     fetch.mockResolvedValueOnce({
@@ -20,6 +38,17 @@ describe("apiRequest authentication handling", () => {
         })
       })
     );
+  });
+
+  it("does not clear a newer account session when an older request returns 401", async () => {
+    localStorage.setItem("nuogo-token", "old-session");
+    let finish;
+    fetch.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const pending = apiRequest("/trips");
+    localStorage.setItem("nuogo-token", "new-session");
+    finish({ ok: false, status: 401, json: async () => ({ error: { code: "AUTH_TOKEN_EXPIRED" } }) });
+    await expect(pending).rejects.toMatchObject({ status: 401 });
+    expect(localStorage.getItem("nuogo-token")).toBe("new-session");
   });
 
   it("clears every Nuogo private cache while preserving locale when a token expires", async () => {

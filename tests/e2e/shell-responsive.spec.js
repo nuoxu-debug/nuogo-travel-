@@ -17,7 +17,8 @@ test("the shared shell has no horizontal overflow at Phase 1 viewports", async (
     await page.setViewportSize(viewport);
     await page.goto("/");
     await expect(page.getByRole("banner")).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBeTruthy();
+    const dimensions = await page.evaluate(() => ({ width: window.innerWidth, scrollWidth: document.documentElement.scrollWidth }));
+    expect(dimensions.scrollWidth, `Horizontal overflow at ${viewport.width}x${viewport.height}`).toBeLessThanOrEqual(dimensions.width + 1);
 
     if (viewport.width < 1024) {
       await page.getByRole("button", { name: "Open menu" }).click();
@@ -28,14 +29,14 @@ test("the shared shell has no horizontal overflow at Phase 1 viewports", async (
   }
 });
 
-test("the shell presents guest, registered, and administrator modes with friendly labels", async ({ page }, testInfo) => {
+test("the shell supports anonymous browsing and labels registered and administrator accounts", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "Account-mode verification is viewport-independent.");
 
   await page.goto("/login");
-  await page.getByRole("button", { name: "Continue as guest" }).click();
-  await expect(page.getByTestId("user-mode-badge")).toHaveText("Guest Mode");
+  await page.getByRole("link", { name: "Browse Singapore", exact: true }).click();
+  await expect(page).toHaveURL(/\/discover\/singapore$/);
+  expect(await page.evaluate(() => localStorage.getItem("nuogo-token"))).toBeNull();
 
-  await page.getByRole("button", { name: "Sign out" }).click();
   await page.goto("/register");
   await page.getByLabel("Full name").fill("Nuogo Registered Traveller");
   await page.getByLabel("Email address").fill(`phase-one-${Date.now()}@nuogo.test`);

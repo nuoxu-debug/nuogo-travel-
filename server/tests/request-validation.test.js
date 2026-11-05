@@ -92,6 +92,96 @@ describe("Express request validation boundaries", () => {
     expect(generated.body.error.code).toBe("GENERATION_CONSTRAINTS_UNSATISFIED");
   });
 
+  it("accepts optional arrival and departure datetimes when they stay inside the trip range", async () => {
+    const application = app();
+    const auth = await request(application).post("/api/auth/register").send({
+      name: "Datetime Preference User",
+      email: "datetime-preferences@nuogo.test",
+      password: "Nuogo123!"
+    });
+
+    const generated = await request(application).post("/api/trips/generate")
+      .set("Authorization", `Bearer ${auth.body.token}`)
+      .send({
+        destination: "singapore",
+        departurePoint: "Changi Airport",
+        arrivalPoint: "Hotel in Singapore",
+        startDate: "2026-10-10",
+        endDate: "2026-10-12",
+        arrivalDateTime: "2026-10-10T09:30",
+        departureDateTime: "2026-10-12T18:45",
+        travellerCount: 2,
+        budgetMinor: 6000,
+        currency: "SGD",
+        interests: ["HISTORY", "FOOD"],
+        preferredSights: [],
+        transportPreferenceMode: "AUTO_CHEAPEST",
+        preferredTransportModes: [],
+        attractionSelectionMode: "AUTO",
+        selectedAttractions: [],
+        travelStyle: "BALANCED",
+        dailyAttractionTarget: 12,
+        rainyDayBackupEnabled: true,
+        otherPreferences: "",
+        language: "en",
+        consentToLlmProcessing: true
+      })
+      .expect(422);
+
+    expect(generated.body.error.code).toBe("GENERATION_CONSTRAINTS_UNSATISFIED");
+  });
+
+  it("rejects malformed or inconsistent optional travel datetimes before planning", async () => {
+    const application = app();
+    const auth = await request(application).post("/api/auth/register").send({
+      name: "Bad Datetime User",
+      email: "bad-datetime@nuogo.test",
+      password: "Nuogo123!"
+    });
+    const base = {
+      destination: "singapore",
+      departurePoint: "Changi Airport",
+      arrivalPoint: "Hotel in Singapore",
+      startDate: "2026-10-10",
+      endDate: "2026-10-12",
+      travellerCount: 2,
+      budgetMinor: 6000,
+      currency: "SGD",
+      interests: ["HISTORY", "FOOD"],
+      preferredSights: [],
+      attractionSelectionMode: "AUTO",
+      selectedAttractions: [],
+      travelStyle: "BALANCED",
+      rainyDayBackupEnabled: true,
+      language: "en",
+      consentToLlmProcessing: true
+    };
+
+    const malformed = await request(application).post("/api/trips/generate")
+      .set("Authorization", `Bearer ${auth.body.token}`)
+      .send({ ...base, arrivalDateTime: "tomorrow morning" })
+      .expect(400);
+    expect(malformed.body.error.details).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "arrivalDateTime" })
+    ]));
+
+    const outsideRange = await request(application).post("/api/trips/generate")
+      .set("Authorization", `Bearer ${auth.body.token}`)
+      .send({ ...base, arrivalDateTime: "2026-10-09T23:00" })
+      .expect(400);
+    expect(outsideRange.body.error.details).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "arrivalDateTime" })
+    ]));
+
+    const reversed = await request(application).post("/api/trips/generate")
+      .set("Authorization", `Bearer ${auth.body.token}`)
+      .send({ ...base, arrivalDateTime: "2026-10-12T20:00", departureDateTime: "2026-10-12T08:00" })
+      .expect(400);
+    expect(reversed.body.error.details).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "departureDateTime" })
+    ]));
+  });
+
   it("validates transport preference request boundaries", async () => {
     const application = app();
     const auth = await request(application).post("/api/auth/register").send({

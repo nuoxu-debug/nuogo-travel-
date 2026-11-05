@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import App from "../src/App.jsx";
@@ -38,7 +38,7 @@ function signInRegisteredTraveller() {
   localStorage.setItem("nuogo-token", "registered-token");
 }
 
-function installGenerationApi({ failure, pendingGeneration } = {}) {
+function installGenerationApi({ failure, failureStatus = 422, pendingGeneration } = {}) {
   fetch.mockImplementation(async (url) => {
     if (String(url).includes("api.frankfurter.dev")) {
       const quote = String(url).split("/").pop().toUpperCase();
@@ -47,7 +47,7 @@ function installGenerationApi({ failure, pendingGeneration } = {}) {
     if (url.endsWith("/auth/me")) return response({ user: { id: "user-1", accountType: "REGISTERED", role: "user" } });
     if (url.endsWith("/trips/generate")) {
       if (pendingGeneration) return pendingGeneration.promise;
-      return failure ? response(failure, false, 422) : response(validatedResult());
+      return failure ? response(failure, false, failureStatus) : response(validatedResult());
     }
     return response({});
   });
@@ -60,16 +60,20 @@ function deferred() {
 }
 
 describe("Singapore preference planner", () => {
-  it("redirects unauthenticated visitors before itinerary generation", async () => {
+  it("lets anonymous visitors generate a session-only preview without guest credentials", async () => {
     installGenerationApi();
     render(<App initialPath="/planner" />);
 
-    expect(await screen.findByRole("button", { name: "Sign in" })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "Generate ONE itinerary" }));
+    expect(await screen.findByRole("region", { name: "Itinerary preview not saved" })).toBeInTheDocument();
     expect(fetch.mock.calls.find(([url]) => url.endsWith("/auth/guest"))).toBeUndefined();
-    expect(fetch.mock.calls.find(([url]) => url.endsWith("/trips/generate"))).toBeUndefined();
+    expect(fetch.mock.calls.find(([url]) => url.endsWith("/trips/generate"))).toBeDefined();
+    expect(localStorage.getItem("nuogo-token")).toBeNull();
+    expect(sessionStorage.getItem("nuogo-token")).toBeNull();
+    expect(JSON.parse(sessionStorage.getItem("nuogo-trip-trip-1")).persistenceScope).toBe("PREVIEW");
   });
 
-  it("redirects Guest Mode users from direct planner access to sign in", async () => {
+  it("lets legacy Guest Mode users see the public planner without creating guest credentials", async () => {
     sessionStorage.setItem("nuogo-token", "guest-token");
     fetch.mockResolvedValueOnce(response({
       user: { id: "guest-1", accountType: "GUEST" }
@@ -77,7 +81,7 @@ describe("Singapore preference planner", () => {
 
     render(<App initialPath="/planner" />);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Please sign in or create an account to plan your trip.");
+    expect(await screen.findByRole("button", { name: "Generate ONE itinerary" })).toBeInTheDocument();
     expect(fetch.mock.calls.find(([url]) => url.endsWith("/auth/guest"))).toBeUndefined();
     expect(fetch.mock.calls.find(([url]) => url.endsWith("/trips/generate"))).toBeUndefined();
   });
@@ -101,14 +105,20 @@ describe("Singapore preference planner", () => {
 
     expect(await screen.findByTestId("planner-brief-hero")).toHaveAttribute("data-layout", "travel-brief");
     expect(screen.getByTestId("planner-brief-background")).toHaveAttribute("src", expect.stringContaining("singapore-marina-bay-hero.png"));
-    expect(screen.getByText("Pilot Destination / Available Now")).toBeInTheDocument();
-    expect(screen.getByText("Currently available for validated planning: Singapore")).toBeInTheDocument();
+    expect(screen.getByText("FYP Pilot Destination")).toBeInTheDocument();
+    expect(screen.getByText("Available pilot destination: Singapore")).toBeInTheDocument();
     expect(screen.getByText("More destinations coming in future releases")).toBeInTheDocument();
     expect(screen.getByLabelText("Departure point")).toHaveValue("Changi Airport");
     expect(screen.getByLabelText("Stay / end point")).toHaveValue("Hotel in Singapore");
     expect(screen.queryByRole("combobox", { name: "Destination" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Start date")).toBeRequired();
     expect(screen.getByLabelText("End date")).toBeRequired();
+    expect(screen.getByLabelText("Arrival time (optional)")).not.toBeRequired();
+    expect(screen.getByLabelText("Departure time (optional)")).not.toBeRequired();
+    expect(screen.getByLabelText("Arrival time (optional)")).toHaveAttribute("type", "text");
+    expect(screen.getByLabelText("Arrival time (optional)")).toHaveAttribute("placeholder", "HH:mm");
+    expect(screen.getByLabelText("Departure time (optional)")).toHaveAttribute("placeholder", "HH:mm");
+    expect(document.querySelectorAll('input[type="date"]')).toHaveLength(2);
     expect(screen.getByRole("spinbutton", { name: "Travellers" })).toHaveValue(2);
     expect(screen.getByLabelText("Daily attraction target")).toHaveValue("2");
     expect(screen.getByRole("button", { name: /Balanced/ })).toHaveAttribute("aria-pressed", "true");
@@ -123,6 +133,10 @@ describe("Singapore preference planner", () => {
 
     await userEvent.clear(await screen.findByLabelText("Departure point"));
     await userEvent.type(screen.getByLabelText("Departure point"), "Kuala Lumpur, Malaysia");
+    await userEvent.type(screen.getByLabelText("Arrival time (optional)"), "09:30");
+    await userEvent.type(screen.getByLabelText("Departure time (optional)"), "18:45");
+    fireEvent.change(screen.getByLabelText("Start date"), { target: { value: "2026-10-11" } });
+    fireEvent.change(screen.getByLabelText("End date"), { target: { value: "2026-10-13" } });
     await userEvent.click(screen.getByRole("button", { name: "Generate ONE itinerary" }));
 
     const request = fetch.mock.calls.find(([url]) => url.endsWith("/trips/generate"));
@@ -132,17 +146,38 @@ describe("Singapore preference planner", () => {
       destination: "singapore",
       departurePoint: "Kuala Lumpur, Malaysia",
       arrivalPoint: "Hotel in Singapore",
-      startDate: "2026-10-10",
-      endDate: "2026-10-12",
+      startDate: "2026-10-11",
+      endDate: "2026-10-13",
       travellerCount: 2,
       budgetMinor: 200000,
       currency: "SGD",
       dailyAttractionTarget: 2,
+      arrivalDateTime: "2026-10-11T09:30",
+      departureDateTime: "2026-10-13T18:45",
       travelStyle: "BALANCED",
       rainyDayBackupEnabled: false,
       language: "en"
     });
     expect(await screen.findByText(/Validated trip workspace/)).toBeInTheDocument();
+  });
+
+  it("uses the selected site language for the time picker and preserves the entered time", async () => {
+    signInRegisteredTraveller();
+    installGenerationApi();
+    render(<App initialPath="/planner" />);
+    const arrival = await screen.findByLabelText("Arrival time (optional)");
+    await userEvent.type(arrival, "09:30");
+    await userEvent.tab();
+    await userEvent.click(screen.getByRole("button", { name: "Choose time: Arrival time (optional)" }));
+    expect(document.querySelector(".flatpickr-calendar.open .flatpickr-hour")).toHaveValue(9);
+    expect(document.querySelector(".flatpickr-calendar.open .flatpickr-days")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "\u4e2d\u6587", exact: true }));
+    const translated = screen.getByLabelText("\u5230\u8fbe\u65f6\u95f4\uff08\u53ef\u9009\uff09");
+    expect(translated).toHaveValue("09:30");
+    await userEvent.click(screen.getByRole("button", { name: "\u9009\u62e9\u65f6\u95f4\uff1a\u5230\u8fbe\u65f6\u95f4\uff08\u53ef\u9009\uff09" }));
+    expect(document.querySelector(".flatpickr-calendar.open .flatpickr-hour")).toHaveValue(9);
+    await userEvent.click(screen.getByRole("button", { name: "\u6e05\u7a7a\uff1a\u5230\u8fbe\u65f6\u95f4\uff08\u53ef\u9009\uff09" }));
+    expect(translated).toHaveValue("");
   });
 
   it("submits only safe fields for manually selected attractions", async () => {
@@ -199,11 +234,33 @@ describe("Singapore preference planner", () => {
     installGenerationApi();
     render(<App initialPath="/planner" />);
 
-    expect(await screen.findByText("试点目的地 / 现已可用")).toBeInTheDocument();
+    expect(await screen.findByText("FYP 试点目的地")).toBeInTheDocument();
     expect(screen.getByLabelText("出发地")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "生成一份行程" }));
     const request = fetch.mock.calls.find(([url]) => url.endsWith("/trips/generate"));
     expect(JSON.parse(request[1].body).language).toBe("zh");
+  });
+
+  it.each([
+    ["zh", "OPENROUTER_NETWORK_ERROR", 502, /连接 AI 服务/],
+    ["en", "OPENROUTER_NETWORK_ERROR", 502, /connect to the AI service/i],
+    ["zh", "OPENROUTER_TIMEOUT", 504, /AI 服务响应超时/],
+    ["en", "OPENROUTER_TIMEOUT", 504, /AI service took too long/i]
+  ])("explains %s %s as an AI service failure instead of an input problem", async (language, code, status, message) => {
+    localStorage.setItem("nuogo-language", language);
+    signInRegisteredTraveller();
+    installGenerationApi({
+      failure: { error: { code, message: "Internal provider failure" } },
+      failureStatus: status
+    });
+    render(<App initialPath="/planner" />);
+
+    await userEvent.click(await screen.findByRole("button", { name: language === "zh" ? "生成一份行程" : "Generate ONE itinerary" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(message);
+    expect(alert).not.toHaveTextContent(/预算|budget|Internal provider failure|OPENROUTER_|系统验证|validation/i);
+    expect(screen.getByRole("button", { name: language === "zh" ? "生成一份行程" : "Generate ONE itinerary" })).toBeEnabled();
   });
 
   it("shows the returned validation reason for a constrained generation failure", async () => {

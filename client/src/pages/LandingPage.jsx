@@ -14,14 +14,14 @@ function content(language) {
     hero: {
       eyebrow: zh ? "\u65b0\u52a0\u5761\u667a\u80fd\u65c5\u884c\u89c4\u5212" : "Singapore intelligent travel planning",
       title: zh ? "\u628a\u65b0\u52a0\u5761\uff0c\u8d70\u6210\u5c5e\u4e8e\u4f60\u7684\u8282\u594f\u3002" : "Let Singapore unfold at your pace.",
-      body: zh ? "Nuogo \u662f\u7531 LLM \u8f85\u52a9\u7684\u65c5\u884c\u884c\u7a0b\u4e0e\u9884\u7b97\u89c4\u5212\u7cfb\u7edf\u3002\u53d1\u73b0\u53d7\u652f\u6301\u7684\u666f\u70b9\uff0c\u586b\u5199\u504f\u597d\uff0c\u9009\u62e9\u4e00\u79cd\u65c5\u884c\u98ce\u683c\uff0c\u518d\u751f\u6210\u4e00\u4efd\u7ecf\u8fc7\u9884\u7b97\u9a8c\u8bc1\u7684\u4e2a\u4eba\u884c\u7a0b\u3002" : "Nuogo is an LLM-assisted itinerary and budget planning system. Discover supported attractions, share your preferences, choose one Travel Style, and generate one budget-validated itinerary.",
+      body: zh ? "Nuogo \u662f\u7531 LLM \u8f85\u52a9\u7684\u65c5\u884c\u884c\u7a0b\u4e0e\u9884\u7b97\u89c4\u5212\u7cfb\u7edf\u3002\u7cfb\u7edf\u4f7f\u7528\u53d7\u652f\u6301\u7684\u65b0\u52a0\u5761\u666f\u70b9\u6761\u76ee\u3001\u4ef7\u683c\u53c2\u8003\u4e0e\u5f00\u653e\u65f6\u95f4\u8bb0\u5f55\uff0c\u518d\u7531 AI \u5728\u53d7\u5141\u8bb8\u7684\u5019\u9009\u666f\u70b9\u4e2d\u8f85\u52a9\u7f16\u6392\u4e00\u4efd\u7ecf\u8fc7\u9884\u7b97\u9a8c\u8bc1\u7684\u884c\u7a0b\u3002" : "Nuogo is an LLM-assisted itinerary and budget planning system. It uses supported Singapore attraction entries, price references, and opening-hour records, then asks AI to draft one budget-validated itinerary from the allowed candidate pool.",
       start: zh ? "\u5f00\u59cb\u89c4\u5212" : "Start Planning",
       guest: zh ? "\u4ee5\u8bbf\u5ba2\u8eab\u4efd\u7ee7\u7eed" : "Continue as Guest",
       guestAria: zh ? "\u4ee5\u8bbf\u5ba2\u8eab\u4efd\u7ee7\u7eed - \u8fdb\u5165\u8bbf\u5ba2\u6a21\u5f0f" : "Continue as Guest - enter Guest Mode",
       scroll: zh ? "\u5411\u4e0b\u63a2\u7d22\u65b0\u52a0\u5761" : "Explore Singapore below",
       manifestLabel: zh ? "Nuogo \u65c5\u884c\u65b9\u5f0f" : "The Nuogo travel method",
       manifestKicker: zh ? "\u65b0\u52a0\u5761\uff0c\u6162\u6162\u5c55\u5f00" : "Singapore, unfolding",
-      manifest: zh ? "\u666f\u70b9\u3001\u504f\u597d\u3001\u8def\u7ebf\u4e0e\u9884\u7b97\uff0c\u7ec8\u4e8e\u5728\u540c\u4e00\u6bb5\u65c5\u7a0b\u91cc\u76f8\u9047\u3002" : "Places, preferences, route and budget, held in one calm journey.",
+      manifest: zh ? "\u666f\u70b9\u5019\u9009\u6c60\u3001\u504f\u597d\u3001\u8def\u7ebf\u4e0e\u9884\u7b97\uff0c\u5728\u540c\u4e00\u6bb5\u65b0\u52a0\u5761\u884c\u7a0b\u91cc\u88ab\u4e00\u8d77\u68c0\u67e5\u3002" : "Candidate POIs, preferences, route and budget, checked together in one Singapore journey.",
     },
     stories: {
       eyebrow: zh ? "\u5728\u57ce\u5e02\u7684\u4e0d\u540c\u7ae0\u8282\u505c\u7559" : "Pause in the city's many chapters",
@@ -38,12 +38,12 @@ function content(language) {
     workflow: {
       eyebrow: zh ? "Nuogo \u5982\u4f55\u5de5\u4f5c" : "How Nuogo works",
       title: zh ? "\u5c11\u4e00\u70b9\u5206\u6563\uff0c\u591a\u4e00\u70b9\u7b03\u5b9a\u3002" : "Less scattered planning. More confident travel.",
-      body: zh ? "\u6bcf\u4e00\u6b65\u90fd\u670d\u52a1\u4e8e\u4e00\u4efd\u884c\u7a0b\uff1a\u4fdd\u7559\u4f60\u7684\u9009\u62e9\uff0c\u4e5f\u8ba4\u771f\u68c0\u67e5\u65f6\u95f4\u3001\u8def\u7ebf\u4e0e\u603b\u9884\u7b97\u3002" : "Each step serves one itinerary: your choices are respected while time, route and total budget are checked with care.",
+      body: zh ? "\u6bcf\u4e00\u6b65\u90fd\u670d\u52a1\u4e8e\u4e00\u4efd\u884c\u7a0b\uff1a\u4fdd\u7559\u4f60\u7684\u9009\u62e9\uff0c\u4e5f\u4f7f\u7528\u7cfb\u7edf\u4e2d\u7684\u65f6\u95f4\u3001\u8def\u7ebf\u4e0e\u4ef7\u683c\u53c2\u8003\u68c0\u67e5\u603b\u9884\u7b97\u3002" : "Each step serves one itinerary: your choices are respected while stored time, route and price references check the total budget.",
     },
     final: {
       eyebrow: zh ? "\u5f00\u59cb\u4f60\u7684\u65b0\u52a0\u5761\u884c\u7a0b" : "Begin your Singapore itinerary",
       title: zh ? "\u4e0b\u4e00\u6bb5\u57ce\u5e02\u8bb0\u5fc6\uff0c\u4ece\u4e00\u4e2a\u9009\u62e9\u5f00\u59cb\u3002" : "Your next city memory starts with one choice.",
-      body: zh ? "\u8fdb\u5165\u771f\u5b9e\u7684\u666f\u70b9\u53d1\u73b0\u4e0e\u65c5\u884c\u504f\u597d\u6d41\u7a0b\uff0c\u751f\u6210\u5c5e\u4e8e\u4f60\u7684\u65b0\u52a0\u5761\u884c\u7a0b\u3002" : "Enter the live discovery and preference flow to create your Singapore itinerary.",
+      body: zh ? "\u8fdb\u5165\u65b0\u52a0\u5761\u666f\u70b9\u53d1\u73b0\u4e0e\u65c5\u884c\u504f\u597d\u6d41\u7a0b\uff0c\u751f\u6210\u4e00\u4efd\u57fa\u4e8e\u6765\u6e90\u652f\u6301\u8d44\u6599\u7684\u884c\u7a0b\u3002" : "Enter the Singapore discovery and preference flow to create an itinerary based on source-backed travel data.",
       action: zh ? "\u5f00\u59cb\u89c4\u5212" : "Start Planning",
     },
   };
@@ -62,7 +62,7 @@ export default function LandingPage() {
   }, []);
 
   return <AppShell dark><main className="nuogo-landing nuogo-landing--atlas" ref={rootRef}>
-    <HeroSection copy={t.hero} />
+    <HeroSection copy={t.hero} zh={t.zh} />
     <div className="landing-story-reveal"><AttractionStorySection copy={t.stories} zh={t.zh} /></div>
     <div className="landing-story-reveal"><JourneyMapSection copy={t.journey} zh={t.zh} /></div>
     <div className="landing-story-reveal"><WorkflowSection copy={t.workflow} zh={t.zh} /></div>

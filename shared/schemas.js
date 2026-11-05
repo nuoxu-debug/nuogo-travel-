@@ -10,6 +10,7 @@ import {
 } from "./constants.js";
 
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+const localDateTimeSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/);
 
 export const canonicalCoordinatesSchema = z.object({
   longitude: z.number().min(-180).max(180),
@@ -104,6 +105,8 @@ export const travelPreferenceSchema = z.object({
   arrivalPoint: z.string().trim().min(1).max(160),
   startDate: z.string().date(),
   endDate: z.string().date(),
+  arrivalDateTime: localDateTimeSchema.optional(),
+  departureDateTime: localDateTimeSchema.optional(),
   travellerCount: z.number().int().min(1).max(20),
   budgetMinor: z.number().int().min(1_000).max(100_000_000),
   currency: z.literal("SGD"),
@@ -142,6 +145,33 @@ export const travelPreferenceSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["endDate"],
       message: "End date must be on or after start date."
+    });
+  }
+  if (preferences.arrivalDateTime) {
+    const arrivalDate = preferences.arrivalDateTime.slice(0, 10);
+    if (arrivalDate < preferences.startDate || arrivalDate > preferences.endDate) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["arrivalDateTime"],
+        message: "Arrival date and time must be within the selected trip dates."
+      });
+    }
+  }
+  if (preferences.departureDateTime) {
+    const departureDate = preferences.departureDateTime.slice(0, 10);
+    if (departureDate < preferences.startDate || departureDate > preferences.endDate) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["departureDateTime"],
+        message: "Departure date and time must be within the selected trip dates."
+      });
+    }
+  }
+  if (preferences.arrivalDateTime && preferences.departureDateTime && preferences.departureDateTime < preferences.arrivalDateTime) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["departureDateTime"],
+      message: "Departure date and time must be after arrival date and time."
     });
   }
 });

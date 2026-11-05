@@ -5458,6 +5458,7 @@ textarea:focus-visible {
   }
 
   .discovery-list {
+    height: auto;
     max-height: none;
     overflow: visible;
     padding-right: 0;
@@ -6752,6 +6753,11 @@ body:has(.nuogo-landing--atlas) .nuogo-shell--dark .nuogo-shell-register {
   transform: rotate(-2deg);
 }
 
+.atlas-hero__destination-card:nth-child(4) figcaption {
+  right: .8rem;
+  left: auto;
+}
+
 .atlas-hero__handnote {
   right: clamp(2.1rem, 6vw, 6.4rem);
   top: 20%;
@@ -7845,27 +7851,32 @@ body:has(.nuogo-landing--atlas) .nuogo-shell--en.nuogo-shell--dark .nuogo-shell-
 @media (min-width: 1024px) and (max-width: 1320px) {
   .nuogo-shell-inner,
   .nuogo-shell--registered .nuogo-shell-inner,
-  .nuogo-shell--en .nuogo-shell-inner {
+  .nuogo-shell--en .nuogo-shell-inner,
+  body:has(.nuogo-landing--atlas) .nuogo-shell--dark .nuogo-shell-inner {
     gap: .8rem;
     padding-inline: 1.15rem;
   }
 
   .nuogo-shell-brand,
   .nuogo-shell--registered .nuogo-shell-brand,
-  .nuogo-shell--en .nuogo-shell-brand {
+  .nuogo-shell--en .nuogo-shell-brand,
+  body:has(.nuogo-landing--atlas) .nuogo-shell--dark .nuogo-shell-brand {
     flex-basis: 11.5rem;
   }
 
   .nuogo-shell-nav,
   .nuogo-shell--registered .nuogo-shell-nav,
-  .nuogo-shell--en .nuogo-shell-nav {
+  .nuogo-shell--en .nuogo-shell-nav,
+  body:has(.nuogo-landing--atlas) .nuogo-shell--dark .nuogo-shell-nav {
     gap: .35rem;
   }
 
   .nuogo-shell-pill-active,
   .nuogo-shell-pill-inactive,
   .nuogo-shell--registered.nuogo-shell--en .nuogo-shell-pill-active,
-  .nuogo-shell--registered.nuogo-shell--en .nuogo-shell-pill-inactive {
+  .nuogo-shell--registered.nuogo-shell--en .nuogo-shell-pill-inactive,
+  body:has(.nuogo-landing--atlas) .nuogo-shell--dark .nuogo-shell-pill-active,
+  body:has(.nuogo-landing--atlas) .nuogo-shell--dark .nuogo-shell-pill-inactive {
     padding-inline: .56rem;
     font-size: .86rem;
   }

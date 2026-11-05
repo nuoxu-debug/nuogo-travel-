@@ -22,6 +22,16 @@ import AppShell from "../layout/AppShell.jsx";
 import { clearAttractionDraft, readAttractionDraft } from "../planning/attractionDraft.js";
 
 function generationErrorMessage(error, language) {
+  if (error.code === "OPENROUTER_NETWORK_ERROR") {
+    return language === "zh"
+      ? "暂时无法连接 AI 服务，请稍后重试。"
+      : "Nuogo could not connect to the AI service. Please try again shortly.";
+  }
+  if (error.code === "OPENROUTER_TIMEOUT") {
+    return language === "zh"
+      ? "AI 服务响应超时，请稍后重试。"
+      : "The AI service took too long to respond. Please try again shortly.";
+  }
   if (error.code === "GENERATION_CONSTRAINTS_UNSATISFIED") {
     return language === "zh"
       ? "无法在当前预算和旅行要求内生成有效行程。请调整预算、日期、必去景点或偏好后重试。"
@@ -161,7 +171,7 @@ export default function PlannerPage() {
           <div className="planner-hero-copy">
             <p className="planner-kicker">{zh ? "当前试点规划" : "Current pilot planning"}</p>
             <h1>{zh ? "使用新加坡试点创建可验证行程" : "Plan with the current Singapore pilot"}</h1>
-            <p>{zh ? "Nuogo 的验证规划流程当前运行在新加坡目的地数据上。分享你的偏好、预算和日期，系统会生成一份受检查的行程。" : "Nuogo's validated planning flow currently runs on Singapore destination data. Share your travel style, budget, dates, and preferred places to generate one checked itinerary."}</p>
+            <p>{zh ? "Nuogo 的 FYP1 试点规划流程当前使用新加坡目的地数据。分享你的偏好、预算和日期，系统会生成一份受检查的行程。" : "Nuogo's FYP1 pilot planning flow currently uses Singapore destination data. Share your travel style, budget, dates, and preferred places to generate one checked itinerary."}</p>
             <span className="planner-time-note"><Clock3 />{zh ? "约 2 分钟完成" : "About 2 minutes"}</span>
             <ol className="planner-progress-rail" aria-label={zh ? "规划步骤" : "Planning steps"}>
               {[zh ? "基本信息" : "Basics", zh ? "兴趣偏好" : "Interests", zh ? "出行方式" : "Transport", zh ? "其他需求" : "Needs", zh ? "生成行程" : "Generate"].map((label, index) => (

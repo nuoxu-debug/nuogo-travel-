@@ -40,7 +40,7 @@ export default function AboutModal({ isOpen, onClose }) {
               {zh ? "关于 Nuogo" : "About Nuogo"}
             </h2>
             <p className="text-xs font-bold uppercase tracking-wider text-[#0284c7]">
-              {zh ? "AI 辅助行程与预算平台" : "AI-assisted itinerary and budget platform"}
+              {zh ? "AI 辅助行程与预算平台" : "Singapore AI-assisted itinerary and budget planner"}
             </p>
           </div>
         </div>
@@ -48,14 +48,14 @@ export default function AboutModal({ isOpen, onClose }) {
         <p className="mt-4 text-sm leading-relaxed text-ink/75">
           {zh
             ? "Nuogo 是一个可扩展的 AI 辅助行程与预算规划平台。当前已验证的新加坡试点展示了系统如何结合目的地资料、偏好输入、预算检查与确定性约束规划。"
-            : "Nuogo is an extensible AI-assisted itinerary and budget planning platform. The current validated Singapore pilot shows how destination data, traveller preferences, budget checks and deterministic constraints work together."}
+            : "Nuogo is a Singapore-focused AI-assisted itinerary and budget planning MVP. It combines source-backed destination data, traveller preferences, budget checks and deterministic constraints before presenting an itinerary."}
         </p>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
           <div className="rounded-xl border border-ink/8 bg-slate-50/70 p-4">
             <div className="flex items-center gap-2 text-xs font-extrabold text-[#0284c7]">
               <Sparkles className="h-4 w-4" />
-              <span>{zh ? "真实景点数据" : "Grounded POIs"}</span>
+              <span>{zh ? "真实景点数据" : "Source-backed POIs"}</span>
             </div>
             <p className="mt-2 text-xs leading-5 text-ink/65">
               {zh
@@ -71,8 +71,8 @@ export default function AboutModal({ isOpen, onClose }) {
             </div>
             <p className="mt-2 text-xs leading-5 text-ink/65">
               {zh
-                ? "注册用户生成行程时，系统会根据 SGD 预算、门票、交通与餐饮参考值检查总成本。"
-                : "Registered planning checks tickets, transport and meals against SGD baselines so generated trips stay within budget."}
+                ? "生成行程时，系统会根据 SGD 预算、门票、交通与餐饮参考值检查总成本。"
+                : "Itinerary planning checks tickets, transport and meals against SGD baselines so generated trips stay within budget."}
             </p>
           </div>
 
@@ -83,8 +83,8 @@ export default function AboutModal({ isOpen, onClose }) {
             </div>
             <p className="mt-2 text-xs leading-5 text-ink/65">
               {zh
-                ? "访客可以浏览网站与公开目的地资料。提交偏好、生成行程和管理行程需要注册或登录。"
-                : "Guests can browse public pages and destination information. Preference submission, generation and itinerary management require sign-in."}
+                ? "访客可以浏览新加坡并生成行程。保存和管理行程需要注册或登录。"
+                : "Guests can browse Singapore and generate an itinerary. Sign in to save and manage trips."}
             </p>
           </div>
         </div>
@@ -102,7 +102,7 @@ export default function AboutModal({ isOpen, onClose }) {
             onClick={onClose}
             className="inline-flex items-center justify-center rounded-full border border-[#67e8f9] bg-[#d8f7ff] px-6 py-2.5 text-xs font-bold text-[#0891b2] shadow-sm transition-all hover:bg-[#cffafe] hover:shadow-md"
           >
-            {zh ? "登录后定制我的行程 ->" : "Sign in to Plan ->"}
+            {zh ? "定制我的行程 ->" : "Plan an itinerary ->"}
           </Link>
         </div>
       </div>

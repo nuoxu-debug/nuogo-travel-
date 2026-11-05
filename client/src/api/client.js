@@ -21,7 +21,7 @@ export async function apiRequest(path, options = {}) {
     error.code = body.error?.code || "REQUEST_FAILED";
     error.status = response.status;
     error.details = body.error?.details;
-    if (response.status === 401) {
+    if (response.status === 401 && token && token === getAuthToken() && path !== "/auth/login" && path !== "/auth/register") {
       clearAttractionDraft();
       clearAuthToken(error.code === "AUTH_TOKEN_EXPIRED" ? "expired" : undefined);
     }

@@ -5,7 +5,7 @@ export const translations = {
     landing: {
       eyebrow: "Singapore travel, thoughtfully structured",
       title: "Plan Singapore, your way.",
-      subtitle: "One grounded AI-assisted itinerary in your selected Travel Style.",
+      subtitle: "One checked AI-assisted itinerary in your selected Travel Style.",
       primary: "Build my Singapore trip",
       secondary: "Explore the workflow",
       routeLabel: "Route preview",

@@ -1,0 +1,47 @@
+.local-time-input {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.local-time-input .field-control {
+  width: 100%;
+  padding-right: 6rem;
+}
+
+.local-time-actions {
+  position: absolute;
+  inset: 0 .25rem 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.local-time-actions button {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border-radius: 4px;
+  color: #12352b;
+}
+
+.local-time-actions button:hover {
+  background: #eef8f5;
+}
+
+.local-time-actions button:focus-visible {
+  outline: 2px solid #008976;
+}
+
+.local-time-actions svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.flatpickr-calendar.nuogo-time-picker {
+  width: 21rem;
+  max-width: calc(100vw - 1.5rem);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+}

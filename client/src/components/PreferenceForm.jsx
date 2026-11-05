@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { deriveTripDurationDays } from "@nuogo/shared/schemas";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { displayLabel } from "../i18n/display.js";
+import LocalTimeInput from "./LocalTimeInput.jsx";
 
 const interests = ["CULTURE", "HISTORY", "FOOD", "NATURE", "SHOPPING", "ENTERTAINMENT", "FAMILY"];
 const travelStyles = ["BUDGET_SAVING", "BALANCED", "COMFORT_FOCUSED"];
@@ -15,7 +16,7 @@ const fallbackExchangeRates = { MYR: 3.3, CNY: 5.35, USD: 0.77 };
 
 const copy = {
   zh: {
-    destination: "\u4f60\u60f3\u53bb\u54ea\u91cc\uff1f", departurePoint: "\u51fa\u53d1\u5730", arrivalPoint: "\u76ee\u7684\u5730", dates: "\u65c5\u884c\u65e5\u671f", start: "\u5f00\u59cb\u65e5\u671f", end: "\u7ed3\u675f\u65e5\u671f", duration: "\u884c\u7a0b\u5929\u6570",
+    destination: "\u4f60\u60f3\u53bb\u54ea\u91cc\uff1f", departurePoint: "\u51fa\u53d1\u5730", arrivalPoint: "\u76ee\u7684\u5730", dates: "\u65c5\u884c\u65e5\u671f", start: "\u5f00\u59cb\u65e5\u671f", end: "\u7ed3\u675f\u65e5\u671f", arrivalTime: "\u5230\u8fbe\u65f6\u95f4\uff08\u53ef\u9009\uff09", departureTime: "\u79bb\u5f00\u65f6\u95f4\uff08\u53ef\u9009\uff09", duration: "\u884c\u7a0b\u5929\u6570",
     party: "\u540c\u884c\u4eba\u6570\u4e0e\u603b\u9884\u7b97", travellers: "\u65c5\u884c\u4eba\u6570", budget: "\u603b\u9884\u7b97\uff08\u65b0\u5e01\uff09",
     preferences: "\u5174\u8da3\u4e0e\u666f\u70b9\u504f\u597d", interests: "\u65c5\u884c\u5174\u8da3", attractions: "\u666f\u70b9\u9009\u62e9",
     auto: "\u81ea\u52a8\u63a8\u8350\u5df2\u5f00\u542f", edit: "\u9009\u62e9\u666f\u70b9", style: "\u65c5\u884c\u98ce\u683c",
@@ -24,10 +25,10 @@ const copy = {
     other: "\u5176\u4ed6\u504f\u597d\uff08\u53ef\u9009\uff09", placeholder: "\u65e0\u969c\u788d\u9700\u6c42\u3001\u996e\u98df\u8981\u6c42\u3001\u8282\u594f\u6216\u5176\u4ed6\u91cd\u8981\u4e8b\u9879\u3002",
     consent: "\u5141\u8bb8 Nuogo \u5c06\u8fd9\u4e9b\u65c5\u884c\u504f\u597d\u53d1\u9001\u7ed9\u5df2\u914d\u7f6e\u7684 AI \u670d\u52a1\u5546\u3002",
     consentNote: "\u8d26\u6237\u51ed\u636e\u4e0e\u79c1\u4eba\u8d44\u6599\u4e0d\u4f1a\u53d1\u9001\u3002", submit: "\u751f\u6210\u4e00\u4efd\u884c\u7a0b",
-    destinationPilot: "\u8bd5\u70b9\u76ee\u7684\u5730 / \u73b0\u5df2\u53ef\u7528", destinationNote: "\u5f53\u524d\u53ef\u7528\u4e8e\u9a8c\u8bc1\u89c4\u5212\uff1a\u65b0\u52a0\u5761", destinationFuture: "\u66f4\u591a\u76ee\u7684\u5730\u5c06\u5728\u672a\u6765\u7248\u672c\u4e2d\u52a0\u5165"
+    destinationPilot: "FYP \u8bd5\u70b9\u76ee\u7684\u5730", destinationNote: "\u53ef\u7528\u8bd5\u70b9\u76ee\u7684\u5730\uff1a\u65b0\u52a0\u5761", destinationFuture: "\u66f4\u591a\u76ee\u7684\u5730\u5c06\u5728\u672a\u6765\u7248\u672c\u4e2d\u52a0\u5165"
   },
   en: {
-    destination: "Where do you want to go?", departurePoint: "Departure point", arrivalPoint: "Destination point", dates: "Travel dates", start: "Start date", end: "End date", duration: "Trip duration",
+    destination: "Where do you want to go?", departurePoint: "Departure point", arrivalPoint: "Destination point", dates: "Travel dates", start: "Start date", end: "End date", arrivalTime: "Arrival time (optional)", departureTime: "Departure time (optional)", duration: "Trip duration",
     party: "Travellers and total budget", travellers: "Travellers", budget: "Total budget (SGD)",
     preferences: "Interests and attraction preferences", interests: "Travel interests", attractions: "Attraction selection",
     auto: "Automatic recommendations enabled", edit: "Choose attractions", style: "Travel style",
@@ -36,12 +37,13 @@ const copy = {
     other: "Other preferences (optional)", placeholder: "Accessibility, dietary needs, pace, or anything else that matters.",
     consent: "Allow Nuogo to send these travel preferences to the configured AI provider.",
     consentNote: "Account credentials and private profile data are excluded.", submit: "Generate ONE itinerary",
-    destinationPilot: "Pilot Destination / Available Now", destinationNote: "Currently available for validated planning: Singapore", destinationFuture: "More destinations coming in future releases"
+    destinationPilot: "FYP Pilot Destination", destinationNote: "Available pilot destination: Singapore", destinationFuture: "More destinations coming in future releases"
   }
 };
 
 export const initialPreferenceValues = {
   destination: "singapore", departurePoint: "Changi Airport", arrivalPoint: "Hotel in Singapore", startDate: "2026-10-10", endDate: "2026-10-12", travellerCount: 2,
+  arrivalTime: "", departureTime: "",
   budgetSgd: 2000, interests: ["CULTURE", "FOOD"], preferredSightsText: "", travelStyle: "BALANCED", dailyAttractionTarget: 2,
   transportPreferenceMode: "AUTO_CHEAPEST", preferredTransportModes: [],
   rainyDayBackupEnabled: false, otherPreferences: "", consentToLlmProcessing: true
@@ -103,6 +105,8 @@ export default function PreferenceForm({ onSubmit, values, onValuesChange, busy 
     event.preventDefault();
     onSubmit({
       destination: "singapore", departurePoint: values.departurePoint.trim(), arrivalPoint: values.arrivalPoint.trim(), startDate: values.startDate, endDate: values.endDate,
+      ...(values.arrivalTime ? { arrivalDateTime: `${values.startDate}T${values.arrivalTime}` } : {}),
+      ...(values.departureTime ? { departureDateTime: `${values.endDate}T${values.departureTime}` } : {}),
       travellerCount: Number(values.travellerCount), budgetMinor: Math.round(Number(values.budgetSgd) * 100), currency: "SGD",
       interests: values.interests, preferredSights: values.preferredSightsText.split(",").map((value) => value.trim()).filter(Boolean),
       attractionSelectionMode: values.attractionDraft?.mode ?? "AUTO",
@@ -137,7 +141,17 @@ export default function PreferenceForm({ onSubmit, values, onValuesChange, busy 
       </div>
     </Panel>
     <Panel icon={CalendarDays} title={text.dates}>
-      <div className="grid gap-4 sm:grid-cols-[1fr_1fr_140px]"><Field label={text.start}><input required aria-label={text.start} type="date" className="field-control" value={values.startDate} onChange={(event) => update("startDate", event.target.value)} /></Field><Field label={text.end}><input required aria-label={text.end} min={values.startDate} type="date" className="field-control" value={values.endDate} onChange={(event) => update("endDate", event.target.value)} /></Field><div className="duration-readout"><span>{text.duration}</span><strong>{duration} {language === "zh" ? "\u5929" : duration === 1 ? "day" : "days"}</strong></div></div>
+      <div className="grid gap-4 sm:grid-cols-[1fr_1fr_140px]">
+        <div className="grid gap-4">
+          <Field label={text.start}><input required aria-label={text.start} type="date" className="field-control" value={values.startDate} onChange={(event) => update("startDate", event.target.value)} /></Field>
+          <Field label={text.arrivalTime}><LocalTimeInput label={text.arrivalTime} language={language} value={values.arrivalTime ?? ""} onChange={(value) => update("arrivalTime", value)} /></Field>
+        </div>
+        <div className="grid gap-4">
+          <Field label={text.end}><input required aria-label={text.end} min={values.startDate} type="date" className="field-control" value={values.endDate} onChange={(event) => update("endDate", event.target.value)} /></Field>
+          <Field label={text.departureTime}><LocalTimeInput label={text.departureTime} language={language} value={values.departureTime ?? ""} onChange={(value) => update("departureTime", value)} /></Field>
+        </div>
+        <div className="duration-readout self-start"><span>{text.duration}</span><strong>{duration} {language === "zh" ? "\u5929" : duration === 1 ? "day" : "days"}</strong></div>
+      </div>
     </Panel>
     <Panel icon={Users} title={text.party}>
       <div className="grid gap-4 sm:grid-cols-[220px_1fr]"><Field label={text.travellers}><div className="traveller-stepper"><button type="button" aria-label={language === "zh" ? "\u51cf\u5c11\u65c5\u884c\u4eba\u6570" : "Decrease travellers" } onClick={() => stepTravellers(-1)} disabled={Number(values.travellerCount) <= 1}><Minus aria-hidden="true" /></button><input required aria-label={text.travellers} type="number" min="1" max="20" value={values.travellerCount} onChange={(event) => update("travellerCount", event.target.value)} /><button type="button" aria-label={language === "zh" ? "\u589e\u52a0\u65c5\u884c\u4eba\u6570" : "Increase travellers" } onClick={() => stepTravellers(1)} disabled={Number(values.travellerCount) >= 20}><Plus aria-hidden="true" /></button></div></Field><div className="budget-control"><label><span><Coins />{text.budget}</span><output>S$ {Number(values.budgetSgd).toLocaleString()}</output></label><input aria-label={text.budget} type="range" min="100" max="10000" step="50" value={values.budgetSgd} onChange={(event) => update("budgetSgd", Number(event.target.value))} /><div className="exchange-reference" aria-live="polite"><div><strong>{exchangeTitle}</strong><small>{exchange.status === "live" && exchange.date ? `${exchangeSource} - ${exchange.date}` : exchange.status === "fallback" ? (language === "zh" ? "\u6682\u7528\u4f30\u7b97\u6c47\u7387" : "Using fallback estimates") : (language === "zh" ? "\u6b63\u5728\u8bfb\u53d6\u6c47\u7387" : "Loading rates")}</small></div><div>{convertedBudget.map(({ currency, value }) => <span key={currency}>{value}</span>)}</div></div></div></div>

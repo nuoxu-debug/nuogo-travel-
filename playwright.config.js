@@ -1,10 +1,16 @@
 import { defineConfig, devices } from "@playwright/test";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+
+// Never allow browser writes to inherit the local/demo persistence snapshot.
+const runDirectory = join(tmpdir(), `nuogo-e2e-${randomUUID()}`);
 
 export default defineConfig({
   testDir: "./tests/e2e",
   outputDir: join(tmpdir(), "nuogo-playwright-results"),
+  metadata: { runDirectory },
+  globalTeardown: "./tests/e2e/global-teardown.js",
   fullyParallel: false,
   workers: 1,
   reporter: "line",
@@ -26,6 +32,9 @@ export default defineConfig({
         APP_RUNTIME_MODE: "demo",
         AI_PROVIDER: "demo",
         TRAVEL_DATA_PROVIDER: "demo",
+        DEMO_PERSISTENCE_PATH: join(runDirectory, "demo-state.json"),
+        JWT_SECRET: "nuogo-isolated-playwright-secret-for-tests-only",
+        NODE_ENV: "test",
         DEMO_ADMIN_EMAIL: "admin@nuogo.test",
         DEMO_ADMIN_PASSWORD: "NuogoAdmin123!"
       }
@@ -37,7 +46,7 @@ export default defineConfig({
       timeout: 30_000,
       env: {
         ...process.env,
-        VITE_CACHE_DIR: join(tmpdir(), `nuogo-vite-cache-${process.pid}`),
+        VITE_CACHE_DIR: join(runDirectory, "vite-cache"),
         VITE_API_URL: "http://127.0.0.1:8788/api"
       }
     }

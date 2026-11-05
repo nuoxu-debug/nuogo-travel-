@@ -9,9 +9,9 @@ import AppShell from "../layout/AppShell.jsx";
 
 function authCopy(language) {
   return language === "zh" ? {
-    context: "新加坡旅行规划", contextTitle: "从发现景点开始，规划属于你的新加坡行程。", contextBody: "先浏览有来源支持的景点，再按日期、预算与旅行风格生成一份可查看的行程。", guestTitle: "访客模式", guestBody: "无需创建账户即可浏览新加坡公开目的地资料。提交偏好、生成行程和管理行程需要注册或登录。", memberBody: "登录后可跨会话保存和管理你的行程。"
+    context: "新加坡旅行规划", contextTitle: "从发现景点开始，规划属于你的新加坡行程。", contextBody: "先浏览有来源支持的景点，再按日期、预算与旅行风格生成一份可查看的行程。", guestTitle: "访客模式", guestBody: "无需创建账户即可浏览新加坡并生成行程。保存和管理行程需要登录。", memberBody: "登录后可跨会话保存和管理你的行程。"
   } : {
-    context: "Singapore travel planning", contextTitle: "Discover the city first. Then make the itinerary yours.", contextBody: "Explore supported attractions, then shape one Singapore itinerary around your dates, budget and travel style.", guestTitle: "Guest Mode", guestBody: "Browse public Singapore destination information without creating an account. Preference submission, generation and itinerary management require sign-in.", memberBody: "Sign in to save and manage your itineraries across sessions."
+    context: "Singapore travel planning", contextTitle: "Discover the city first. Then make the itinerary yours.", contextBody: "Explore supported attractions, then shape one Singapore itinerary around your dates, budget and travel style.", guestTitle: "Guest Mode", guestBody: "Browse Singapore and generate an itinerary without creating an account. Sign in to save and manage your trips.", memberBody: "Sign in to save and manage your itineraries across sessions."
   };
 }
 

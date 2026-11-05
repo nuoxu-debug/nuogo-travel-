@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getDestinationDiscoveryContent } from "@nuogo/shared/destination-discovery";
+import { ExternalServiceError, ExternalServiceTimeoutError } from "../../errors.js";
 import { buildCandidatePool } from "../poi/buildCandidatePool.js";
 import { resolveAttractionPreferences } from "../poi/resolveAttractionPreferences.js";
 import { calculateItineraryBudget } from "../budget/budgetEngine.js";
@@ -463,6 +464,7 @@ async function generateVariant(profile, context) {
       )
     };
   } catch (error) {
+    if (error instanceof ExternalServiceError || error instanceof ExternalServiceTimeoutError) throw error;
     return {
       state: "FAILED",
       itinerary: undefined,
@@ -548,6 +550,7 @@ export async function generateValidatedTrip(preferences, dependencies) {
     }, variants);
     return await save(dependencies, run);
   } catch (error) {
+    if (error instanceof ExternalServiceError || error instanceof ExternalServiceTimeoutError) throw error;
     return await save(dependencies, withLegacyVariants({
       id: runId,
       tripId,

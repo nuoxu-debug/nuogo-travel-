@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { travelPreferenceSchema, tripRevisionSchema } from "@nuogo/shared/schemas";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { getTripAccess, guestClaimMatches, requireTripRole } from "../services/tripAccess.js";
+import { getTripAccess, requireTripRole } from "../services/tripAccess.js";
 import { travelPreferenceRequest } from "../validation/requestValidators.js";
 import { validateRequest } from "../validation/validateRequest.js";
 import { screenTravelPreferences } from "../services/promptInjection.js";
@@ -31,7 +31,7 @@ function validationError(message) {
 }
 
 function requireRegisteredTraveller(req, _res, next) {
-  if (req.user.accountType === "GUEST") {
+  if (req.user?.accountType === "GUEST") {
     const error = new Error("A registered account is required for itinerary planning.");
     error.code = "REGISTERED_ACCOUNT_REQUIRED";
     error.status = 403;
@@ -111,11 +111,10 @@ export function createTripsRouter({
   config
 }) {
   const router = Router();
-  router.use(authenticate);
-  router.use(requireRegisteredTraveller);
-
   router.post(
     "/generate",
+    (req, res, next) => req.get("Authorization") ? authenticate(req, res, next) : next(),
+    requireRegisteredTraveller,
     ...travelPreferenceRequest,
     validateRequest,
     async (req, res, next) => {
@@ -133,7 +132,7 @@ export function createTripsRouter({
         error.details = { fields: screening.fields };
         throw error;
       }
-      await repository.recordPrivacyConsent(req.user.id, {
+      if (req.user) await repository.recordPrivacyConsent(req.user.id, {
         type: "LLM_ITINERARY_GENERATION",
         version: "2026-08-21",
         accepted: true
@@ -157,6 +156,9 @@ export function createTripsRouter({
     }
     }
   );
+
+  router.use(authenticate);
+  router.use(requireRegisteredTraveller);
 
   router.post("/save-preview", async (req, res, next) => {
     try {
@@ -196,34 +198,13 @@ export function createTripsRouter({
     }
   });
 
-  router.post("/:tripId/claim", async (req, res, next) => {
-    try {
-      if (req.user.accountType === "GUEST") {
-        const error = new Error("A registered account is required to save this itinerary.");
-        error.code = "REGISTERED_ACCOUNT_REQUIRED";
-        error.status = 403;
-        throw error;
+  router.post("/:tripId/claim", (_req, res) => {
+    res.status(410).json({
+      error: {
+        code: "GUEST_TRIP_CLAIM_DEPRECATED",
+        message: "Guest itinerary claiming has been retired. Please sign in before planning."
       }
-      const claimToken = typeof req.body.claimToken === "string" ? req.body.claimToken : "";
-      if (claimToken.length < 16 || claimToken.length > 256) throw validationError("A valid save token is required.");
-      const pending = await repository.getTrip(req.params.tripId);
-      if (!pending || !guestClaimMatches(pending.guestClaimTokenHash, claimToken)) {
-        const error = new Error("This guest itinerary cannot be saved by this account.");
-        error.code = "GUEST_TRIP_CLAIM_DENIED";
-        error.status = 403;
-        throw error;
-      }
-      const trip = await repository.claimGuestTrip(req.params.tripId, req.user.id, pending.guestClaimTokenHash);
-      if (!trip) {
-        const error = new Error("This guest itinerary cannot be saved by this account.");
-        error.code = "GUEST_TRIP_CLAIM_DENIED";
-        error.status = 403;
-        throw error;
-      }
-      res.json({ trip });
-    } catch (error) {
-      next(error);
-    }
+    });
   });
 
   router.get("/:tripId", async (req, res, next) => {
